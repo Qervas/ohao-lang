@@ -8,7 +8,7 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
-    app.setApplicationName("Ohao Language Learner");
+    app.setApplicationName("ohao-lang");
     QCoreApplication::setOrganizationName("ohao");
     QCoreApplication::setOrganizationDomain("ohao.local");
 

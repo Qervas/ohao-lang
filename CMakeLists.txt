@@ -16,6 +16,7 @@ set(SOURCES
     src/FloatingWidget.cpp
     src/SelectionToolbar.cpp
     src/ScreenCapture.cpp
+    src/SettingsWindow.cpp
 )
 
 set(HEADERS
@@ -25,6 +26,7 @@ set(HEADERS
     src/FloatingWidget.h
     src/SelectionToolbar.h
     src/ScreenCapture.h
+    src/SettingsWindow.h
 )
 
 qt_add_executable(ohao-lang ${SOURCES} ${HEADERS})

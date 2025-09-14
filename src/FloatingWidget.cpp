@@ -1,6 +1,7 @@
 #include "FloatingWidget.h"
 #include "ScreenshotWidget.h"
 #include "ScreenCapture.h"
+#include "SettingsWindow.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QHBoxLayout>
@@ -23,10 +24,21 @@ FloatingWidget::FloatingWidget(QWidget *parent)
 
     // Restore saved position or fall back to default using a timer to ensure it's set after initialization
     QTimer::singleShot(100, [this]() {
+        qDebug() << "QSettings file location:" << settings.fileName();
+
         QPoint savedPos = settings.value("floatingWidget/pos", QPoint(-1, -1)).toPoint();
+        qDebug() << "Read saved position from settings:" << savedPos;
+
         if (savedPos != QPoint(-1, -1)) {
-            qDebug() << "Restoring saved position:" << savedPos;
+            // Clamp to screen
+            if (QScreen *screen = QApplication::primaryScreen()) {
+                QRect g = screen->geometry();
+                savedPos.setX(qBound(0, savedPos.x(), g.width() - width()));
+                savedPos.setY(qBound(0, savedPos.y(), g.height() - height()));
+            }
+            qDebug() << "Restoring saved position (clamped):" << savedPos;
             move(savedPos);
+            qDebug() << "Widget moved to:" << pos();
             return;
         }
         QScreen *screen = QApplication::primaryScreen();
@@ -34,6 +46,7 @@ FloatingWidget::FloatingWidget(QWidget *parent)
             QPoint initialPos(50, 50); // Top-left corner with some margin
             qDebug() << "No saved position. Using initial position:" << initialPos;
             move(initialPos);
+            qDebug() << "Widget moved to initial position:" << pos();
         }
     });
     
@@ -95,6 +108,22 @@ void FloatingWidget::setupUI()
     // Setup scale animation for buttons
     scaleAnimation = new QPropertyAnimation();
     scaleAnimation->setDuration(150);
+
+    // Debounced saver for position
+    savePosTimer = new QTimer(this);
+    savePosTimer->setSingleShot(true);
+    savePosTimer->setInterval(150);
+    connect(savePosTimer, &QTimer::timeout, this, [this]() {
+        QPoint p = this->pos();
+        if (QScreen *screen = QApplication::primaryScreen()) {
+            QRect g = screen->geometry();
+            p.setX(qBound(0, p.x(), g.width() - width()));
+            p.setY(qBound(0, p.y(), g.height() - height()));
+        }
+        settings.setValue("floatingWidget/pos", p);
+        settings.sync();
+        qDebug() << "Debounced save position:" << p;
+    });
 }
 
 void FloatingWidget::applyModernStyle()
@@ -166,6 +195,7 @@ void FloatingWidget::mousePressEvent(QMouseEvent *event)
         const QString platformName = QGuiApplication::platformName();
         if (platformName.contains("wayland", Qt::CaseInsensitive) && windowHandle()) {
             qDebug() << "Starting system move via compositor (Wayland)";
+            isWaylandSystemMove = true;
             windowHandle()->startSystemMove();
             event->accept();
             return;
@@ -214,6 +244,7 @@ void FloatingWidget::mouseMoveEvent(QMouseEvent *event)
         }
 
         move(newPos);
+        if (savePosTimer) savePosTimer->start();
         event->accept();
         
         qDebug() << "Moved widget to position:" << newPos;
@@ -224,8 +255,9 @@ void FloatingWidget::mouseMoveEvent(QMouseEvent *event)
 
 void FloatingWidget::mouseReleaseEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton && isDragging) {
+    if (event->button() == Qt::LeftButton && (isDragging || isWaylandSystemMove)) {
         isDragging = false;
+        isWaylandSystemMove = false;
         setCursor(Qt::OpenHandCursor);
         event->accept();
         
@@ -234,11 +266,29 @@ void FloatingWidget::mouseReleaseEvent(QMouseEvent *event)
         update();
         
         // Persist current position
-        settings.setValue("floatingWidget/pos", this->pos());
-        
-        qDebug() << "Stopped dragging at position:" << pos();
+        // Clamp to current screen bounds to avoid saving off-screen
+        QPoint currentPos = this->pos();
+        if (QScreen *screen = QApplication::primaryScreen()) {
+            QRect g = screen->geometry();
+            currentPos.setX(qBound(0, currentPos.x(), g.width() - width()));
+            currentPos.setY(qBound(0, currentPos.y(), g.height() - height()));
+        }
+        settings.setValue("floatingWidget/pos", currentPos);
+        settings.sync(); // Force write to disk
+
+        qDebug() << "Stopped dragging at position:" << currentPos;
+        qDebug() << "Saved position to settings file:" << settings.fileName();
+        qDebug() << "Verify saved position:" << settings.value("floatingWidget/pos").toPoint();
     } else {
         event->ignore();
+    }
+}
+
+void FloatingWidget::moveEvent(QMoveEvent *event)
+{
+    QWidget::moveEvent(event);
+    if (isDragging || isWaylandSystemMove) {
+        if (savePosTimer) savePosTimer->start();
     }
 }
 
@@ -370,6 +420,13 @@ void FloatingWidget::takeScreenshot()
 
 void FloatingWidget::openSettings()
 {
-    qDebug() << "Opening settings...";
-    // TODO: Implement settings dialog
+    qDebug() << "Opening settings window...";
+
+    if (!settingsWindow) {
+        settingsWindow = new SettingsWindow(this);
+    }
+
+    settingsWindow->show();
+    settingsWindow->raise();
+    settingsWindow->activateWindow();
 }

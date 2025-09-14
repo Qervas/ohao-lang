@@ -7,6 +7,9 @@
 #include <QTimer>
 #include <QSettings>
 #include <QCoreApplication>
+#include <QMoveEvent>
+
+class SettingsWindow;
 
 class FloatingWidget : public QWidget
 {
@@ -22,6 +25,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void moveEvent(QMoveEvent *event) override;
 
 private slots:
     void takeScreenshot();
@@ -48,4 +52,13 @@ private:
 
     // Settings for persisting window position
     QSettings settings{QCoreApplication::organizationName(), QCoreApplication::applicationName()};
+
+    // Track Wayland compositor-driven move so we can persist position on release
+    bool isWaylandSystemMove = false;
+
+    // Debounce saving position while moving
+    QTimer *savePosTimer = nullptr;
+
+    // Settings window
+    SettingsWindow *settingsWindow = nullptr;
 };
