@@ -1,0 +1,146 @@
+# Build directories
+build/
+build-*/
+out/
+cmake-build-*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Qt specific
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.qmlc
+*.jsc
+Makefile*
+*build-*
+*.qm
+*.prl
+
+# Qt Creator
+*.autosave
+*.pro.user.*
+*.pro.user
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+ohao-lang
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Qt Creator
+*.autosave
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Package files
+*.tar.gz
+*.zip
+*.rar
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Local configuration files
+config.local.*
+*.local
+
+# Documentation build
+docs/_build/
+docs/build/
+
+# Test results
+test-results/
+coverage/
+
+# Profiling data
+*.prof
+*.gcov
+*.gcda
+*.gcno
+
+# Valgrind
+*.memcheck
+*.helgrind
+*.drd
+*.massif
+
+# Clang static analyzer
+*.plist
+
+# Cppcheck
+cppcheck-results.xml
+
+# Sanitizer
+*.asan
+*.msan
+*.tsan
+*.ubsan
