@@ -1,4 +1,5 @@
 #include "SettingsWindow.h"
+#include "OCREngine.h"
 #include <QApplication>
 #include <QScreen>
 #include <QDebug>
@@ -203,6 +204,20 @@ void SettingsWindow::setupTranslationTab()
     layout->setSpacing(20);
     layout->setContentsMargins(15, 15, 15, 15);
 
+    // Auto-Processing Group
+    QGroupBox *autoGroup = new QGroupBox("Automatic Processing", translationTab);
+    QVBoxLayout *autoLayout = new QVBoxLayout(autoGroup);
+
+    autoOcrCheck = new QCheckBox("Auto-OCR: Automatically extract text when area is selected");
+    autoOcrCheck->setChecked(true);
+    autoLayout->addWidget(autoOcrCheck);
+
+    autoTranslateCheck = new QCheckBox("Auto-Translate: Automatically translate after OCR");
+    autoTranslateCheck->setChecked(true);
+    autoLayout->addWidget(autoTranslateCheck);
+
+    layout->addWidget(autoGroup);
+
     // Translation Engine Group
     QGroupBox *engineGroup = new QGroupBox("Translation Engine", translationTab);
     QFormLayout *engineLayout = new QFormLayout(engineGroup);
@@ -214,13 +229,15 @@ void SettingsWindow::setupTranslationTab()
     engineLayout->addRow("Engine:", translationEngineCombo);
 
     sourceLanguageCombo = new QComboBox();
-    sourceLanguageCombo->addItems({"Auto-Detect", "English", "Chinese", "Japanese", "Korean",
-                                  "Spanish", "French", "German", "Russian", "Portuguese"});
+    sourceLanguageCombo->addItems({"Auto-Detect", "English", "Chinese (Simplified)", "Chinese (Traditional)",
+                                  "Japanese", "Korean", "Spanish", "French", "German", "Russian",
+                                  "Portuguese", "Italian", "Dutch", "Polish", "Arabic", "Hindi", "Thai", "Vietnamese"});
     engineLayout->addRow("Source Language:", sourceLanguageCombo);
 
     targetLanguageCombo = new QComboBox();
-    targetLanguageCombo->addItems({"English", "Chinese", "Japanese", "Korean", "Spanish",
-                                  "French", "German", "Russian", "Portuguese"});
+    targetLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)", "Japanese", "Korean", "Spanish",
+                                  "French", "German", "Russian", "Portuguese", "Italian", "Dutch",
+                                  "Polish", "Arabic", "Hindi", "Thai", "Vietnamese"});
     targetLanguageCombo->setCurrentText("English");
     engineLayout->addRow("Target Language:", targetLanguageCombo);
 
@@ -568,6 +585,8 @@ void SettingsWindow::loadSettings()
     ocrAutoDetectCheck->setChecked(settings->value("ocr/autoDetect", true).toBool());
 
     // Translation Settings
+    autoOcrCheck->setChecked(settings->value("translation/autoOcr", true).toBool());
+    autoTranslateCheck->setChecked(settings->value("translation/autoTranslate", true).toBool());
     translationEngineCombo->setCurrentText(settings->value("translation/engine", "Google Translate (Free)").toString());
     sourceLanguageCombo->setCurrentText(settings->value("translation/sourceLanguage", "Auto-Detect").toString());
     targetLanguageCombo->setCurrentText(settings->value("translation/targetLanguage", "English").toString());
@@ -593,6 +612,8 @@ void SettingsWindow::saveSettings()
     settings->setValue("ocr/autoDetect", ocrAutoDetectCheck->isChecked());
 
     // Translation Settings
+    settings->setValue("translation/autoOcr", autoOcrCheck->isChecked());
+    settings->setValue("translation/autoTranslate", autoTranslateCheck->isChecked());
     settings->setValue("translation/engine", translationEngineCombo->currentText());
     settings->setValue("translation/sourceLanguage", sourceLanguageCombo->currentText());
     settings->setValue("translation/targetLanguage", targetLanguageCombo->currentText());
@@ -619,6 +640,8 @@ void SettingsWindow::resetToDefaults()
     ocrAutoDetectCheck->setChecked(true);
 
     // Reset Translation settings
+    autoOcrCheck->setChecked(true);
+    autoTranslateCheck->setChecked(true);
     translationEngineCombo->setCurrentText("Google Translate (Free)");
     sourceLanguageCombo->setCurrentText("Auto-Detect");
     targetLanguageCombo->setCurrentText("English");
@@ -722,21 +745,55 @@ void SettingsWindow::onTestOcrClicked()
     ocrStatusText->setPlainText("Testing OCR configuration...\n");
     QApplication::processEvents();
 
-    // Simulate OCR test
     QString engine = ocrEngineCombo->currentText();
     QString language = ocrLanguageCombo->currentText();
+    QString result;
 
-    // In a real implementation, this would test the actual OCR engine
-    QString result = QString("✅ OCR Test Results:\n"
-                           "Engine: %1\n"
-                           "Language: %2\n"
-                           "Quality Level: %3/5\n"
-                           "Status: Ready for use")
-                           .arg(engine)
-                           .arg(language)
-                           .arg(ocrQualitySlider->value());
+    // Test actual OCR engine availability
+    bool engineAvailable = false;
+    QString statusMessage;
+
+    if (engine == "Tesseract") {
+        engineAvailable = OCREngine::isTesseractAvailable();
+        statusMessage = engineAvailable ? "Tesseract found and ready" : "Tesseract not installed or not in PATH";
+    } else if (engine == "EasyOCR") {
+        engineAvailable = OCREngine::isEasyOCRAvailable();
+        statusMessage = engineAvailable ? "EasyOCR Python module found" : "EasyOCR not installed (pip install easyocr)";
+    } else if (engine == "PaddleOCR") {
+        engineAvailable = OCREngine::isPaddleOCRAvailable();
+        statusMessage = engineAvailable ? "PaddleOCR Python module found" : "PaddleOCR not installed (pip install paddlepaddle paddleocr)";
+    } else if (engine == "Windows OCR") {
+        engineAvailable = OCREngine::isWindowsOCRAvailable();
+        statusMessage = engineAvailable ? "Windows OCR API available" : "Windows OCR only available on Windows 10+";
+    }
+
+    QString status = engineAvailable ? "✅" : "❌";
+    result = QString("%1 OCR Test Results:\n"
+                    "Engine: %2\n"
+                    "Language: %3\n"
+                    "Quality Level: %4/5\n"
+                    "Availability: %5\n"
+                    "Status: %6")
+                    .arg(status)
+                    .arg(engine)
+                    .arg(language)
+                    .arg(ocrQualitySlider->value())
+                    .arg(statusMessage)
+                    .arg(engineAvailable ? "Ready for use" : "Installation required");
 
     ocrStatusText->setPlainText(result);
+
+    // Update engine dropdown styling based on availability
+    if (engineAvailable) {
+        ocrEngineCombo->setStyleSheet(ocrEngineCombo->styleSheet() + " QComboBox { border-color: #28a745; }");
+    } else {
+        ocrEngineCombo->setStyleSheet(ocrEngineCombo->styleSheet() + " QComboBox { border-color: #dc3545; }");
+    }
+
+    // Reset style after 3 seconds
+    QTimer::singleShot(3000, [this]() {
+        ocrEngineCombo->setStyleSheet("");
+    });
 }
 
 void SettingsWindow::onTestTranslationClicked()

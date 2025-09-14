@@ -8,6 +8,10 @@
 #include <QMouseEvent>
 #include <QKeyEvent>
 
+#include "OCREngine.h"
+
+class OCRResultWindow;
+
 enum class ToolbarButton {
     None,
     Copy,
@@ -40,11 +44,16 @@ private slots:
     void handleSave();
     void handleOCR();
     void handleCancel();
+    void onOCRFinished(const OCRResult &result);
+    void onOCRProgress(const QString &status);
+    void onOCRError(const QString &error);
+    void onOCRRetryRequested();
 
 private:
     void captureScreen();
     void setupWidget();
     void drawToolbar(QPainter &painter);
+    void drawResultsOverlay(QPainter &painter);
     QRect getToolbarRect();
     ToolbarButton getButtonAt(QPoint pos);
     void handleToolbarClick(ToolbarButton button);
@@ -60,4 +69,15 @@ private:
     QRect saveButtonRect;
     QRect ocrButtonRect;
     QRect cancelButtonRect;
+
+    // OCR functionality
+    OCREngine *ocrEngine;
+    OCRResultWindow *ocrResultWindow;
+    QPixmap m_lastOCRImage;
+
+    // Results overlay
+    bool showingResults;
+    OCRResult m_currentResult;
+    QString m_progressText;
+    QRect m_resultAreaRect;
 };

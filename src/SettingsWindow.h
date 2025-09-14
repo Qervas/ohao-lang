@@ -70,6 +70,8 @@ private:
 
     // Translation Tab
     QWidget *translationTab;
+    QCheckBox *autoOcrCheck;
+    QCheckBox *autoTranslateCheck;
     QComboBox *translationEngineCombo;
     QComboBox *sourceLanguageCombo;
     QComboBox *targetLanguageCombo;

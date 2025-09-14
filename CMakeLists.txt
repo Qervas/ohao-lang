@@ -4,7 +4,7 @@ project(OhaoLang VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui DBus)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui DBus Network)
 
 qt_standard_project_setup()
 
@@ -17,6 +17,9 @@ set(SOURCES
     src/SelectionToolbar.cpp
     src/ScreenCapture.cpp
     src/SettingsWindow.cpp
+    src/OCREngine.cpp
+    src/OCRResultWindow.cpp
+    src/TranslationEngine.cpp
 )
 
 set(HEADERS
@@ -27,8 +30,11 @@ set(HEADERS
     src/SelectionToolbar.h
     src/ScreenCapture.h
     src/SettingsWindow.h
+    src/OCREngine.h
+    src/OCRResultWindow.h
+    src/TranslationEngine.h
 )
 
 qt_add_executable(ohao-lang ${SOURCES} ${HEADERS})
 
-target_link_libraries(ohao-lang PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui Qt6::DBus)
+target_link_libraries(ohao-lang PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui Qt6::DBus Qt6::Network)
