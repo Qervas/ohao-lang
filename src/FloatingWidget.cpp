@@ -1,5 +1,6 @@
 #include "FloatingWidget.h"
 #include "ScreenshotWidget.h"
+#include "ScreenCapture.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QHBoxLayout>
@@ -8,31 +9,57 @@
 #include <QTimer>
 #include <QScreen>
 #include <QApplication>
+#include <QGuiApplication>
 #include <QDebug>
 #include <QTransform>
+#include <QWindow>
 
 FloatingWidget::FloatingWidget(QWidget *parent)
     : QWidget(parent), isDragging(false), currentScale(1.0), currentOpacity(200)
 {
+    qDebug() << "Creating FloatingWidget...";
     setupUI();
     applyModernStyle();
 
-    // Position at right edge of screen
-    QScreen *screen = QApplication::primaryScreen();
-    if (screen) {
-        QRect screenGeometry = screen->geometry();
-        move(screenGeometry.width() - width() - 20, screenGeometry.height() / 2 - height() / 2);
-    }
+    // Restore saved position or fall back to default using a timer to ensure it's set after initialization
+    QTimer::singleShot(100, [this]() {
+        QPoint savedPos = settings.value("floatingWidget/pos", QPoint(-1, -1)).toPoint();
+        if (savedPos != QPoint(-1, -1)) {
+            qDebug() << "Restoring saved position:" << savedPos;
+            move(savedPos);
+            return;
+        }
+        QScreen *screen = QApplication::primaryScreen();
+        if (screen) {
+            QPoint initialPos(50, 50); // Top-left corner with some margin
+            qDebug() << "No saved position. Using initial position:" << initialPos;
+            move(initialPos);
+        }
+    });
+    
+    qDebug() << "FloatingWidget created successfully";
 }
 
 void FloatingWidget::setupUI()
 {
-    // Make widget frameless and always on top
-    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+    // Make widget frameless and always on top - force it to be a top-level window
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Window);
     setAttribute(Qt::WA_TranslucentBackground);
+    
+    // Enable mouse tracking for better drag experience
+    setMouseTracking(true);
 
     // Set size
     setFixedSize(140, 60);
+    
+    // Use simple styling instead of custom paint event for testing
+    setStyleSheet("background-color: rgba(255, 255, 255, 200); border: 3px solid red; border-radius: 10px;");
+    
+    // Force the widget to accept mouse events
+    setAttribute(Qt::WA_NoMouseReplay);
+    
+    // Force the widget to be a top-level window
+    setParent(nullptr);
 
     // Create horizontal layout
     QHBoxLayout *layout = new QHBoxLayout(this);
@@ -107,47 +134,13 @@ void FloatingWidget::applyModernStyle()
 
 void FloatingWidget::paintEvent(QPaintEvent *event)
 {
-    Q_UNUSED(event)
-
+    // Temporarily disable custom painting to test basic dragging
+    QWidget::paintEvent(event);
+    
+    // Add a simple visual indicator for testing
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    // Apply scale transformation
-    QTransform transform;
-    transform.translate(width()/2.0, height()/2.0);
-    transform.scale(currentScale, currentScale);
-    transform.translate(-width()/2.0, -height()/2.0);
-    painter.setTransform(transform);
-
-    // Draw modern rounded rectangle with gradient
-    QPainterPath path;
-    path.addRoundedRect(rect(), 25, 25);
-
-    // Create gradient background with more vibrant colors
-    QLinearGradient gradient(0, 0, 0, height());
-    if (currentScale > 1.0) {
-        // Hover state - more vibrant
-        gradient.setColorAt(0, QColor(255, 255, 255, currentOpacity));
-        gradient.setColorAt(0.3, QColor(248, 250, 255, currentOpacity));
-        gradient.setColorAt(1, QColor(240, 245, 255, currentOpacity));
-    } else {
-        // Normal state
-        gradient.setColorAt(0, QColor(255, 255, 255, currentOpacity));
-        gradient.setColorAt(0.5, QColor(250, 250, 252, currentOpacity));
-        gradient.setColorAt(1, QColor(245, 245, 248, currentOpacity));
-    }
-
-    painter.fillPath(path, gradient);
-
-    // Draw subtle border with glow effect on hover
-    QPen borderPen;
-    if (currentScale > 1.0) {
-        borderPen = QPen(QColor(100, 150, 255, 150), 1.5);
-    } else {
-        borderPen = QPen(QColor(200, 200, 210, 100), 1);
-    }
-    painter.setPen(borderPen);
-    painter.drawPath(path);
+    painter.setPen(QPen(Qt::blue, 2));
+    painter.drawText(rect(), Qt::AlignCenter, "DRAG ME");
 }
 
 void FloatingWidget::enterEvent(QEnterEvent *event)
@@ -166,27 +159,51 @@ void FloatingWidget::leaveEvent(QEvent *event)
 
 void FloatingWidget::mousePressEvent(QMouseEvent *event)
 {
+    qDebug() << "Mouse press event received at:" << event->pos() << "Button:" << event->button();
+    
     if (event->button() == Qt::LeftButton) {
-        // Check if click is on a button - if so, don't start dragging
-        QWidget *childWidget = childAt(event->pos());
-        if (childWidget && (childWidget == screenshotBtn || childWidget == settingsBtn)) {
-            // Let button handle the click
-            event->ignore();
+        // Wayland: must request compositor-driven move; manual move() is ignored
+        const QString platformName = QGuiApplication::platformName();
+        if (platformName.contains("wayland", Qt::CaseInsensitive) && windowHandle()) {
+            qDebug() << "Starting system move via compositor (Wayland)";
+            windowHandle()->startSystemMove();
+            event->accept();
             return;
         }
 
-        // Start dragging only if not clicking on buttons
+        // Other platforms: perform manual dragging
         isDragging = true;
-        dragPosition = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        dragPosition = event->pos(); // Use local position instead of global
         setCursor(Qt::ClosedHandCursor);
         event->accept();
+        
+        // Change opacity to show click is working
+        currentOpacity = 100;
+        update();
+        
+        qDebug() << "Started dragging from position:" << dragPosition << "Global pos:" << event->globalPos();
+    } else {
+        event->ignore();
     }
 }
 
 void FloatingWidget::mouseMoveEvent(QMouseEvent *event)
 {
-    if (isDragging && (event->buttons() & Qt::LeftButton)) {
-        QPoint newPos = event->globalPosition().toPoint() - dragPosition;
+    static int moveCount = 0;
+    moveCount++;
+    
+    qDebug() << "Mouse move event #" << moveCount << " - isDragging:" << isDragging << "buttons:" << event->buttons() << "pos:" << event->pos();
+    
+    if (isDragging) {
+        // If on Wayland, system move is already in progress; ignore manual move
+        const QString platformName = QGuiApplication::platformName();
+        if (platformName.contains("wayland", Qt::CaseInsensitive)) {
+            event->accept();
+            return;
+        }
+        QPoint newPos = event->globalPos() - dragPosition;
+        
+        qDebug() << "Calculated new position:" << newPos << "from global:" << event->globalPos() << "dragPosition:" << dragPosition;
 
         // Keep widget on screen
         QScreen *screen = QApplication::primaryScreen();
@@ -198,6 +215,10 @@ void FloatingWidget::mouseMoveEvent(QMouseEvent *event)
 
         move(newPos);
         event->accept();
+        
+        qDebug() << "Moved widget to position:" << newPos;
+    } else {
+        event->ignore();
     }
 }
 
@@ -207,6 +228,17 @@ void FloatingWidget::mouseReleaseEvent(QMouseEvent *event)
         isDragging = false;
         setCursor(Qt::OpenHandCursor);
         event->accept();
+        
+        // Restore opacity
+        currentOpacity = 200;
+        update();
+        
+        // Persist current position
+        settings.setValue("floatingWidget/pos", this->pos());
+        
+        qDebug() << "Stopped dragging at position:" << pos();
+    } else {
+        event->ignore();
     }
 }
 
@@ -233,56 +265,32 @@ void FloatingWidget::animateHover(bool hover)
 
 void FloatingWidget::takeScreenshot()
 {
-    qDebug() << "Taking screenshot - Flameshot style!";
+    qDebug() << "Taking screenshot using ScreenCapture!";
 
     // Hide widget immediately and take screenshot
     hide();
 
     // Wait a moment for widget to hide completely
     QTimer::singleShot(100, [this]() {
-        qDebug() << "Capturing screen before showing overlay...";
+        qDebug() << "Capturing screen with cross-platform ScreenCapture...";
 
-        // Capture screen FIRST, before creating any overlay
-        QScreen *screen = QApplication::primaryScreen();
-        if (!screen) {
-            qWarning() << "No primary screen found!";
-            show(); // Show widget back
-            return;
-        }
+        // Use the new ScreenCapture class for real cross-platform capture
+        ScreenCapture *capture = new ScreenCapture(this);
+        QPixmap screenshot = capture->captureScreen();
+        capture->deleteLater();
 
-        qDebug() << "Screen geometry:" << screen->geometry();
+        qDebug() << "Screenshot capture completed, size:" << screenshot.size();
 
-        // Try multiple screenshot methods
-        QPixmap screenshot;
-
-        // Method 1: Basic screen grab
-        qDebug() << "Trying method 1: screen->grabWindow(0)";
-        screenshot = screen->grabWindow(0);
-
+        // If still no screenshot after all methods, create demo pattern
         if (screenshot.isNull()) {
-            qDebug() << "Method 1 failed, trying method 2: screen grab with geometry";
-            QRect screenRect = screen->geometry();
-            screenshot = screen->grabWindow(0, 0, 0, screenRect.width(), screenRect.height());
-        }
-
-        if (screenshot.isNull()) {
-            qDebug() << "Method 2 failed, trying method 3: Different screen grab approach";
-            // Try grabbing the entire screen with explicit coordinates
-            QRect screenRect = screen->geometry();
-            screenshot = screen->grabWindow(0, screenRect.x(), screenRect.y(), screenRect.width(), screenRect.height());
-        }
-
-        if (screenshot.isNull()) {
-            qDebug() << "Method 3 failed, trying method 4: Alternative screen grab";
-            // Try with different parameters for Wayland compatibility
-            screenshot = screen->grabWindow(0, 0, 0, -1, -1);
-        }
-
-        if (screenshot.isNull()) {
-            qDebug() << "All Qt methods failed. This is likely due to Wayland restrictions.";
-            qDebug() << "Creating demo pattern for now...";
-
+            qDebug() << "Screenshot capture failed, creating demo pattern as fallback";
             // Create a realistic demo pattern
+            QScreen *screen = QApplication::primaryScreen();
+            if (!screen) {
+                qWarning() << "No primary screen found!";
+                show();
+                return;
+            }
             QRect screenRect = screen->geometry();
             screenshot = QPixmap(screenRect.size());
 
@@ -309,9 +317,9 @@ void FloatingWidget::takeScreenshot()
             painter.setPen(Qt::white);
             painter.setFont(QFont("Arial", 16, QFont::Bold));
             painter.drawText(screenRect, Qt::AlignCenter,
-                            "Demo Mode - Wayland Screenshot Simulation\n\n"
+                            "OHAO Screenshot Tool - Demo Mode\n\n"
                             "Click and drag to select any area\n"
-                            "This demonstrates the selection functionality");
+                            "Screenshot capture restricted by Wayland security");
 
             painter.setPen(Qt::yellow);
             painter.setFont(QFont("Arial", 12));

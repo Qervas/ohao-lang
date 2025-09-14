@@ -5,6 +5,8 @@
 #include <QPropertyAnimation>
 #include <QGraphicsDropShadowEffect>
 #include <QTimer>
+#include <QSettings>
+#include <QCoreApplication>
 
 class FloatingWidget : public QWidget
 {
@@ -43,4 +45,7 @@ private:
     // Animation properties
     qreal currentScale;
     int currentOpacity;
+
+    // Settings for persisting window position
+    QSettings settings{QCoreApplication::organizationName(), QCoreApplication::applicationName()};
 };
