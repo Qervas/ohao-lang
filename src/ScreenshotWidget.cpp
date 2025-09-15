@@ -18,6 +18,8 @@ ScreenshotWidget::ScreenshotWidget(QWidget *parent)
     : QWidget(parent), selecting(false), hasSelection(false), showingToolbar(false)
     , ocrEngine(nullptr), ocrResultWindow(nullptr), showingResults(false)
 {
+    std::cout << "*** ScreenshotWidget constructor (no screenshot) called" << std::endl;
+
     // Make fullscreen and frameless
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -38,15 +40,22 @@ ScreenshotWidget::ScreenshotWidget(const QPixmap &screenshot, QWidget *parent)
 
     // Use the provided screenshot
     this->screenshot = screenshot;
-    qDebug() << "Screenshot widget initialized with image:" << screenshot.size();
+    std::cout << "*** Screenshot widget initialized with image: " << screenshot.size().width() << "x" << screenshot.size().height() << std::endl;
+
+    // Resize to match screenshot native resolution instead of logical screen size
+    if (!screenshot.isNull()) {
+        resize(screenshot.size());
+        std::cout << "*** Widget resized to native screenshot size: " << screenshot.size().width() << "x" << screenshot.size().height() << std::endl;
+    }
 
     setupWidget();
 }
 
 void ScreenshotWidget::setupWidget()
 {
-    // Make fullscreen
-    showFullScreen();
+    // Position at top-left but don't change size - we want to keep native resolution
+    move(0, 0);
+    show();
 
     // Enable mouse tracking
     setMouseTracking(true);
@@ -70,30 +79,27 @@ ScreenshotWidget::~ScreenshotWidget()
 
 void ScreenshotWidget::captureScreen()
 {
-    qDebug() << "Capturing screen for backward compatibility...";
+    std::cout << "*** ScreenshotWidget: Capturing screen using enhanced ScreenCapture class..." << std::endl;
 
-    QScreen *screen = QApplication::primaryScreen();
-    if (!screen) {
-        qWarning() << "No primary screen found!";
-        return;
-    }
-
-    qDebug() << "Screen geometry:" << screen->geometry();
-    screenshot = screen->grabWindow(0);
+    // Use our enhanced ScreenCapture class with resolution detection and preprocessing
+    ScreenCapture *capture = new ScreenCapture(this);
+    screenshot = capture->captureScreen();
 
     if (screenshot.isNull()) {
-        qWarning() << "Screenshot capture failed! Trying alternative method...";
+        qWarning() << "ScreenshotWidget: Enhanced capture failed! Trying fallback method...";
 
-        // Try alternative screen capture using screen directly
-        QRect screenRect = screen->geometry();
-        QPixmap desktopPixmap = screen->grabWindow(0, 0, 0, screenRect.width(), screenRect.height());
-
-        if (!desktopPixmap.isNull()) {
-            screenshot = desktopPixmap;
-            qDebug() << "Alternative screenshot method worked:" << screenshot.size();
+        // Fallback to basic Qt capture if enhanced method fails
+        QScreen *screen = QApplication::primaryScreen();
+        if (screen) {
+            qDebug() << "ScreenshotWidget: Using fallback Qt capture";
+            screenshot = screen->grabWindow(0);
         }
+    }
+
+    if (!screenshot.isNull()) {
+        qDebug() << "ScreenshotWidget: Screenshot captured successfully:" << screenshot.size();
     } else {
-        qDebug() << "Screenshot captured successfully:" << screenshot.size();
+        qWarning() << "ScreenshotWidget: All capture methods failed!";
     }
 
     if (!screenshot.isNull()) {

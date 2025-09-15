@@ -9,6 +9,7 @@
 #include <QKeyEvent>
 
 #include "OCREngine.h"
+#include "ScreenCapture.h"
 
 class OCRResultWindow;
 

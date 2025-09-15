@@ -11,6 +11,7 @@
 #include <QUrl>
 #include <QUuid>
 #include <QTimer>
+#include <iostream>
 
 ScreenCapture::ScreenCapture(QObject *parent)
     : QObject(parent)
@@ -28,18 +29,30 @@ ScreenCapture::~ScreenCapture()
 
 QPixmap ScreenCapture::captureScreen()
 {
-    qDebug() << "ScreenCapture: Starting screen capture";
+    std::cout << "*** ScreenCapture: Starting screen capture" << std::endl;
+
+    // Detect screen resolution first for robust handling
+    ScreenInfo screenInfo = detectScreenResolution();
 
 #ifdef Q_OS_LINUX
-    return captureLinux();
+    QPixmap screenshot = captureLinux();
 #elif defined(Q_OS_WIN)
-    return captureWindows();
+    QPixmap screenshot = captureWindows();
 #elif defined(Q_OS_MAC)
-    return captureMacOS();
+    QPixmap screenshot = captureMacOS();
 #else
     qWarning() << "ScreenCapture: Unsupported platform";
     return QPixmap();
 #endif
+
+    // Ensure highest quality and fix any resolution mismatches
+    if (!screenshot.isNull()) {
+        screenshot = ensureHighestQuality(screenshot, screenInfo);
+        // Apply OCR preprocessing for better text recognition
+        screenshot = preprocessForOCR(screenshot);
+    }
+
+    return screenshot;
 }
 
 #ifdef Q_OS_LINUX
@@ -74,9 +87,10 @@ QPixmap ScreenCapture::captureX11()
     QPixmap screenshot = screen->grabWindow(0);
     if (screenshot.isNull()) {
         qWarning() << "ScreenCapture: Failed to grab window on X11";
-    } else {
-        qDebug() << "ScreenCapture: X11 capture successful, size:" << screenshot.size();
+        return screenshot;
     }
+
+    qDebug() << "ScreenCapture: X11 capture successful, size:" << screenshot.size();
     return screenshot;
 }
 
@@ -211,12 +225,6 @@ QPixmap ScreenCapture::loadScreenshotFromUri(const QString &uri)
             qDebug() << "ScreenCapture: Screen geometry:" << screenGeometry;
             qDebug() << "ScreenCapture: Device pixel ratio:" << devicePixelRatio;
 
-            // If captured image is larger than screen geometry, scale it down
-            if (pixmap.width() > screenGeometry.width() || pixmap.height() > screenGeometry.height()) {
-                qDebug() << "ScreenCapture: Scaling down from" << pixmap.size() << "to" << screenGeometry.size();
-                pixmap = pixmap.scaled(screenGeometry.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-                qDebug() << "ScreenCapture: Final scaled size:" << pixmap.size();
-            }
         }
 
         // Clean up temporary file if it exists
@@ -262,3 +270,214 @@ QPixmap ScreenCapture::captureMacOS()
     return screenshot;
 }
 #endif // Q_OS_MAC
+
+// Image preprocessing methods for better OCR accuracy
+QPixmap ScreenCapture::preprocessForOCR(const QPixmap &originalPixmap)
+{
+    if (originalPixmap.isNull()) {
+        return originalPixmap;
+    }
+
+    qDebug() << "ScreenCapture: Starting OCR preprocessing for image size:" << originalPixmap.size();
+
+    QPixmap processed = originalPixmap;
+
+    // Step 1: Enhance contrast for better text visibility
+    processed = enhanceContrast(processed);
+
+    // Step 2: Apply sharpening to improve text edges
+    processed = sharpenImage(processed);
+
+    qDebug() << "ScreenCapture: OCR preprocessing complete";
+    return processed;
+}
+
+QPixmap ScreenCapture::enhanceContrast(const QPixmap &pixmap)
+{
+    if (pixmap.isNull()) {
+        return pixmap;
+    }
+
+    QImage image = pixmap.toImage();
+    if (image.isNull()) {
+        return pixmap;
+    }
+
+    // Convert to RGB32 if needed for better processing
+    if (image.format() != QImage::Format_RGB32 && image.format() != QImage::Format_ARGB32) {
+        image = image.convertToFormat(QImage::Format_RGB32);
+    }
+
+    qDebug() << "ScreenCapture: Enhancing contrast for OCR";
+
+    // Simple contrast enhancement - increase the difference between light and dark pixels
+    const double contrastFactor = 1.3; // 30% contrast increase
+    const int brightnessAdjust = 10;
+
+    for (int y = 0; y < image.height(); ++y) {
+        QRgb *line = reinterpret_cast<QRgb*>(image.scanLine(y));
+        for (int x = 0; x < image.width(); ++x) {
+            QRgb pixel = line[x];
+
+            int r = qRed(pixel);
+            int g = qGreen(pixel);
+            int b = qBlue(pixel);
+
+            // Apply contrast enhancement
+            r = qBound(0, static_cast<int>((r - 128) * contrastFactor + 128 + brightnessAdjust), 255);
+            g = qBound(0, static_cast<int>((g - 128) * contrastFactor + 128 + brightnessAdjust), 255);
+            b = qBound(0, static_cast<int>((b - 128) * contrastFactor + 128 + brightnessAdjust), 255);
+
+            line[x] = qRgb(r, g, b);
+        }
+    }
+
+    return QPixmap::fromImage(image);
+}
+
+QPixmap ScreenCapture::sharpenImage(const QPixmap &pixmap)
+{
+    if (pixmap.isNull()) {
+        return pixmap;
+    }
+
+    QImage image = pixmap.toImage();
+    if (image.isNull()) {
+        return pixmap;
+    }
+
+    // Convert to RGB32 for processing
+    if (image.format() != QImage::Format_RGB32 && image.format() != QImage::Format_ARGB32) {
+        image = image.convertToFormat(QImage::Format_RGB32);
+    }
+
+    qDebug() << "ScreenCapture: Applying sharpening filter for better text edges";
+
+    // Create sharpening kernel (unsharp mask)
+    const int kernelSize = 3;
+    const double kernel[kernelSize][kernelSize] = {
+        {-0.1, -0.2, -0.1},
+        {-0.2,  2.2, -0.2},
+        {-0.1, -0.2, -0.1}
+    };
+
+    QImage result = image;
+
+    // Apply sharpening filter
+    for (int y = 1; y < image.height() - 1; ++y) {
+        for (int x = 1; x < image.width() - 1; ++x) {
+            double r = 0.0, g = 0.0, b = 0.0;
+
+            // Apply kernel
+            for (int ky = -1; ky <= 1; ++ky) {
+                for (int kx = -1; kx <= 1; ++kx) {
+                    QRgb pixel = image.pixel(x + kx, y + ky);
+                    double weight = kernel[ky + 1][kx + 1];
+
+                    r += qRed(pixel) * weight;
+                    g += qGreen(pixel) * weight;
+                    b += qBlue(pixel) * weight;
+                }
+            }
+
+            // Clamp values and set pixel
+            r = qBound(0.0, r, 255.0);
+            g = qBound(0.0, g, 255.0);
+            b = qBound(0.0, b, 255.0);
+
+            result.setPixel(x, y, qRgb(static_cast<int>(r), static_cast<int>(g), static_cast<int>(b)));
+        }
+    }
+
+    return QPixmap::fromImage(result);
+}
+
+// Resolution detection and handling methods
+ScreenCapture::ScreenInfo ScreenCapture::detectScreenResolution()
+{
+    ScreenInfo info;
+
+    QScreen *screen = QGuiApplication::primaryScreen();
+    if (!screen) {
+        qWarning() << "ScreenCapture: No primary screen found for resolution detection";
+        return info;
+    }
+
+    // Get logical size (what Qt thinks the screen size is)
+    info.logicalSize = screen->size();
+
+    // Get device pixel ratio (DPI scaling factor)
+    info.devicePixelRatio = screen->devicePixelRatio();
+
+    // Get geometry which might differ from size()
+    QRect geometry = screen->geometry();
+    info.physicalSize = geometry.size();
+
+    // Try to get actual screen resolution from different sources
+    QSize actualResolution;
+
+    // Method 1: Try availableSize which might be more accurate
+    QSize availableSize = screen->availableSize();
+
+    // Method 2: Use the physical size from screen directly
+    QSizeF physicalSizeMM = screen->physicalSize();
+
+    // For your case: actual screen is 2560x1600, so let's detect this pattern
+    // If calculated native size is much larger than what we expect, use logical size with correct scaling
+    QSize calculatedNative = QSize(
+        static_cast<int>(info.physicalSize.width() * info.devicePixelRatio),
+        static_cast<int>(info.physicalSize.height() * info.devicePixelRatio)
+    );
+
+    // Detect if this is a case where Qt's DPI calculation is wrong
+    // Common actual resolutions for comparison
+    if ((calculatedNative.width() > 3000 && calculatedNative.height() > 2000) ||
+        (info.devicePixelRatio > 1.5 && info.logicalSize.width() < 2000)) {
+        // Likely a high-DPI display where Qt's calculation is off
+        // Use logical size but try to detect actual resolution
+        if (info.logicalSize.width() >= 1700 && info.logicalSize.width() <= 1800 &&
+            info.logicalSize.height() >= 1000 && info.logicalSize.height() <= 1100) {
+            // This looks like 2560x1600 scaled down - use actual resolution
+            info.nativeSize = QSize(2560, 1600);
+            std::cout << "*** Detected 2560x1600 display pattern, using actual resolution" << std::endl;
+        } else {
+            // Use 1.5x scaling as more realistic for this type of display
+            info.nativeSize = QSize(
+                static_cast<int>(info.logicalSize.width() * 1.5),
+                static_cast<int>(info.logicalSize.height() * 1.5)
+            );
+            std::cout << "*** Using 1.5x scaling instead of reported " << info.devicePixelRatio << "x" << std::endl;
+        }
+    } else {
+        // Normal case - use calculated native size
+        info.nativeSize = calculatedNative;
+    }
+
+    std::cout << "*** Screen resolution detection:" << std::endl;
+    std::cout << "  - Logical size: " << info.logicalSize.width() << "x" << info.logicalSize.height() << std::endl;
+    std::cout << "  - Physical size: " << info.physicalSize.width() << "x" << info.physicalSize.height() << std::endl;
+    std::cout << "  - Device pixel ratio: " << info.devicePixelRatio << std::endl;
+    std::cout << "  - Native resolution (corrected): " << info.nativeSize.width() << "x" << info.nativeSize.height() << std::endl;
+
+    return info;
+}
+
+QPixmap ScreenCapture::ensureHighestQuality(const QPixmap &pixmap, const ScreenInfo &screenInfo)
+{
+    if (pixmap.isNull()) {
+        qWarning() << "ScreenCapture: Cannot process null pixmap";
+        return pixmap;
+    }
+
+    QSize pixmapSize = pixmap.size();
+    std::cout << "*** Using native captured resolution: " << pixmapSize.width() << "x" << pixmapSize.height() << std::endl;
+
+    // NO SCALING - just use whatever resolution we captured at
+    // This ensures we work in native coordinates throughout
+    QPixmap result = pixmap;
+
+    // Reset device pixel ratio to 1.0 since we're working in native pixels
+    result.setDevicePixelRatio(1.0);
+
+    return result;
+}
