@@ -506,8 +506,13 @@ void ScreenshotWidget::mouseReleaseEvent(QMouseEvent *event)
                 update(); // Redraw to show toolbar
             }
         } else {
-            std::cout << "*** Selection too small, closing" << std::endl;
-            close();
+            std::cout << "*** Selection too small, ignoring and staying active" << std::endl;
+            // Reset selection state and keep the overlay active
+            hasSelection = false;
+            selecting = false;
+            showingToolbar = false;
+            setCursor(Qt::CrossCursor);
+            update();
         }
     }
 }
