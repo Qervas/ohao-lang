@@ -18,8 +18,6 @@ ScreenshotWidget::ScreenshotWidget(QWidget *parent)
     : QWidget(parent), selecting(false), hasSelection(false), showingToolbar(false)
     , ocrEngine(nullptr), ocrResultWindow(nullptr), showingResults(false)
 {
-    std::cout << "*** ScreenshotWidget constructor (no screenshot) called" << std::endl;
-
     // Make fullscreen and frameless
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -40,22 +38,15 @@ ScreenshotWidget::ScreenshotWidget(const QPixmap &screenshot, QWidget *parent)
 
     // Use the provided screenshot
     this->screenshot = screenshot;
-    std::cout << "*** Screenshot widget initialized with image: " << screenshot.size().width() << "x" << screenshot.size().height() << std::endl;
-
-    // Resize to match screenshot native resolution instead of logical screen size
-    if (!screenshot.isNull()) {
-        resize(screenshot.size());
-        std::cout << "*** Widget resized to native screenshot size: " << screenshot.size().width() << "x" << screenshot.size().height() << std::endl;
-    }
+    qDebug() << "Screenshot widget initialized with image:" << screenshot.size();
 
     setupWidget();
 }
 
 void ScreenshotWidget::setupWidget()
 {
-    // Position at top-left but don't change size - we want to keep native resolution
-    move(0, 0);
-    show();
+    // Always full screen so selection can cover the entire display area
+    showFullScreen();
 
     // Enable mouse tracking
     setMouseTracking(true);
@@ -67,9 +58,7 @@ void ScreenshotWidget::setupWidget()
     setFocusPolicy(Qt::StrongFocus);
     setFocus();
 
-    if (!screenshot.isNull()) {
-        resize(screenshot.size());
-    }
+    // Fullscreen handles sizing; nothing else to do
 }
 
 ScreenshotWidget::~ScreenshotWidget()
@@ -79,35 +68,24 @@ ScreenshotWidget::~ScreenshotWidget()
 
 void ScreenshotWidget::captureScreen()
 {
-    std::cout << "*** ScreenshotWidget: Capturing screen using enhanced ScreenCapture class..." << std::endl;
+    qDebug() << "Capturing screen for backward compatibility...";
 
-    // Use our enhanced ScreenCapture class with resolution detection and preprocessing
-    ScreenCapture *capture = new ScreenCapture(this);
-    screenshot = capture->captureScreen();
+    // Use central ScreenCapture so Wayland/X11/Win/Mac paths are consistent
+    ScreenCapture capture;
+    QPixmap captured = capture.captureScreen();
 
-    if (screenshot.isNull()) {
-        qWarning() << "ScreenshotWidget: Enhanced capture failed! Trying fallback method...";
-
-        // Fallback to basic Qt capture if enhanced method fails
-        QScreen *screen = QApplication::primaryScreen();
-        if (screen) {
-            qDebug() << "ScreenshotWidget: Using fallback Qt capture";
-            screenshot = screen->grabWindow(0);
-        }
-    }
-
-    if (!screenshot.isNull()) {
-        qDebug() << "ScreenshotWidget: Screenshot captured successfully:" << screenshot.size();
-    } else {
-        qWarning() << "ScreenshotWidget: All capture methods failed!";
-    }
-
-    if (!screenshot.isNull()) {
-        resize(screenshot.size());
-    } else {
+    if (captured.isNull()) {
         qCritical() << "All screenshot methods failed!";
         close();
+        return;
     }
+
+    // Keep DPR tagging for correct on-screen mapping during selection
+    screenshot = captured;
+    qDebug() << "Screenshot captured successfully:" << screenshot.size() << " DPR:" << screenshot.devicePixelRatio();
+
+    // Match widget size to logical size (QPixmap::size is already logical when DPR>1)
+    resize(screenshot.size());
 }
 
 void ScreenshotWidget::paintEvent(QPaintEvent *event)
@@ -135,7 +113,15 @@ void ScreenshotWidget::paintEvent(QPaintEvent *event)
         // Clear the selection area to show original screenshot
         painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
         painter.fillRect(selectionRect, Qt::transparent);
-        painter.drawPixmap(selectionRect, screenshot, selectionRect);
+        // Map logical selection to pixmap device pixels for the source rect
+        {
+            qreal dpr = screenshot.devicePixelRatio();
+            QRect srcRect(
+                QPoint(static_cast<int>(selectionRect.x() * dpr), static_cast<int>(selectionRect.y() * dpr)),
+                QSize(static_cast<int>(selectionRect.width() * dpr), static_cast<int>(selectionRect.height() * dpr))
+            );
+            painter.drawPixmap(selectionRect, screenshot, srcRect);
+        }
 
         // Draw modern selection border with blue accent
         QPen borderPen(QColor(0, 150, 255), 3);
@@ -156,7 +142,10 @@ void ScreenshotWidget::paintEvent(QPaintEvent *event)
 
         // Show dimensions with modern styling
         if (selectionRect.width() > 30 && selectionRect.height() > 20) {
-            QString dimensions = QString("%1 × %2").arg(selectionRect.width()).arg(selectionRect.height());
+            qreal dpr = screenshot.devicePixelRatio();
+            int physW = static_cast<int>(selectionRect.width() * dpr);
+            int physH = static_cast<int>(selectionRect.height() * dpr);
+            QString dimensions = QString("%1 × %2 px").arg(physW).arg(physH);
             QFont font = painter.font();
             font.setPointSize(11);
             font.setWeight(QFont::Bold);
@@ -527,6 +516,10 @@ void ScreenshotWidget::keyPressEvent(QKeyEvent *event)
 {
     if (event->key() == Qt::Key_Escape) {
         emit screenshotFinished();
+        // If OCR is running, cancel it safely
+        if (ocrEngine && ocrEngine->isBusy()) {
+            ocrEngine->cancel();
+        }
         close();
     } else if (showingResults && (event->modifiers() & Qt::ControlModifier) && event->key() == Qt::Key_C) {
         // Copy OCR results when showing overlay
@@ -599,7 +592,12 @@ void ScreenshotWidget::handleToolbarClick(ToolbarButton button)
 void ScreenshotWidget::handleCopy()
 {
     QRect selection = QRect(startPoint, endPoint).normalized();
-    QPixmap selectedArea = screenshot.copy(selection);
+    QPixmap selectedArea = screenshot.copy(QRect(
+        QPoint(static_cast<int>(selection.x() * screenshot.devicePixelRatio()),
+               static_cast<int>(selection.y() * screenshot.devicePixelRatio())),
+        QSize(static_cast<int>(selection.width() * screenshot.devicePixelRatio()),
+              static_cast<int>(selection.height() * screenshot.devicePixelRatio()))
+    ));
 
     QClipboard *clipboard = QApplication::clipboard();
     clipboard->setPixmap(selectedArea);
@@ -612,7 +610,12 @@ void ScreenshotWidget::handleCopy()
 void ScreenshotWidget::handleSave()
 {
     QRect selection = QRect(startPoint, endPoint).normalized();
-    QPixmap selectedArea = screenshot.copy(selection);
+    QPixmap selectedArea = screenshot.copy(QRect(
+        QPoint(static_cast<int>(selection.x() * screenshot.devicePixelRatio()),
+               static_cast<int>(selection.y() * screenshot.devicePixelRatio())),
+        QSize(static_cast<int>(selection.width() * screenshot.devicePixelRatio()),
+              static_cast<int>(selection.height() * screenshot.devicePixelRatio()))
+    ));
 
     QString fileName = QFileDialog::getSaveFileName(this, "Save Screenshot",
         QDir::homePath() + "/screenshot.png", "Images (*.png *.jpg)");
@@ -629,7 +632,12 @@ void ScreenshotWidget::handleSave()
 void ScreenshotWidget::handleOCR()
 {
     QRect selection = QRect(startPoint, endPoint).normalized();
-    QPixmap selectedArea = screenshot.copy(selection);
+    QPixmap selectedArea = screenshot.copy(QRect(
+        QPoint(static_cast<int>(selection.x() * screenshot.devicePixelRatio()),
+               static_cast<int>(selection.y() * screenshot.devicePixelRatio())),
+        QSize(static_cast<int>(selection.width() * screenshot.devicePixelRatio()),
+              static_cast<int>(selection.height() * screenshot.devicePixelRatio()))
+    ));
 
     qDebug() << "OCR requested for selection:" << selection;
 
@@ -674,6 +682,12 @@ void ScreenshotWidget::handleOCR()
         ocrEngine->setTranslationTargetLanguage(settings.value("translation/targetLanguage", "English").toString());
     }
 
+    // Debounce if already running
+    if (m_ocrInProgress || (ocrEngine && ocrEngine->isBusy())) {
+        qDebug() << "OCR already in progress - ignoring new request";
+        return;
+    }
+
     // Check if auto-OCR is enabled to determine UI behavior
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     bool autoOcr = settings.value("translation/autoOcr", true).toBool();
@@ -702,6 +716,7 @@ void ScreenshotWidget::handleOCR()
     m_lastOCRImage = selectedArea;
 
     // Start OCR processing
+    m_ocrInProgress = true;
     ocrEngine->performOCR(selectedArea);
 }
 
@@ -714,6 +729,8 @@ void ScreenshotWidget::handleCancel()
 void ScreenshotWidget::onOCRFinished(const OCRResult &result)
 {
     qDebug() << "OCR finished. Success:" << result.success << "Text:" << result.text;
+
+    m_ocrInProgress = false;
 
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     bool autoOcr = settings.value("translation/autoOcr", true).toBool();
@@ -750,6 +767,8 @@ void ScreenshotWidget::onOCRProgress(const QString &status)
 void ScreenshotWidget::onOCRError(const QString &error)
 {
     qDebug() << "OCR error:" << error;
+
+    m_ocrInProgress = false;
 
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     bool autoOcr = settings.value("translation/autoOcr", true).toBool();

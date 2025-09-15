@@ -81,4 +81,7 @@ private:
     OCRResult m_currentResult;
     QString m_progressText;
     QRect m_resultAreaRect;
+
+    // Guard to debounce OCR when already running
+    bool m_ocrInProgress = false;
 };

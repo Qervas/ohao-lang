@@ -19,13 +19,23 @@ OCREngine::OCREngine(QObject *parent)
 
 OCREngine::~OCREngine()
 {
-    if (m_process) {
-        m_process->kill();
-        m_process->waitForFinished(3000);
+    stopRunningProcess();
+    if (!m_currentImagePath.isEmpty()) {
+        QFile::remove(m_currentImagePath);
     }
-    if (m_tempImageFile) {
-        delete m_tempImageFile;
+}
+
+void OCREngine::cancel()
+{
+    stopRunningProcess();
+    if (!m_currentImagePath.isEmpty()) {
+        QFile::remove(m_currentImagePath);
+        m_currentImagePath.clear();
     }
+    OCRResult cancelled;
+    cancelled.success = false;
+    cancelled.errorMessage = "OCR cancelled";
+    emit ocrFinished(cancelled);
 }
 
 void OCREngine::setEngine(Engine engine)
@@ -80,6 +90,9 @@ void OCREngine::performOCR(const QPixmap &image)
         return;
     }
 
+    // If already running, cancel current run to start a new one safely
+    stopRunningProcess();
+
     emit ocrProgress("Starting OCR processing...");
 
     switch (m_engine) {
@@ -108,29 +121,23 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         return;
     }
 
-    // Save image to temporary file
-    if (m_tempImageFile) {
-        delete m_tempImageFile;
+    // Save image to persistent temp file
+    if (!m_currentImagePath.isEmpty()) {
+        QFile::remove(m_currentImagePath);
+        m_currentImagePath.clear();
     }
 
-    m_tempImageFile = new QTemporaryFile(m_tempDir + "/ocr_image_XXXXXX.png");
-    if (!m_tempImageFile->open()) {
-        emit ocrError("Failed to create temporary image file");
-        return;
-    }
-
-    QString imagePath = m_tempImageFile->fileName();
-    if (!image.save(imagePath, "PNG")) {
+    m_currentImagePath = m_tempDir + "/ocr_image_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".png";
+    if (!image.save(m_currentImagePath, "PNG")) {
         emit ocrError("Failed to save image to temporary file");
         return;
     }
-    m_tempImageFile->close();
 
     // Preprocess image if enabled
-    QString processedImagePath = imagePath;
+    QString processedImagePath = m_currentImagePath;
     if (m_preprocessing) {
         emit ocrProgress("Preprocessing image...");
-        processedImagePath = preprocessImage(imagePath);
+        processedImagePath = preprocessImage(m_currentImagePath);
     }
 
     // Prepare Tesseract command
@@ -178,23 +185,17 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
 
 void OCREngine::performEasyOCR(const QPixmap &image)
 {
-    // Save image to temporary file
-    if (m_tempImageFile) {
-        delete m_tempImageFile;
+    // Save image to persistent temp file
+    if (!m_currentImagePath.isEmpty()) {
+        QFile::remove(m_currentImagePath);
+        m_currentImagePath.clear();
     }
 
-    m_tempImageFile = new QTemporaryFile(m_tempDir + "/ocr_image_XXXXXX.png");
-    if (!m_tempImageFile->open()) {
-        emit ocrError("Failed to create temporary image file");
-        return;
-    }
-
-    QString imagePath = m_tempImageFile->fileName();
-    if (!image.save(imagePath, "PNG")) {
+    m_currentImagePath = m_tempDir + "/ocr_image_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".png";
+    if (!image.save(m_currentImagePath, "PNG")) {
         emit ocrError("Failed to save image to temporary file");
         return;
     }
-    m_tempImageFile->close();
 
     QString script = getPythonOCRScript(EasyOCR);
 
@@ -211,7 +212,7 @@ void OCREngine::performEasyOCR(const QPixmap &image)
     emit ocrProgress("Running EasyOCR...");
 
     QStringList arguments;
-    arguments << scriptFile.fileName() << imagePath << m_language.toLower();
+    arguments << scriptFile.fileName() << m_currentImagePath << m_language.toLower();
 
     m_process = new QProcess(this);
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
@@ -230,23 +231,17 @@ void OCREngine::performEasyOCR(const QPixmap &image)
 
 void OCREngine::performPaddleOCR(const QPixmap &image)
 {
-    // Similar implementation to EasyOCR but with PaddleOCR
-    if (m_tempImageFile) {
-        delete m_tempImageFile;
+    // Save image to persistent temp file
+    if (!m_currentImagePath.isEmpty()) {
+        QFile::remove(m_currentImagePath);
+        m_currentImagePath.clear();
     }
 
-    m_tempImageFile = new QTemporaryFile(m_tempDir + "/ocr_image_XXXXXX.png");
-    if (!m_tempImageFile->open()) {
-        emit ocrError("Failed to create temporary image file");
-        return;
-    }
-
-    QString imagePath = m_tempImageFile->fileName();
-    if (!image.save(imagePath, "PNG")) {
+    m_currentImagePath = m_tempDir + "/ocr_image_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".png";
+    if (!image.save(m_currentImagePath, "PNG")) {
         emit ocrError("Failed to save image to temporary file");
         return;
     }
-    m_tempImageFile->close();
 
     QString script = getPythonOCRScript(PaddleOCR);
 
@@ -262,7 +257,7 @@ void OCREngine::performPaddleOCR(const QPixmap &image)
     emit ocrProgress("Running PaddleOCR...");
 
     QStringList arguments;
-    arguments << scriptFile.fileName() << imagePath << m_language.toLower();
+    arguments << scriptFile.fileName() << m_currentImagePath << m_language.toLower();
 
     m_process = new QProcess(this);
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
@@ -526,6 +521,12 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
     m_process->deleteLater();
     m_process = nullptr;
 
+    // Clean up temp image
+    if (!m_currentImagePath.isEmpty()) {
+        QFile::remove(m_currentImagePath);
+        m_currentImagePath.clear();
+    }
+
     // Store the OCR result and start translation if auto-translate is enabled
     m_currentOCRResult = result;
     if (result.success && m_autoTranslate && !result.text.isEmpty()) {
@@ -566,6 +567,12 @@ void OCREngine::onPythonOCRFinished(int exitCode, QProcess::ExitStatus exitStatu
 
     m_process->deleteLater();
     m_process = nullptr;
+
+    // Clean up temp image
+    if (!m_currentImagePath.isEmpty()) {
+        QFile::remove(m_currentImagePath);
+        m_currentImagePath.clear();
+    }
 
     // Store the OCR result and start translation if auto-translate is enabled
     m_currentOCRResult = result;
@@ -720,4 +727,16 @@ void OCREngine::onTranslationError(const QString &error)
 
     emit ocrProgress("Translation error: " + error);
     emit ocrFinished(m_currentOCRResult);
+}
+
+void OCREngine::stopRunningProcess()
+{
+    if (m_process) {
+        if (m_process->state() != QProcess::NotRunning) {
+            m_process->kill();
+            m_process->waitForFinished(1000);
+        }
+        m_process->deleteLater();
+        m_process = nullptr;
+    }
 }

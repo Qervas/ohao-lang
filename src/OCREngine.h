@@ -72,6 +72,11 @@ public:
     static bool isPaddleOCRAvailable();
     static bool isWindowsOCRAvailable();
 
+    // Concurrency helpers
+    bool isBusy() const { return m_process && m_process->state() != QProcess::NotRunning; }
+public slots:
+    void cancel();
+
 signals:
     void ocrFinished(const OCRResult &result);
     void ocrProgress(const QString &status);
@@ -96,6 +101,9 @@ private:
     QString getPythonOCRScript(Engine engine);
     void startTranslation(const QString &text);
 
+    // Helper to stop any running process safely
+    void stopRunningProcess();
+
     Engine m_engine = Tesseract;
     QString m_language = "English";
     int m_qualityLevel = 3;
@@ -113,7 +121,8 @@ private:
 
     QProcess *m_process = nullptr;
     QNetworkAccessManager *m_networkManager = nullptr;
-    QTemporaryFile *m_tempImageFile = nullptr;
+    // Replace QTemporaryFile* with persistent image path we manage manually
+    QString m_currentImagePath;
     QString m_tempDir;
     QSettings *m_settings = nullptr;
 };

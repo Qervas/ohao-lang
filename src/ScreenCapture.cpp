@@ -29,30 +29,18 @@ ScreenCapture::~ScreenCapture()
 
 QPixmap ScreenCapture::captureScreen()
 {
-    std::cout << "*** ScreenCapture: Starting screen capture" << std::endl;
-
-    // Detect screen resolution first for robust handling
-    ScreenInfo screenInfo = detectScreenResolution();
+    qDebug() << "ScreenCapture: Starting screen capture";
 
 #ifdef Q_OS_LINUX
-    QPixmap screenshot = captureLinux();
+    return captureLinux();
 #elif defined(Q_OS_WIN)
-    QPixmap screenshot = captureWindows();
+    return captureWindows();
 #elif defined(Q_OS_MAC)
-    QPixmap screenshot = captureMacOS();
+    return captureMacOS();
 #else
     qWarning() << "ScreenCapture: Unsupported platform";
     return QPixmap();
 #endif
-
-    // Ensure highest quality and fix any resolution mismatches
-    if (!screenshot.isNull()) {
-        screenshot = ensureHighestQuality(screenshot, screenInfo);
-        // Apply OCR preprocessing for better text recognition
-        screenshot = preprocessForOCR(screenshot);
-    }
-
-    return screenshot;
 }
 
 #ifdef Q_OS_LINUX
@@ -85,12 +73,23 @@ QPixmap ScreenCapture::captureX11()
     }
 
     QPixmap screenshot = screen->grabWindow(0);
+    // Infer DPR so logical size matches screen logical size
+    {
+        const QSize screenLogical = screen->geometry().size();
+        const QSize imgPhysical = screenshot.size();
+        if (screenLogical.width() > 0 && screenLogical.height() > 0) {
+            const qreal inferredDprW = static_cast<qreal>(imgPhysical.width()) / static_cast<qreal>(screenLogical.width());
+            const qreal inferredDprH = static_cast<qreal>(imgPhysical.height()) / static_cast<qreal>(screenLogical.height());
+            const qreal inferredDpr = qMax<qreal>(1.0, (inferredDprW + inferredDprH) / 2.0);
+            screenshot.setDevicePixelRatio(inferredDpr);
+            qDebug() << "ScreenCapture: X11 inferred DPR:" << inferredDpr;
+        }
+    }
     if (screenshot.isNull()) {
         qWarning() << "ScreenCapture: Failed to grab window on X11";
-        return screenshot;
+    } else {
+        qDebug() << "ScreenCapture: X11 capture successful, size:" << screenshot.size();
     }
-
-    qDebug() << "ScreenCapture: X11 capture successful, size:" << screenshot.size();
     return screenshot;
 }
 
@@ -216,15 +215,18 @@ QPixmap ScreenCapture::loadScreenshotFromUri(const QString &uri)
     if (pixmap.load(path)) {
         qDebug() << "ScreenCapture: Successfully loaded screenshot, size:" << pixmap.size();
 
-        // Handle DPI scaling - portal captures at native resolution
+        // Preserve native pixels and infer DPR from image physical size vs screen logical geometry
         QScreen *screen = QGuiApplication::primaryScreen();
         if (screen) {
-            QRect screenGeometry = screen->geometry();
-            qreal devicePixelRatio = screen->devicePixelRatio();
-
-            qDebug() << "ScreenCapture: Screen geometry:" << screenGeometry;
-            qDebug() << "ScreenCapture: Device pixel ratio:" << devicePixelRatio;
-
+            const QSize screenLogical = screen->geometry().size();
+            const QSize imgPhysical = pixmap.size();
+            if (screenLogical.width() > 0 && screenLogical.height() > 0) {
+                const qreal inferredDprW = static_cast<qreal>(imgPhysical.width()) / static_cast<qreal>(screenLogical.width());
+                const qreal inferredDprH = static_cast<qreal>(imgPhysical.height()) / static_cast<qreal>(screenLogical.height());
+                const qreal inferredDpr = qMax<qreal>(1.0, (inferredDprW + inferredDprH) / 2.0);
+                qDebug() << "ScreenCapture: Inferred DPR from portal image:" << inferredDpr << " (W:" << inferredDprW << ", H:" << inferredDprH << ")";
+                pixmap.setDevicePixelRatio(inferredDpr);
+            }
         }
 
         // Clean up temporary file if it exists
@@ -250,6 +252,17 @@ QPixmap ScreenCapture::captureWindows()
     }
 
     QPixmap screenshot = screen->grabWindow(0);
+    {
+        const QSize screenLogical = screen->geometry().size();
+        const QSize imgPhysical = screenshot.size();
+        if (screenLogical.width() > 0 && screenLogical.height() > 0) {
+            const qreal inferredDprW = static_cast<qreal>(imgPhysical.width()) / static_cast<qreal>(screenLogical.width());
+            const qreal inferredDprH = static_cast<qreal>(imgPhysical.height()) / static_cast<qreal>(screenLogical.height());
+            const qreal inferredDpr = qMax<qreal>(1.0, (inferredDprW + inferredDprH) / 2.0);
+            screenshot.setDevicePixelRatio(inferredDpr);
+            qDebug() << "ScreenCapture: Windows inferred DPR:" << inferredDpr;
+        }
+    }
     qDebug() << "ScreenCapture: Windows capture, size:" << screenshot.size();
     return screenshot;
 }
@@ -266,6 +279,17 @@ QPixmap ScreenCapture::captureMacOS()
     }
 
     QPixmap screenshot = screen->grabWindow(0);
+    {
+        const QSize screenLogical = screen->geometry().size();
+        const QSize imgPhysical = screenshot.size();
+        if (screenLogical.width() > 0 && screenLogical.height() > 0) {
+            const qreal inferredDprW = static_cast<qreal>(imgPhysical.width()) / static_cast<qreal>(screenLogical.width());
+            const qreal inferredDprH = static_cast<qreal>(imgPhysical.height()) / static_cast<qreal>(screenLogical.height());
+            const qreal inferredDpr = qMax<qreal>(1.0, (inferredDprW + inferredDprH) / 2.0);
+            screenshot.setDevicePixelRatio(inferredDpr);
+            qDebug() << "ScreenCapture: macOS inferred DPR:" << inferredDpr;
+        }
+    }
     qDebug() << "ScreenCapture: macOS capture, size:" << screenshot.size();
     return screenshot;
 }
