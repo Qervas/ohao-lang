@@ -5,6 +5,8 @@
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QEventLoop>
+#include <QMap>
+#include <QVariant>
 
 class ScreenCapture : public QObject
 {
@@ -21,8 +23,10 @@ signals:
     void captureCompleted(const QPixmap &screenshot);
     void captureFailed(const QString &error);
 
+#ifdef Q_OS_LINUX
 private slots:
-    void handlePortalResponse(uint response, const QVariantMap &results);
+    void handlePortalResponse(uint response, const QMap<QString, QVariant> &results);
+#endif
 
 private:
     // Platform-specific implementations

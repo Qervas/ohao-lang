@@ -123,7 +123,7 @@ bool ScreenCapture::callScreenshotPortal()
                 "org.freedesktop.portal.Request",
                 "Response",
                 this,
-                SLOT(handlePortalResponse(uint,QVariantMap)));
+                SLOT(handlePortalResponse(uint,QMap<QString,QVariant>)));
 
     // Call the Screenshot method
     QDBusMessage message = QDBusMessage::createMethodCall(
@@ -173,7 +173,7 @@ bool ScreenCapture::callScreenshotPortal()
     return !m_screenshot.isNull();
 }
 
-void ScreenCapture::handlePortalResponse(uint response, const QVariantMap &results)
+void ScreenCapture::handlePortalResponse(uint response, const QMap<QString,QVariant> &results)
 {
     qDebug() << "ScreenCapture: Portal response received, code:" << response;
     qDebug() << "ScreenCapture: Results:" << results;
