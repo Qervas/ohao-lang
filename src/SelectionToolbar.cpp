@@ -21,49 +21,25 @@ void SelectionToolbar::setupUI()
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(4);
 
-    // Modern button style for dark toolbar
-    QString buttonStyle = R"(
-        QPushButton {
-            background-color: rgba(70, 70, 80, 200);
-            border: 1px solid rgba(100, 100, 120, 150);
-            border-radius: 18px;
-            padding: 8px 12px;
-            font-size: 16px;
-            font-weight: 600;
-            color: #FFFFFF;
-            min-width: 38px;
-            min-height: 38px;
-        }
-        QPushButton:hover {
-            background-color: rgba(90, 140, 255, 220);
-            border: 1px solid rgba(120, 160, 255, 200);
-            color: #FFFFFF;
-        }
-        QPushButton:pressed {
-            background-color: rgba(60, 110, 220, 255);
-            border: 1px solid rgba(100, 140, 255, 200);
-        }
-    )";
-
     // Create buttons with icons
     copyBtn = new QPushButton("📋", this);
     copyBtn->setToolTip("Copy to clipboard");
-    copyBtn->setStyleSheet(buttonStyle);
+    copyBtn->setObjectName("toolbarButton");
     connect(copyBtn, &QPushButton::clicked, this, &SelectionToolbar::copyRequested);
 
     saveBtn = new QPushButton("💾", this);
     saveBtn->setToolTip("Save to file");
-    saveBtn->setStyleSheet(buttonStyle);
+    saveBtn->setObjectName("toolbarButton");
     connect(saveBtn, &QPushButton::clicked, this, &SelectionToolbar::saveRequested);
 
     ocrBtn = new QPushButton("📝", this);
     ocrBtn->setToolTip("Extract text (OCR)");
-    ocrBtn->setStyleSheet(buttonStyle);
+    ocrBtn->setObjectName("toolbarButton");
     connect(ocrBtn, &QPushButton::clicked, this, &SelectionToolbar::ocrRequested);
 
     cancelBtn = new QPushButton("❌", this);
     cancelBtn->setToolTip("Cancel");
-    cancelBtn->setStyleSheet(buttonStyle);
+    cancelBtn->setObjectName("toolbarButton");
     connect(cancelBtn, &QPushButton::clicked, this, &SelectionToolbar::cancelRequested);
 
     // Add buttons to layout
@@ -72,14 +48,7 @@ void SelectionToolbar::setupUI()
     layout->addWidget(ocrBtn);
     layout->addWidget(cancelBtn);
 
-    // Set modern widget style with shadow for better visibility outside selection
-    setStyleSheet(R"(
-        SelectionToolbar {
-            background-color: rgba(30, 30, 35, 240);
-            border: 1px solid rgba(100, 100, 120, 150);
-            border-radius: 24px;
-        }
-    )");
+    setObjectName("selectionToolbar");
 
     // Add drop shadow for better visibility when positioned outside selection
     QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);

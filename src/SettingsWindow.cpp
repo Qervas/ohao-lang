@@ -7,6 +7,7 @@
 #include <QShowEvent>
 #include <QHideEvent>
 #include <QCoreApplication>
+#include "ThemeManager.h"
 
 SettingsWindow::SettingsWindow(QWidget *parent)
     : QDialog(parent)
@@ -307,7 +308,11 @@ void SettingsWindow::setupAppearanceTab()
     QFormLayout *themeLayout = new QFormLayout(themeGroup);
 
     themeCombo = new QComboBox();
-    themeCombo->addItems({"Auto (System)", "Light", "Dark", "High Contrast"});
+    themeCombo->addItems({"Auto (System)", "Light", "Dark", "High Contrast", "Cyberpunk"});
+    connect(themeCombo, &QComboBox::currentTextChanged, this, [this](const QString &text){
+        // Preview theme instantly
+        ThemeManager::applyTheme(ThemeManager::fromString(text));
+    });
     themeLayout->addRow("Theme:", themeCombo);
 
     layout->addWidget(themeGroup);
@@ -342,237 +347,7 @@ void SettingsWindow::setupAppearanceTab()
 
 void SettingsWindow::applyModernStyling()
 {
-    setStyleSheet(R"(
-        QDialog {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 rgba(240, 242, 245, 0.95),
-                stop:1 rgba(250, 252, 255, 0.95));
-            border-radius: 15px;
-            border: 1px solid rgba(200, 200, 210, 0.3);
-        }
-
-        QTabWidget {
-            background: transparent;
-            border: none;
-        }
-
-        QTabWidget::pane {
-            border: 2px solid rgba(200, 200, 210, 0.2);
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.7);
-            margin-top: 5px;
-        }
-
-        QTabWidget::tab-bar {
-            alignment: center;
-        }
-
-        QTabBar::tab {
-            background: rgba(220, 220, 230, 0.5);
-            border: 1px solid rgba(200, 200, 210, 0.3);
-            padding: 12px 24px;
-            margin-right: 2px;
-            border-top-left-radius: 8px;
-            border-top-right-radius: 8px;
-            font-weight: 500;
-            color: #4A5568;
-        }
-
-        QTabBar::tab:selected {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(255, 255, 255, 0.9),
-                stop:1 rgba(245, 247, 250, 0.9));
-            border-bottom-color: transparent;
-            color: #2D3748;
-            font-weight: 600;
-        }
-
-        QTabBar::tab:hover:!selected {
-            background: rgba(235, 235, 245, 0.7);
-        }
-
-        QGroupBox {
-            font-weight: 600;
-            font-size: 13px;
-            color: #2D3748;
-            border: 2px solid rgba(200, 200, 210, 0.2);
-            border-radius: 8px;
-            margin-top: 10px;
-            padding-top: 10px;
-            background: rgba(255, 255, 255, 0.4);
-        }
-
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 10px;
-            padding: 0 5px 0 5px;
-        }
-
-        QComboBox, QLineEdit, QSpinBox {
-            border: 2px solid rgba(200, 200, 210, 0.3);
-            border-radius: 6px;
-            padding: 8px 12px;
-            background: rgba(255, 255, 255, 0.8);
-            font-size: 13px;
-            min-height: 24px;
-            min-width: 120px;
-        }
-
-        QComboBox:focus, QLineEdit:focus, QSpinBox:focus {
-            border-color: rgba(100, 150, 250, 0.6);
-            background: rgba(255, 255, 255, 1.0);
-        }
-
-        QComboBox::drop-down {
-            border: none;
-            width: 20px;
-        }
-
-        QComboBox::down-arrow {
-            image: none;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-top: 4px solid #666;
-            margin-right: 8px;
-        }
-
-        QCheckBox {
-            spacing: 8px;
-            font-size: 13px;
-            color: #4A5568;
-        }
-
-        QCheckBox::indicator {
-            width: 18px;
-            height: 18px;
-            border: 2px solid rgba(200, 200, 210, 0.4);
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.8);
-        }
-
-        QCheckBox::indicator:checked {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 rgba(100, 150, 250, 0.9),
-                stop:1 rgba(120, 170, 255, 0.9));
-            border-color: rgba(100, 150, 250, 0.6);
-        }
-
-        QSlider::groove:horizontal {
-            border: 1px solid rgba(200, 200, 210, 0.3);
-            height: 6px;
-            background: rgba(220, 220, 230, 0.5);
-            border-radius: 3px;
-        }
-
-        QSlider::handle:horizontal {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 rgba(100, 150, 250, 0.9),
-                stop:1 rgba(120, 170, 255, 0.9));
-            border: 2px solid rgba(100, 150, 250, 0.6);
-            width: 20px;
-            margin: -8px 0;
-            border-radius: 10px;
-        }
-
-        QTextEdit {
-            border: 2px solid rgba(200, 200, 210, 0.3);
-            border-radius: 6px;
-            background: rgba(250, 250, 252, 0.9);
-            padding: 8px;
-            font-size: 12px;
-        }
-
-        QPushButton {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(255, 255, 255, 0.9),
-                stop:1 rgba(240, 242, 245, 0.9));
-            border: 2px solid rgba(200, 200, 210, 0.3);
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-weight: 600;
-            font-size: 13px;
-            color: #4A5568;
-            min-width: 80px;
-        }
-
-        QPushButton:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(255, 255, 255, 1.0),
-                stop:1 rgba(245, 247, 250, 1.0));
-            border-color: rgba(100, 150, 250, 0.4);
-        }
-
-        QPushButton:pressed {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(235, 237, 240, 1.0),
-                stop:1 rgba(225, 227, 230, 1.0));
-        }
-
-        QPushButton#applyBtn {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(100, 150, 250, 0.9),
-                stop:1 rgba(80, 130, 230, 0.9));
-            color: white;
-            border-color: rgba(80, 130, 230, 0.6);
-        }
-
-        QPushButton#applyBtn:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(120, 170, 255, 0.95),
-                stop:1 rgba(100, 150, 250, 0.95));
-        }
-
-        QPushButton#testBtn {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(50, 200, 120, 0.9),
-                stop:1 rgba(30, 180, 100, 0.9));
-            color: white;
-            border-color: rgba(30, 180, 100, 0.6);
-        }
-
-        QPushButton#testBtn:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(70, 220, 140, 0.95),
-                stop:1 rgba(50, 200, 120, 0.95));
-        }
-
-        QScrollArea {
-            background: transparent;
-            border: none;
-        }
-
-        QScrollBar:vertical {
-            background: rgba(240, 240, 245, 0.5);
-            width: 12px;
-            border-radius: 6px;
-            margin: 2px;
-        }
-
-        QScrollBar::handle:vertical {
-            background: rgba(180, 180, 190, 0.7);
-            border-radius: 5px;
-            min-height: 20px;
-        }
-
-        QScrollBar::handle:vertical:hover {
-            background: rgba(160, 160, 170, 0.9);
-        }
-
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-            height: 0px;
-        }
-
-        QLabel {
-            color: #4A5568;
-            font-size: 13px;
-            padding: 2px;
-        }
-
-        QFormLayout QLabel {
-            min-width: 120px;
-            padding-right: 8px;
-        }
-    )");
+    // Now themed globally via ThemeManager
 }
 
 void SettingsWindow::loadSettings()
@@ -784,15 +559,14 @@ void SettingsWindow::onTestOcrClicked()
     ocrStatusText->setPlainText(result);
 
     // Update engine dropdown styling based on availability
-    if (engineAvailable) {
-        ocrEngineCombo->setStyleSheet(ocrEngineCombo->styleSheet() + " QComboBox { border-color: #28a745; }");
-    } else {
-        ocrEngineCombo->setStyleSheet(ocrEngineCombo->styleSheet() + " QComboBox { border-color: #dc3545; }");
-    }
-
-    // Reset style after 3 seconds
+    // Use dynamic property for validation state instead of inline style
+    ocrEngineCombo->setProperty("valid", engineAvailable ? "true" : "false");
+    ocrEngineCombo->style()->unpolish(ocrEngineCombo);
+    ocrEngineCombo->style()->polish(ocrEngineCombo);
     QTimer::singleShot(3000, [this]() {
-        ocrEngineCombo->setStyleSheet("");
+        ocrEngineCombo->setProperty("valid", QVariant());
+        ocrEngineCombo->style()->unpolish(ocrEngineCombo);
+        ocrEngineCombo->style()->polish(ocrEngineCombo);
     });
 }
 

@@ -58,6 +58,8 @@ void FloatingWidget::setupUI()
     // Make widget frameless and always on top - force it to be a top-level window
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Window);
     setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_StyledBackground, true);
+    setObjectName("floatingWidget");
     
     // Enable mouse tracking for better drag experience
     setMouseTracking(true);
@@ -65,8 +67,7 @@ void FloatingWidget::setupUI()
     // Set size
     setFixedSize(140, 60);
     
-    // Use simple styling instead of custom paint event for testing
-    setStyleSheet("background-color: rgba(255, 255, 255, 200); border: 3px solid red; border-radius: 10px;");
+    // Styling now provided globally by ThemeManager via #floatingWidget
     
     // Force the widget to accept mouse events
     setAttribute(Qt::WA_NoMouseReplay);
@@ -83,12 +84,14 @@ void FloatingWidget::setupUI()
     screenshotBtn = new QPushButton(this);
     screenshotBtn->setFixedSize(50, 40);
     screenshotBtn->setCursor(Qt::PointingHandCursor);
+    screenshotBtn->setObjectName("floatingButton");
     connect(screenshotBtn, &QPushButton::clicked, this, &FloatingWidget::takeScreenshot);
 
     // Settings button
     settingsBtn = new QPushButton(this);
     settingsBtn->setFixedSize(50, 40);
     settingsBtn->setCursor(Qt::PointingHandCursor);
+    settingsBtn->setObjectName("floatingButton");
     connect(settingsBtn, &QPushButton::clicked, this, &FloatingWidget::openSettings);
 
     layout->addWidget(screenshotBtn);
@@ -128,48 +131,37 @@ void FloatingWidget::setupUI()
 
 void FloatingWidget::applyModernStyle()
 {
-    // Modern gradient button style with icons
-    QString buttonStyle = R"(
-        QPushButton {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(255, 255, 255, 240),
-                stop:1 rgba(240, 240, 245, 240));
-            border: 1px solid rgba(200, 200, 210, 150);
-            border-radius: 20px;
-            font-size: 18px;
-            font-weight: bold;
-            color: #4A5568;
-        }
-        QPushButton:hover {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(255, 255, 255, 255),
-                stop:1 rgba(245, 245, 250, 255));
-            border: 1px solid rgba(100, 150, 250, 200);
-        }
-        QPushButton:pressed {
-            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(240, 240, 245, 255),
-                stop:1 rgba(230, 230, 235, 255));
-        }
-    )";
-
-    screenshotBtn->setStyleSheet(buttonStyle);
-    settingsBtn->setStyleSheet(buttonStyle);
-
-    // Set button icons using Unicode symbols
+    // Set button icons (styling handled by ThemeManager)
     screenshotBtn->setText("📸");
     settingsBtn->setText("⚙️");
 }
 
 void FloatingWidget::paintEvent(QPaintEvent *event)
 {
-    // Temporarily disable custom painting to test basic dragging
-    QWidget::paintEvent(event);
-    
-    // Add a simple visual indicator for testing
-    QPainter painter(this);
-    painter.setPen(QPen(Qt::blue, 2));
-    painter.drawText(rect(), Qt::AlignCenter, "DRAG ME");
+    Q_UNUSED(event)
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+    QRect r = rect();
+    int radius = 18;
+
+    QColor base = palette().window().color();
+    if (base.alpha() == 255) base.setAlpha(200); // ensure translucency
+    bool hl = property("highlight").toString() == QStringLiteral("true");
+    QColor fill = base;
+    if (hl) {
+        fill = fill.lighter(115);
+        fill.setAlpha(qMin(255, fill.alpha() + 25));
+    }
+
+    QPainterPath path;
+    path.addRoundedRect(r.adjusted(0,0,-1,-1), radius, radius);
+    p.fillPath(path, fill);
+    if (hl) {
+        QPen pen(QColor(255,255,255,90));
+        pen.setWidth(2);
+        p.setPen(pen);
+        p.drawPath(path);
+    }
 }
 
 void FloatingWidget::enterEvent(QEnterEvent *event)
@@ -177,6 +169,8 @@ void FloatingWidget::enterEvent(QEnterEvent *event)
     Q_UNUSED(event)
     animateHover(true);
     setCursor(Qt::OpenHandCursor);
+    setProperty("highlight", "true");
+    style()->unpolish(this); style()->polish(this); update();
 }
 
 void FloatingWidget::leaveEvent(QEvent *event)
@@ -184,6 +178,8 @@ void FloatingWidget::leaveEvent(QEvent *event)
     Q_UNUSED(event)
     animateHover(false);
     setCursor(Qt::ArrowCursor);
+    setProperty("highlight", "false");
+    style()->unpolish(this); style()->polish(this); update();
 }
 
 void FloatingWidget::mousePressEvent(QMouseEvent *event)

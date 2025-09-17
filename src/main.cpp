@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include "FloatingWidget.h"
 #include "SystemTray.h"
+#include "ThemeManager.h"
 
 int main(int argc, char *argv[])
 {
@@ -11,6 +12,9 @@ int main(int argc, char *argv[])
     app.setApplicationName("ohao-lang");
     QCoreApplication::setOrganizationName("ohao");
     QCoreApplication::setOrganizationDomain("ohao.local");
+
+    // Apply theme early so all widgets inherit styles
+    ThemeManager::applyFromSettings();
 
     // Create and show floating widget as a top-level window
     FloatingWidget *widget = new FloatingWidget(nullptr);
