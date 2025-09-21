@@ -121,6 +121,30 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         return;
     }
 
+    // Ensure TESSDATA_PREFIX is set so languages can load (Windows users installing via Scoop often miss this)
+    if (qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
+        QStringList candidateDirs;
+#ifdef Q_OS_WIN
+        // Common Windows install locations
+        candidateDirs << QDir::fromNativeSeparators("C:/Program Files/Tesseract-OCR/tessdata");
+        candidateDirs << QDir::fromNativeSeparators("C:/Program Files (x86)/Tesseract-OCR/tessdata");
+        // Scoop (user-specific) pattern
+        QString home = QDir::homePath();
+        candidateDirs << home + "/scoop/apps/tesseract/current/tessdata";
+        candidateDirs << home + "/scoop/persist/tesseract/tessdata";
+#endif
+        // Allow portable relative placement next to the executable
+        candidateDirs << QCoreApplication::applicationDirPath() + "/tessdata";
+
+        for (const QString &dirPath : candidateDirs) {
+            if (QDir(dirPath).exists(dirPath + "/eng.traineddata")) {
+                qputenv("TESSDATA_PREFIX", QFileInfo(dirPath).absolutePath().toUtf8());
+                emit ocrProgress(QString("Set TESSDATA_PREFIX to %1").arg(QFileInfo(dirPath).absolutePath()));
+                break;
+            }
+        }
+    }
+
     // Save image to persistent temp file
     if (!m_currentImagePath.isEmpty()) {
         QFile::remove(m_currentImagePath);
@@ -132,6 +156,9 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         emit ocrError("Failed to save image to temporary file");
         return;
     }
+    emit ocrProgress(QString("Saved temp image: %1 (%2x%3)")
+                     .arg(QFileInfo(m_currentImagePath).fileName())
+                     .arg(image.width()).arg(image.height()));
 
     // Preprocess image if enabled
     QString processedImagePath = m_currentImagePath;
@@ -139,11 +166,44 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         emit ocrProgress("Preprocessing image...");
         processedImagePath = preprocessImage(m_currentImagePath);
     }
+    m_lastProcessedImagePath = processedImagePath;
 
-    // Prepare Tesseract command
+    // Prepare Tesseract command (plain text output first for reliability)
     QStringList arguments;
     arguments << processedImagePath;
-    arguments << "stdout"; // Output to stdout instead of file
+    arguments << "stdout"; // tesseract will ignore for tsv but required positional
+
+    // Robust tessdata detection: prefer explicit env, otherwise scan common directories
+    QString tessdataDir;
+    if (!qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
+        // TESSDATA_PREFIX should point to parent dir containing tessdata or be the tessdata dir itself
+        QString prefix = QString::fromUtf8(qgetenv("TESSDATA_PREFIX"));
+        if (QDir(prefix + "/tessdata").exists(prefix + "/tessdata/eng.traineddata")) {
+            tessdataDir = prefix + "/tessdata";
+        } else if (QDir(prefix).exists(prefix + "/eng.traineddata")) {
+            tessdataDir = prefix; // already at tessdata layer
+        }
+    }
+    if (tessdataDir.isEmpty()) {
+        QStringList probe;
+#ifdef Q_OS_WIN
+        QString home = QDir::homePath();
+        probe << "C:/Program Files/Tesseract-OCR/tessdata";
+        probe << "C:/Program Files (x86)/Tesseract-OCR/tessdata";
+        probe << home + "/scoop/apps/tesseract/current/tessdata";
+        probe << home + "/scoop/persist/tesseract/tessdata";
+#endif
+        probe << QCoreApplication::applicationDirPath() + "/tessdata";
+        for (const QString &p : probe) {
+            if (QDir(p).exists(p + "/eng.traineddata")) { tessdataDir = p; break; }
+        }
+    }
+    if (!tessdataDir.isEmpty()) {
+        arguments << "--tessdata-dir" << tessdataDir;
+        emit ocrProgress(QString("Using tessdata dir: %1").arg(tessdataDir));
+    } else {
+        emit ocrProgress("Warning: tessdata dir not found; language load may fail");
+    }
 
     // Language parameter
     QString langCode = getTesseractLanguageCode(m_language);
@@ -167,14 +227,20 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         arguments << "--oem" << "1"; // LSTM engine
     }
 
-    // Additional configurations for better accuracy
+    // Configuration tuning
     arguments << "-c" << "tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:()[]{}\"'-+= \n\t";
 
-    emit ocrProgress("Running Tesseract OCR...");
+    emit ocrProgress("Running Tesseract OCR (text phase)...");
 
     m_process = new QProcess(this);
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &OCREngine::onTesseractFinished);
+    // Propagate TESSDATA_PREFIX if set after our detection
+    if (!qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
+        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+        env.insert("TESSDATA_PREFIX", qgetenv("TESSDATA_PREFIX"));
+        m_process->setProcessEnvironment(env);
+    }
 
     m_process->start("tesseract", arguments);
     if (!m_process->waitForStarted(5000)) {
@@ -404,19 +470,34 @@ try:
     text_parts = []
     confidence_sum = 0
     count = 0
+    tokens = []
 
     for (bbox, text, confidence) in results:
+        if not text:
+            continue
         text_parts.append(text)
         confidence_sum += confidence
         count += 1
+        # bbox is list of 4 points [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
+        xs = [p[0] for p in bbox]
+        ys = [p[1] for p in bbox]
+        left, top = min(xs), min(ys)
+        width, height = max(xs) - left, max(ys) - top
+        tokens.append({
+            'text': text,
+            'box': [int(left), int(top), int(width), int(height)],
+            'confidence': float(confidence),
+            'lineId': -1
+        })
 
     final_text = ' '.join(text_parts)
     avg_confidence = confidence_sum / count if count > 0 else 0
 
     result = {
-        "text": final_text,
-        "confidence": f"{avg_confidence:.2f}",
-        "success": True
+        'text': final_text,
+        'confidence': f"{avg_confidence:.2f}",
+        'success': True,
+        'tokens': tokens
     }
 
     print(json.dumps(result))
@@ -463,23 +544,41 @@ try:
     text_parts = []
     confidence_sum = 0
     count = 0
+    tokens = []
 
     if results and results[0]:
         for line in results[0]:
             if line and len(line) > 1:
-                text = line[1][0] if len(line[1]) > 0 else ""
-                confidence = line[1][1] if len(line[1]) > 1 else 0
+                box_points = line[0]  # list of 4 points
+                txt_conf = line[1]
+                if isinstance(txt_conf, (list, tuple)) and len(txt_conf) >= 2:
+                    text, confidence = txt_conf[0], txt_conf[1]
+                else:
+                    text, confidence = '', 0
+                if not text:
+                    continue
                 text_parts.append(text)
                 confidence_sum += confidence
                 count += 1
+                xs = [p[0] for p in box_points]
+                ys = [p[1] for p in box_points]
+                left, top = min(xs), min(ys)
+                width, height = max(xs) - left, max(ys) - top
+                tokens.append({
+                    'text': text,
+                    'box': [int(left), int(top), int(width), int(height)],
+                    'confidence': float(confidence),
+                    'lineId': -1
+                })
 
     final_text = ' '.join(text_parts)
     avg_confidence = confidence_sum / count if count > 0 else 0
 
     result = {
-        "text": final_text,
-        "confidence": f"{avg_confidence:.2f}",
-        "success": True
+        'text': final_text,
+        'confidence': f"{avg_confidence:.2f}",
+        'success': True,
+        'tokens': tokens
     }
 
     print(json.dumps(result))
@@ -508,10 +607,68 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
         }
     } else {
         QString output = m_process->readAllStandardOutput();
-        result.text = output.trimmed();
+        // Parse TSV directly from output
+        QTextStream ts(&output, QIODevice::ReadOnly);
+        QString header = ts.readLine();
+        Q_UNUSED(header)
+        QMap<int, QString> lineAccum; // lineId -> text
+        int tokenCount = 0;
+        while (!ts.atEnd()) {
+            QString line = ts.readLine();
+            if (line.isEmpty()) continue;
+            QStringList cols = line.split('\t');
+            if (cols.size() < 12) continue;
+            int level = cols[0].toInt();
+            if (level != 5) continue; // word level
+            int lineNum = cols[5].toInt();
+            int left = cols[6].toInt();
+            int top = cols[7].toInt();
+            int width = cols[8].toInt();
+            int height = cols[9].toInt();
+            float conf = cols[10].toFloat();
+            QString tokenText = cols[11];
+            if (tokenText.trimmed().isEmpty()) continue;
+            OCRResult::OCRToken token;
+            token.text = tokenText;
+            token.box = QRect(left, top, width, height);
+            token.confidence = conf;
+            token.lineId = lineNum;
+            result.tokens.push_back(token);
+            if (!lineAccum.contains(lineNum)) lineAccum[lineNum] = tokenText;
+            else lineAccum[lineNum] += " " + tokenText;
+            ++tokenCount;
+        }
+        // Reconstruct text preserving line order
+        QStringList lines;
+        QList<int> keys = lineAccum.keys();
+        std::sort(keys.begin(), keys.end());
+        for (int k : keys) lines << lineAccum.value(k);
+        result.text = lines.join('\n');
         result.success = !result.text.isEmpty();
-        result.confidence = "N/A"; // Tesseract doesn't provide confidence by default
+        result.confidence = "N/A";
         result.language = m_language;
+
+        if (!result.success) {
+            emit ocrProgress("TSV parse empty, retrying plain text mode...");
+            // Fallback: run tesseract again in plain text mode quick
+            QProcess plain;
+            QStringList args;
+            args << m_currentImagePath << "stdout";
+            QString langCode = getTesseractLanguageCode(m_language);
+            if (!langCode.isEmpty()) { args << "-l" << langCode; }
+            plain.start("tesseract", args);
+            if (plain.waitForFinished(5000) && plain.exitCode()==0) {
+                QString txt = plain.readAllStandardOutput().trimmed();
+                if (!txt.isEmpty()) {
+                    result.text = txt;
+                    result.success = true;
+                }
+            }
+        }
+        emit ocrProgress(QString("Tesseract tokens: %1 lines: %2 success=%3")
+                         .arg(result.tokens.size())
+                         .arg(result.text.count('\n')+1)
+                         .arg(result.success));
 
         if (!result.success) {
             result.errorMessage = "No text detected in image";
@@ -562,6 +719,26 @@ void OCREngine::onPythonOCRFinished(int exitCode, QProcess::ExitStatus exitStatu
             result.confidence = obj["confidence"].toString();
             result.language = m_language;
             result.errorMessage = obj["error"].toString();
+            if (obj.contains("tokens") && obj["tokens"].isArray()) {
+                QJsonArray arr = obj["tokens"].toArray();
+                for (const QJsonValue &val : arr) {
+                    if (!val.isObject()) continue;
+                    QJsonObject to = val.toObject();
+                    OCRResult::OCRToken tok;
+                    tok.text = to.value("text").toString();
+                    tok.confidence = static_cast<float>(to.value("confidence").toDouble(-1.0));
+                    tok.lineId = to.value("lineId").toInt(-1);
+                    if (to.contains("box") && to["box"].isArray()) {
+                        QJsonArray b = to["box"].toArray();
+                        if (b.size() >= 4) {
+                            tok.box = QRect(b[0].toInt(), b[1].toInt(), b[2].toInt(), b[3].toInt());
+                        }
+                    }
+                    if (!tok.text.trimmed().isEmpty()) {
+                        result.tokens.push_back(tok);
+                    }
+                }
+            }
         }
     }
 

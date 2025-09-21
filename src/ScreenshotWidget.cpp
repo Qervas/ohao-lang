@@ -703,6 +703,23 @@ void ScreenshotWidget::handleOCR()
         showingResults = true;
         m_progressText = "🔍 Starting OCR processing...";
         m_currentResult = OCRResult(); // Reset result
+        if (!m_textOverlay) {
+            m_textOverlay = new TextReplacementOverlay(nullptr);
+            m_textOverlay->setAttribute(Qt::WA_DeleteOnClose, false);
+            m_textOverlay->setDebugBoxes(true); // start with debug boxes; can toggle via setting later
+        }
+        if (!m_lastOCRImage.isNull()) {
+            m_textOverlay->setSourceImageSize(m_lastOCRImage.size());
+        }
+        // Position overlay over selection rect in global coordinates
+        if (hasSelection) {
+            QRect selRect(QPoint(qMin(startPoint.x(), endPoint.x()), qMin(startPoint.y(), endPoint.y())),
+                          QPoint(qMax(startPoint.x(), endPoint.x()), qMax(startPoint.y(), endPoint.y())));
+            QPoint globalTopLeft = mapToGlobal(selRect.topLeft());
+            m_textOverlay->setGeometry(QRect(globalTopLeft, selRect.size()));
+            m_textOverlay->show();
+            m_textOverlay->raise();
+        }
         update(); // Redraw to show overlay
     } else {
         // Use separate window for manual OCR mode
@@ -744,6 +761,12 @@ void ScreenshotWidget::onOCRFinished(const OCRResult &result)
         // Update overlay with results
         m_currentResult = result;
         m_progressText.clear();
+        if (m_textOverlay && result.success) {
+            m_textOverlay->setSourceImageSize(m_lastOCRImage.size());
+            QString translated = result.hasTranslation ? result.translatedText : QString();
+            m_textOverlay->setTokens(result.tokens, result.text, translated);
+            m_textOverlay->setMode(translated.isEmpty() ? TextReplacementOverlay::ShowOriginal : TextReplacementOverlay::ShowTranslated);
+        }
         update(); // Redraw to show results
     } else if (ocrResultWindow) {
         // Use separate window
@@ -763,6 +786,10 @@ void ScreenshotWidget::onOCRProgress(const QString &status)
     if (autoOcr && showingResults) {
         // Update overlay progress
         m_progressText = status;
+        if (m_textOverlay && m_textOverlay->isVisible()) {
+            // Keep showing selection area with maybe light translucent background
+            // We don't yet have tokens; nothing to update here.
+        }
         update(); // Redraw to show progress
     } else if (ocrResultWindow) {
         ocrResultWindow->showOCRProgress(status);
@@ -785,6 +812,9 @@ void ScreenshotWidget::onOCRError(const QString &error)
         errorResult.success = false;
         errorResult.errorMessage = error;
         m_currentResult = errorResult;
+        if (m_textOverlay) {
+            m_textOverlay->hide();
+        }
         update(); // Redraw to show error
     } else {
         if (ocrResultWindow) {
