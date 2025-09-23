@@ -49,6 +49,7 @@
       src/OCRResultWindow.cpp
       src/TranslationEngine.cpp
       src/ThemeManager.cpp
+    src/TextReplacementOverlay.cpp
   )
 
   set(HEADERS
@@ -63,6 +64,7 @@
       src/OCRResultWindow.h
       src/TranslationEngine.h
       src/ThemeManager.h
+    src/TextReplacementOverlay.h
   )
 
   qt_add_executable(ohao-lang ${SOURCES} ${HEADERS})

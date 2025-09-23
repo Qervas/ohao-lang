@@ -17,6 +17,8 @@
 #include <QTimer>
 #include <QFileInfo>
 #include <QMap>
+#include <QRect>
+#include <QVector>
 
 class TranslationEngine;
 
@@ -30,6 +32,13 @@ struct OCRResult {
     bool success = false;
     bool hasTranslation = false;
     QString errorMessage;
+    struct OCRToken {
+        QString text;
+        QRect   box;        // in selection image coordinates
+        float    confidence = -1.f;
+        int      lineId = -1;
+    };
+    QVector<OCRToken> tokens; // populated when engine returns positional data
 };
 
 class OCREngine : public QObject
@@ -125,4 +134,5 @@ private:
     QString m_currentImagePath;
     QString m_tempDir;
     QSettings *m_settings = nullptr;
+    QString m_lastProcessedImagePath; // for secondary TSV extraction
 };

@@ -10,6 +10,7 @@
 #include <QMoveEvent>
 
 class SettingsWindow;
+class GlobalShortcutManager;
 
 class FloatingWidget : public QWidget
 {
@@ -61,4 +62,11 @@ private:
 
     // Settings window
     SettingsWindow *settingsWindow = nullptr;
+
+    // Global shortcut manager (Windows only)
+#ifdef Q_OS_WIN
+    GlobalShortcutManager *shortcutManager = nullptr;
+#endif
+
+    bool screenshotInProgress = false;
 };
