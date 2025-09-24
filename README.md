@@ -3,7 +3,16 @@
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-blue?logo=windows)](https://github.com/Qervas/ohao-lang)
 [![Qt](https://img.shields.io/badge/Qt-6.9.2-green?logo=qt)](https://qt.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v1.0.0-red)](https://github.com/Qervas/ohao-lang/releases)
+[- Follow Qt coding conventions
+- Add tests for new features
+- Update documentation
+- Ensure cross-platform compatibility
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgmentsase](https://img.shields.io/badge/Release-v1.0.0-red)](https://github.com/Qervas/ohao-lang/releases)
 
 A powerful, portable OCR and translation tool with integrated Text-to-Speech functionality. Perfect for language learners, professionals, and anyone working with multilingual content.
 
@@ -303,11 +312,7 @@ ohao-lang-portable-v1.0.0/
 - Update documentation
 - Ensure cross-platform compatibility
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - **Qt Framework** - Cross-platform application framework
 - **Tesseract OCR** - Open source OCR engine
