@@ -4,25 +4,27 @@
 #include <QMenu>
 #include <QAction>
 
-class MainWindow;
+class FloatingWidget;
 
 class SystemTray : public QSystemTrayIcon
 {
     Q_OBJECT
 
 public:
-    SystemTray(MainWindow *window, QObject *parent = nullptr);
+    SystemTray(FloatingWidget *widget, QObject *parent = nullptr);
 
 private slots:
     void onTrayActivated(QSystemTrayIcon::ActivationReason reason);
     void takeScreenshot();
-    void showMainWindow();
+    void toggleVisibility();
+    void openSettings();
     void quitApplication();
 
 private:
-    MainWindow *mainWindow;
+    FloatingWidget *floatingWidget;
     QMenu *trayMenu;
     QAction *screenshotAction;
-    QAction *showAction;
+    QAction *toggleAction;
+    QAction *settingsAction;
     QAction *quitAction;
 };

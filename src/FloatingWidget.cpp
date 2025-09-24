@@ -1,4 +1,5 @@
 #include "FloatingWidget.h"
+#include "GlobalShortcutManager.h"
 #include "ScreenshotWidget.h"
 #include "ScreenCapture.h"
 #include "SettingsWindow.h"
@@ -21,6 +22,13 @@ FloatingWidget::FloatingWidget(QWidget *parent)
     qDebug() << "Creating FloatingWidget...";
     setupUI();
     applyModernStyle();
+
+    // Initialize global shortcut manager
+    shortcutManager = new GlobalShortcutManager(this);
+    connect(shortcutManager, &GlobalShortcutManager::screenshotRequested, 
+            this, &FloatingWidget::takeScreenshot);
+    connect(shortcutManager, &GlobalShortcutManager::toggleVisibilityRequested,
+            this, &FloatingWidget::toggleVisibility);
 
     // Restore saved position or fall back to default using a timer to ensure it's set after initialization
     QTimer::singleShot(100, [this]() {
@@ -425,4 +433,17 @@ void FloatingWidget::openSettings()
     settingsWindow->show();
     settingsWindow->raise();
     settingsWindow->activateWindow();
+}
+
+void FloatingWidget::toggleVisibility()
+{
+    if (isVisible()) {
+        qDebug() << "Hiding FloatingWidget via global shortcut";
+        hide();
+    } else {
+        qDebug() << "Showing FloatingWidget via global shortcut";
+        show();
+        raise();
+        activateWindow();
+    }
 }

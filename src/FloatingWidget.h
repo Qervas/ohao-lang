@@ -19,6 +19,10 @@ class FloatingWidget : public QWidget
 public:
     FloatingWidget(QWidget *parent = nullptr);
 
+    // Public methods that can be called by SystemTray
+    void takeScreenshot();
+    void openSettings();
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void enterEvent(QEnterEvent *event) override;
@@ -29,8 +33,7 @@ protected:
     void moveEvent(QMoveEvent *event) override;
 
 private slots:
-    void takeScreenshot();
-    void openSettings();
+    void toggleVisibility();
     void animateHover(bool hover);
 
 private:

@@ -1,24 +1,37 @@
 #include "SystemTray.h"
-#include "MainWindow.h"
+#include "FloatingWidget.h"
 #include <QApplication>
+#include <QStyle>
 
-SystemTray::SystemTray(MainWindow *window, QObject *parent)
-    : QSystemTrayIcon(parent), mainWindow(window)
+SystemTray::SystemTray(FloatingWidget *widget, QObject *parent)
+    : QSystemTrayIcon(parent), floatingWidget(widget)
 {
     // Create tray menu
     trayMenu = new QMenu();
 
-    screenshotAction = new QAction("Take Screenshot", this);
+    // Screenshot action
+    screenshotAction = new QAction("📷 Take Screenshot", this);
+    screenshotAction->setShortcut(QKeySequence("Ctrl+Shift+S"));
     connect(screenshotAction, &QAction::triggered, this, &SystemTray::takeScreenshot);
     trayMenu->addAction(screenshotAction);
 
     trayMenu->addSeparator();
 
-    showAction = new QAction("Show Window", this);
-    connect(showAction, &QAction::triggered, this, &SystemTray::showMainWindow);
-    trayMenu->addAction(showAction);
+    // Toggle visibility action
+    toggleAction = new QAction("👁️ Toggle Visibility", this);
+    toggleAction->setShortcut(QKeySequence("Ctrl+Shift+H"));
+    connect(toggleAction, &QAction::triggered, this, &SystemTray::toggleVisibility);
+    trayMenu->addAction(toggleAction);
 
-    quitAction = new QAction("Quit", this);
+    // Settings action
+    settingsAction = new QAction("⚙️ Settings", this);
+    connect(settingsAction, &QAction::triggered, this, &SystemTray::openSettings);
+    trayMenu->addAction(settingsAction);
+
+    trayMenu->addSeparator();
+
+    // Quit action
+    quitAction = new QAction("❌ Quit", this);
     connect(quitAction, &QAction::triggered, this, &SystemTray::quitApplication);
     trayMenu->addAction(quitAction);
 
@@ -27,9 +40,16 @@ SystemTray::SystemTray(MainWindow *window, QObject *parent)
     // Connect tray activation
     connect(this, &QSystemTrayIcon::activated, this, &SystemTray::onTrayActivated);
 
-    // Set tray icon (will be a simple default for now)
-    setIcon(QIcon::fromTheme("applications-graphics"));
-    setToolTip("Ohao Language Learner");
+    // Create a simple tray icon using built-in style
+    QIcon trayIcon = QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
+    if (trayIcon.isNull()) {
+        // Fallback to creating a simple icon programmatically
+        QPixmap pixmap(16, 16);
+        pixmap.fill(Qt::blue);
+        trayIcon = QIcon(pixmap);
+    }
+    setIcon(trayIcon);
+    setToolTip("Ohao Language Learner - OCR & Translation Tool");
 
     show();
 }
@@ -37,21 +57,36 @@ SystemTray::SystemTray(MainWindow *window, QObject *parent)
 void SystemTray::onTrayActivated(QSystemTrayIcon::ActivationReason reason)
 {
     if (reason == QSystemTrayIcon::DoubleClick) {
-        takeScreenshot();
+        toggleVisibility();
     }
 }
 
 void SystemTray::takeScreenshot()
 {
-    if (mainWindow) {
-        mainWindow->takeScreenshot();
+    if (floatingWidget) {
+        floatingWidget->takeScreenshot();
     }
 }
 
-void SystemTray::showMainWindow()
+void SystemTray::toggleVisibility()
 {
-    if (mainWindow) {
-        mainWindow->showWidget();
+    if (floatingWidget) {
+        if (floatingWidget->isVisible()) {
+            floatingWidget->hide();
+            toggleAction->setText("👁️ Show Widget");
+        } else {
+            floatingWidget->show();
+            floatingWidget->raise();
+            floatingWidget->activateWindow();
+            toggleAction->setText("👁️ Hide Widget");
+        }
+    }
+}
+
+void SystemTray::openSettings()
+{
+    if (floatingWidget) {
+        floatingWidget->openSettings();
     }
 }
 

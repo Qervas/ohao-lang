@@ -14,14 +14,17 @@ public:
 
 signals:
     void screenshotRequested();
+    void toggleVisibilityRequested();
 
 private:
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
-    void registerShortcut();
-    void unregisterShortcut();
+    void registerShortcuts();
+    void unregisterShortcuts();
 
 #ifdef Q_OS_WIN
-    int hotkeyId = 1;
-    bool registered = false;
+    int screenshotHotkeyId = 1;
+    int toggleHotkeyId = 2;
+    bool screenshotRegistered = false;
+    bool toggleRegistered = false;
 #endif
 };

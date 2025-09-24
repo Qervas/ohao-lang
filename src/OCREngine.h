@@ -109,6 +109,7 @@ private:
     QString getTesseractLanguageCode(const QString &language);
     QString getPythonOCRScript(Engine engine);
     void startTranslation(const QString &text);
+    QString mergeParagraphLines(const QStringList &lines, const QVector<OCRResult::OCRToken> &tokens);
 
     // Helper to stop any running process safely
     void stopRunningProcess();

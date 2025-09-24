@@ -21,9 +21,10 @@ int main(int argc, char *argv[])
     widget->setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Window);
     widget->show();
 
-    // Optional: Still have system tray for additional control
+    // Create system tray for additional control
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
-        SystemTray *tray = new SystemTray(nullptr);
+        SystemTray *tray = new SystemTray(widget);
+        Q_UNUSED(tray); // Prevent unused variable warning
     }
 
     return app.exec();

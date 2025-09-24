@@ -643,7 +643,9 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
         QList<int> keys = lineAccum.keys();
         std::sort(keys.begin(), keys.end());
         for (int k : keys) lines << lineAccum.value(k);
-        result.text = lines.join('\n');
+        
+        // Apply intelligent paragraph merging
+        result.text = mergeParagraphLines(lines, result.tokens);
         result.success = !result.text.isEmpty();
         result.confidence = "N/A";
         result.language = m_language;
@@ -660,7 +662,14 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
             if (plain.waitForFinished(5000) && plain.exitCode()==0) {
                 QString txt = plain.readAllStandardOutput().trimmed();
                 if (!txt.isEmpty()) {
-                    result.text = txt;
+                    // Apply paragraph merging to plain text as well
+                    QStringList lines = txt.split('\n');
+                    if (lines.size() > 1) {
+                        // For plain text mode, use simplified merging without token info
+                        result.text = mergeParagraphLines(lines, QVector<OCRResult::OCRToken>());
+                    } else {
+                        result.text = txt;
+                    }
                     result.success = true;
                 }
             }
@@ -916,4 +925,177 @@ void OCREngine::stopRunningProcess()
         m_process->deleteLater();
         m_process = nullptr;
     }
+}
+
+QString OCREngine::mergeParagraphLines(const QStringList &lines, const QVector<OCRResult::OCRToken> &tokens)
+{
+    if (lines.isEmpty()) return QString();
+    if (lines.size() == 1) return lines.first();
+    
+    // Group tokens by line ID to analyze spatial relationships
+    QMap<int, QList<OCRResult::OCRToken>> tokensByLine;
+    for (const OCRResult::OCRToken &token : tokens) {
+        if (token.lineId >= 0) {
+            tokensByLine[token.lineId].append(token);
+        }
+    }
+    
+    // Calculate line metrics for paragraph detection
+    struct LineInfo {
+        QString text;
+        int leftMargin = 0;
+        int rightEnd = 0;
+        int height = 0;
+        int centerY = 0;
+        bool endsWithPunctuation = false;
+        bool startsCapitalized = false;
+        bool hasIndentation = false;
+    };
+    
+    QList<LineInfo> lineInfos;
+    bool hasTokenData = !tokens.isEmpty();
+    
+    if (hasTokenData) {
+        // Use token-based analysis when available
+        QList<int> lineIds = tokensByLine.keys();
+        std::sort(lineIds.begin(), lineIds.end());
+        
+        for (int i = 0; i < lines.size() && i < lineIds.size(); ++i) {
+            LineInfo info;
+            info.text = lines[i];
+            
+            // Calculate spatial metrics from tokens
+            if (tokensByLine.contains(lineIds[i])) {
+                const QList<OCRResult::OCRToken> &lineTokens = tokensByLine[lineIds[i]];
+                if (!lineTokens.isEmpty()) {
+                    // Find leftmost and rightmost positions
+                    info.leftMargin = lineTokens.first().box.left();
+                    info.rightEnd = lineTokens.first().box.right();
+                    info.centerY = lineTokens.first().box.center().y();
+                    info.height = lineTokens.first().box.height();
+                    
+                    for (const OCRResult::OCRToken &token : lineTokens) {
+                        info.leftMargin = qMin(info.leftMargin, token.box.left());
+                        info.rightEnd = qMax(info.rightEnd, token.box.right());
+                    }
+                }
+            }
+            
+            // Text analysis
+            QString trimmed = info.text.trimmed();
+            if (!trimmed.isEmpty()) {
+                // Check if line ends with punctuation (sentence/paragraph enders)
+                QChar lastChar = trimmed.at(trimmed.length() - 1);
+                info.endsWithPunctuation = (lastChar == '.' || lastChar == '!' || lastChar == '?' || 
+                                           lastChar == ':' || lastChar == ';');
+                
+                // Check if line starts with capital letter (potential new sentence/paragraph)
+                info.startsCapitalized = trimmed.at(0).isUpper();
+            }
+            
+            lineInfos.append(info);
+        }
+    } else {
+        // Fallback to text-based analysis when no token data
+        for (int i = 0; i < lines.size(); ++i) {
+            LineInfo info;
+            info.text = lines[i];
+            
+            // Analyze text indentation (spaces/tabs at start)
+            QString originalLine = lines[i];
+            int leadingSpaces = 0;
+            while (leadingSpaces < originalLine.length() && originalLine.at(leadingSpaces).isSpace()) {
+                leadingSpaces++;
+            }
+            info.hasIndentation = (leadingSpaces > 0);
+            
+            // Text analysis
+            QString trimmed = info.text.trimmed();
+            if (!trimmed.isEmpty()) {
+                // Check if line ends with punctuation (sentence/paragraph enders)
+                QChar lastChar = trimmed.at(trimmed.length() - 1);
+                info.endsWithPunctuation = (lastChar == '.' || lastChar == '!' || lastChar == '?' || 
+                                           lastChar == ':' || lastChar == ';');
+                
+                // Check if line starts with capital letter (potential new sentence/paragraph)
+                info.startsCapitalized = trimmed.at(0).isUpper();
+            }
+            
+            lineInfos.append(info);
+        }
+    }
+    
+    // Detect paragraph breaks and merge accordingly
+    QStringList paragraphs;
+    QString currentParagraph;
+    
+    for (int i = 0; i < lineInfos.size(); ++i) {
+        const LineInfo &current = lineInfos[i];
+        bool shouldStartNewParagraph = false;
+        
+        if (i == 0) {
+            // First line always starts a new paragraph
+            shouldStartNewParagraph = true;
+        } else {
+            const LineInfo &previous = lineInfos[i - 1];
+            
+            // Heuristics for paragraph detection:
+            bool hasSignificantIndent = false;
+            bool hasVerticalGap = false;
+            
+            if (hasTokenData) {
+                // Token-based spatial analysis
+                // 1. Large indentation change (common in paragraphs)
+                int indentDiff = current.leftMargin - previous.leftMargin;
+                hasSignificantIndent = indentDiff > 20; // pixels
+                
+                // 4. Large vertical gap (line spacing indicates paragraph break)
+                if (i > 0) {
+                    int verticalGap = current.centerY - previous.centerY;
+                    int expectedLineSpacing = qMax(previous.height, current.height) * 1.2; // 120% of line height
+                    hasVerticalGap = verticalGap > expectedLineSpacing;
+                }
+            } else {
+                // Text-based analysis fallback
+                // 1. Text indentation change
+                hasSignificantIndent = current.hasIndentation && !previous.hasIndentation;
+            }
+            
+            // 2. Previous line ends with paragraph-ending punctuation
+            bool previousEndsParagraph = previous.endsWithPunctuation;
+            
+            // 3. Current line starts with capital letter (potential new sentence)
+            bool currentStartsCapitalized = current.startsCapitalized;
+            
+            // 5. Very short previous line (often indicates paragraph end)
+            bool previousLineShort = previous.text.trimmed().length() < 40;
+            
+            // Decision logic: Start new paragraph if...
+            shouldStartNewParagraph = (hasSignificantIndent && currentStartsCapitalized) ||  // Indented + capitalized
+                                     (previousEndsParagraph && hasVerticalGap) ||            // Punctuation + gap
+                                     (previousEndsParagraph && hasSignificantIndent) ||      // Punctuation + indent
+                                     (previousLineShort && previousEndsParagraph && currentStartsCapitalized); // Short line ending + new sentence
+        }
+        
+        if (shouldStartNewParagraph) {
+            if (!currentParagraph.isEmpty()) {
+                paragraphs.append(currentParagraph.trimmed());
+            }
+            currentParagraph = current.text;
+        } else {
+            // Continue current paragraph - join with space
+            if (!currentParagraph.isEmpty()) {
+                currentParagraph += " ";
+            }
+            currentParagraph += current.text.trimmed();
+        }
+    }
+    
+    // Add the last paragraph
+    if (!currentParagraph.isEmpty()) {
+        paragraphs.append(currentParagraph.trimmed());
+    }
+    
+    // Join paragraphs with double line breaks to preserve paragraph structure
+    return paragraphs.join("\n\n");
 }

@@ -20,7 +20,7 @@ GlobalShortcutManager::GlobalShortcutManager(QObject *parent)
     if (QCoreApplication::instance()) {
         QCoreApplication::instance()->installNativeEventFilter(this);
     }
-    registerShortcut();
+    registerShortcuts();
 #else
     qWarning() << "Global shortcuts are only implemented on Windows for now.";
 #endif
@@ -29,37 +29,54 @@ GlobalShortcutManager::GlobalShortcutManager(QObject *parent)
 GlobalShortcutManager::~GlobalShortcutManager()
 {
 #ifdef Q_OS_WIN
-    unregisterShortcut();
+    unregisterShortcuts();
     if (QCoreApplication::instance()) {
         QCoreApplication::instance()->removeNativeEventFilter(this);
     }
 #endif
 }
 
-void GlobalShortcutManager::registerShortcut()
+void GlobalShortcutManager::registerShortcuts()
 {
 #ifdef Q_OS_WIN
-    unregisterShortcut();
+    unregisterShortcuts();
 
-    const UINT modifiers = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT;
-    const UINT virtualKey = 0x53; // 'S'
+    // Register Ctrl+Shift+S for screenshot
+    const UINT screenshotModifiers = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT;
+    const UINT screenshotKey = 0x53; // 'S'
 
-    if (RegisterHotKey(nullptr, hotkeyId, modifiers, virtualKey)) {
-        registered = true;
+    if (RegisterHotKey(nullptr, screenshotHotkeyId, screenshotModifiers, screenshotKey)) {
+        screenshotRegistered = true;
         qInfo() << "Registered global screenshot shortcut Ctrl+Shift+S";
     } else {
-        registered = false;
+        screenshotRegistered = false;
         qWarning() << "Failed to register global shortcut Ctrl+Shift+S. Error:" << GetLastError();
+    }
+
+    // Register Ctrl+Shift+H for toggle visibility
+    const UINT toggleModifiers = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT;
+    const UINT toggleKey = 0x48; // 'H'
+
+    if (RegisterHotKey(nullptr, toggleHotkeyId, toggleModifiers, toggleKey)) {
+        toggleRegistered = true;
+        qInfo() << "Registered global visibility toggle shortcut Ctrl+Shift+H";
+    } else {
+        toggleRegistered = false;
+        qWarning() << "Failed to register global shortcut Ctrl+Shift+H. Error:" << GetLastError();
     }
 #endif
 }
 
-void GlobalShortcutManager::unregisterShortcut()
+void GlobalShortcutManager::unregisterShortcuts()
 {
 #ifdef Q_OS_WIN
-    if (registered) {
-        UnregisterHotKey(nullptr, hotkeyId);
-        registered = false;
+    if (screenshotRegistered) {
+        UnregisterHotKey(nullptr, screenshotHotkeyId);
+        screenshotRegistered = false;
+    }
+    if (toggleRegistered) {
+        UnregisterHotKey(nullptr, toggleHotkeyId);
+        toggleRegistered = false;
     }
 #endif
 }
@@ -69,12 +86,20 @@ bool GlobalShortcutManager::nativeEventFilter(const QByteArray &eventType, void 
 #ifdef Q_OS_WIN
     if (eventType == "windows_generic_MSG" || eventType == "windows_dispatcher_MSG") {
         MSG *msg = static_cast<MSG *>(message);
-        if (msg->message == WM_HOTKEY && msg->wParam == hotkeyId) {
-            emit screenshotRequested();
-            if (result) {
-                *result = 0;
+        if (msg->message == WM_HOTKEY) {
+            if (msg->wParam == screenshotHotkeyId) {
+                emit screenshotRequested();
+                if (result) {
+                    *result = 0;
+                }
+                return true;
+            } else if (msg->wParam == toggleHotkeyId) {
+                emit toggleVisibilityRequested();
+                if (result) {
+                    *result = 0;
+                }
+                return true;
             }
-            return true;
         }
     }
 #else

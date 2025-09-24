@@ -1278,8 +1278,38 @@ void SettingsWindow::onTestTTSClicked()
     ttsEngine->setPitch((pitchSlider->value()) / 100.0);
     ttsEngine->setRate(rateSlider->value() / 100.0);
 
-    // Determine locale from Translation target language
-    auto mapTargetToLocale = [](const QString &name)->QLocale {
+    // Use the actual voice settings from General tab instead of TTS tab
+    // Check which language and voice should be used based on General tab settings
+    QString inputLanguage = ocrLanguageCombo ? ocrLanguageCombo->currentText() : QString();
+    QString outputLanguage = targetLanguageCombo ? targetLanguageCombo->currentText() : QString();
+    
+    // Determine which voice to test based on TTS options in General tab
+    bool ttsInput = ttsInputCheckBox ? ttsInputCheckBox->isChecked() : false;
+    bool ttsOutput = ttsOutputCheckBox ? ttsOutputCheckBox->isChecked() : false;
+    
+    QString testLanguage;
+    QString voiceToUse;
+    
+    // Prioritize output voice if both are enabled, otherwise use whichever is enabled
+    if (ttsOutput && outputVoiceCombo) {
+        testLanguage = outputLanguage;
+        voiceToUse = outputVoiceCombo->currentData().toString();
+    } else if (ttsInput && inputVoiceCombo) {
+        testLanguage = inputLanguage;
+        voiceToUse = inputVoiceCombo->currentData().toString();
+    } else {
+        // Fallback to output voice if no TTS options are enabled
+        testLanguage = outputLanguage;
+        voiceToUse = outputVoiceCombo ? outputVoiceCombo->currentData().toString() : QString();
+    }
+    
+    if (voiceToUse.isEmpty()) {
+        ttsStatusText->setPlainText("❌ No voice selected in General tab");
+        return;
+    }
+
+    // Determine locale from the selected language
+    auto mapLanguageToLocale = [](const QString &name)->QLocale {
         if (name.contains("English", Qt::CaseInsensitive)) return QLocale(QLocale::English, QLocale::UnitedStates);
         if (name.contains("Chinese") && name.contains("Simplified")) return QLocale(QLocale::Chinese, QLocale::China);
         if (name.contains("Chinese") && name.contains("Traditional")) return QLocale(QLocale::Chinese, QLocale::Taiwan);
@@ -1300,50 +1330,45 @@ void SettingsWindow::onTestTTSClicked()
         if (name.contains("Vietnamese", Qt::CaseInsensitive)) return QLocale(QLocale::Vietnamese, QLocale::Vietnam);
         return QLocale::system();
     };
-    QLocale selectedLocale = mapTargetToLocale(targetLanguageCombo->currentText());
-        // Backend-specific voice handling
-        if (ttsEngine->backend() == TTSEngine::Backend::System) {
-            ttsEngine->setLocale(selectedLocale);
-            int voiceIndex = voiceCombo->currentIndex();
-            if (voiceIndex >= 0) {
-                QList<QVoice> voices = ttsEngine->getVoicesForLanguage(selectedLocale);
-                if (voiceIndex < voices.size()) {
-                    QVoice selectedVoice = voices[voiceIndex];
-                    ttsEngine->setVoice(selectedVoice);
-                    qDebug() << "Set system voice to:" << selectedVoice.name() << "for locale:" << selectedLocale;
-                }
-            }
-        } else {
-            const QString backendText = ttsBackendCombo->currentText();
-            if (backendText.contains("Azure")) {
-                QString voice = voiceCombo->currentText();
-                if (voice.isEmpty()) { auto s = CloudTTSProvider::azureSuggestedVoicesFor(selectedLocale); if (!s.isEmpty()) voice = s.first(); }
-                ttsEngine->configureAzure(azureRegionEdit->text(), azureKeyEdit->text(), voice, azureStyleEdit->text());
-            } else if (backendText == "Google Cloud TTS") {
-                QString voice = voiceCombo->currentText();
-                if (voice.isEmpty()) { auto s = CloudTTSProvider::googleSuggestedVoicesFor(selectedLocale); if (!s.isEmpty()) voice = s.first(); }
-                ttsEngine->configureGoogle(googleApiKeyEdit->text(), voice, googleLanguageCodeEdit->text());
-            } else if (backendText.contains("Google (Free")) {
-                QString voice = voiceCombo->currentText();
-                if (voice.isEmpty()) { auto s = CloudTTSProvider::googleFreeSuggestedVoicesFor(selectedLocale); if (!s.isEmpty()) voice = s.first(); }
-                ttsEngine->configureGoogleFree(voice);
-                ttsEngine->setBackend(TTSEngine::Backend::GoogleFree);
-            } else if (backendText.contains("ElevenLabs")) {
-                QString voiceId = voiceCombo->currentText().trimmed();
-                if (voiceId.isEmpty()) voiceId = elevenVoiceIdEdit->text().trimmed();
-                ttsEngine->configureElevenLabs(elevenApiKeyEdit->text(), voiceId);
-            } else if (backendText.contains("Polly")) {
-                QString voice = voiceCombo->currentText();
-                if (voice.isEmpty()) { auto s = CloudTTSProvider::pollySuggestedVoicesFor(selectedLocale); if (!s.isEmpty()) voice = s.first(); }
-                ttsEngine->configurePolly(pollyRegionEdit->text(), pollyAccessKeyEdit->text(), pollySecretKeyEdit->text(), voice);
-            } else if (backendText.contains("Piper")) {
-                ttsEngine->configurePiper(piperExeEdit->text(), piperModelEdit->text());
-            } else if (backendText.contains("Edge")) {
-                ttsEngine->configureEdge(edgeExeEdit->text(), edgeVoiceEdit->text());
+    
+    QLocale selectedLocale = mapLanguageToLocale(testLanguage);
+    
+    // Configure TTS with the selected voice from General tab
+    const QString backendText = ttsBackendCombo->currentText();
+    if (backendText.contains("Azure")) {
+        ttsEngine->configureAzure(azureRegionEdit->text(), azureKeyEdit->text(), voiceToUse, azureStyleEdit->text());
+    } else if (backendText == "Google Cloud TTS") {
+        ttsEngine->configureGoogle(googleApiKeyEdit->text(), voiceToUse, googleLanguageCodeEdit->text());
+    } else if (backendText.contains("Google (Free")) {
+        ttsEngine->configureGoogleFree(voiceToUse);
+        ttsEngine->setBackend(TTSEngine::Backend::GoogleFree);
+    } else if (backendText.contains("ElevenLabs")) {
+        ttsEngine->configureElevenLabs(elevenApiKeyEdit->text(), voiceToUse);
+    } else if (backendText.contains("Polly")) {
+        ttsEngine->configurePolly(pollyRegionEdit->text(), pollyAccessKeyEdit->text(), pollySecretKeyEdit->text(), voiceToUse);
+    } else if (backendText.contains("Piper")) {
+        ttsEngine->configurePiper(piperExeEdit->text(), piperModelEdit->text());
+    } else if (backendText.contains("Edge")) {
+        ttsEngine->configureEdge(edgeExeEdit->text(), voiceToUse);
+    } else {
+        // System backend
+        ttsEngine->setLocale(selectedLocale);
+        int voiceIndex = voiceCombo->currentIndex();
+        if (voiceIndex >= 0) {
+            QList<QVoice> voices = ttsEngine->getVoicesForLanguage(selectedLocale);
+            if (voiceIndex < voices.size()) {
+                QVoice selectedVoice = voices[voiceIndex];
+                ttsEngine->setVoice(selectedVoice);
+                qDebug() << "Set system voice to:" << selectedVoice.name() << "for locale:" << selectedLocale;
             }
         }
+    }
 
-    ttsStatusText->setPlainText(QString("🔊 Speaking: \"%1\"").arg(testText));
+    QString statusMessage = QString("🔊 Testing %1 voice: \"%2\" - %3")
+                           .arg(ttsOutput && outputVoiceCombo ? "Output" : "Input")
+                           .arg(voiceToUse)
+                           .arg(testText);
+    ttsStatusText->setPlainText(statusMessage);
     ttsEngine->speak(testText);
 }
 
