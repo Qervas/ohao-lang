@@ -32,7 +32,7 @@
       endif()
   endif()
 
-  find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui DBus Network)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui DBus Network TextToSpeech Multimedia)
 
   qt_standard_project_setup()
 
@@ -49,7 +49,11 @@
       src/OCRResultWindow.cpp
       src/TranslationEngine.cpp
       src/ThemeManager.cpp
-    src/TextReplacementOverlay.cpp
+      src/TextReplacementOverlay.cpp
+      src/GlobalShortcutManager.cpp
+      src/TTSEngine.cpp
+      src/TTSManager.cpp
+      src/CloudTTSProvider.cpp
   )
 
   set(HEADERS
@@ -64,12 +68,27 @@
       src/OCRResultWindow.h
       src/TranslationEngine.h
       src/ThemeManager.h
-    src/TextReplacementOverlay.h
+      src/TextReplacementOverlay.h
+      src/GlobalShortcutManager.h
+      src/TTSEngine.h
+      src/TTSManager.h
+      src/CloudTTSProvider.h
   )
 
-  qt_add_executable(ohao-lang ${SOURCES} ${HEADERS})
+  # Create executable
+  # WIN32 flag creates Windows subsystem app (no console window)
+  # Remove WIN32 for console subsystem (useful for debugging)
+  qt_add_executable(ohao-lang WIN32 ${SOURCES} ${HEADERS})
+  
+  # Optional: Allow enabling console for release builds via CMake option
+  option(ENABLE_CONSOLE "Enable console window for debugging" OFF)
+  if(ENABLE_CONSOLE AND WIN32)
+      set_target_properties(ohao-lang PROPERTIES
+          LINK_FLAGS "/SUBSYSTEM:CONSOLE"
+      )
+  endif()
 
-  target_link_libraries(ohao-lang PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui Qt6::DBus Qt6::Network)
+target_link_libraries(ohao-lang PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui Qt6::DBus Qt6::Network Qt6::TextToSpeech Qt6::Multimedia)
 
   # Deploy Qt runtime on Windows so the .exe can run standalone
   if (WIN32)
