@@ -1,6 +1,7 @@
 #include "SettingsWindow.h"
 #include "OCREngine.h"
 #include "TTSEngine.h"
+#include "TTSManager.h"
 #include <QApplication>
 #include <QScreen>
 #include <QDebug>
@@ -20,8 +21,8 @@ SettingsWindow::SettingsWindow(QWidget *parent)
     , settings(new QSettings(QCoreApplication::organizationName(), QCoreApplication::applicationName(), this))
     , ttsEngine(nullptr)
 {
-    // Initialize TTS engine
-    ttsEngine = new TTSEngine(this);
+    // Use global TTS engine from manager
+    ttsEngine = TTSManager::instance().ttsEngine();
 
     setupUI();
     applyModernStyling();

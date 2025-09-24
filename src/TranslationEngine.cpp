@@ -451,7 +451,8 @@ QString TranslationEngine::getLanguageCode(const QString &language, Engine engin
         {"Arabic", "ar"},
         {"Hindi", "hi"},
         {"Thai", "th"},
-        {"Vietnamese", "vi"}
+        {"Vietnamese", "vi"},
+        {"Swedish", "sv"}
     };
 
     QMap<QString, QString> deeplCodes = {
@@ -465,7 +466,8 @@ QString TranslationEngine::getLanguageCode(const QString &language, Engine engin
         {"Portuguese", "PT"},
         {"Italian", "IT"},
         {"Dutch", "NL"},
-        {"Polish", "PL"}
+        {"Polish", "PL"},
+        {"Swedish", "SV"}
     };
 
     if (engine == GoogleTranslate || engine == LibreTranslate || engine == OllamaLLM) {
@@ -496,7 +498,8 @@ QString TranslationEngine::getLanguageName(const QString &code)
         {"ar", "Arabic"},
         {"hi", "Hindi"},
         {"th", "Thai"},
-        {"vi", "Vietnamese"}
+        {"vi", "Vietnamese"},
+        {"sv", "Swedish"}
     };
 
     return codeToName.value(code, code);

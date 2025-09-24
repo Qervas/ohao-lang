@@ -1,6 +1,7 @@
 #include "ScreenshotWidget.h"
 #include "SelectionToolbar.h"
 #include "OCRResultWindow.h"
+#include "TTSManager.h"
 #include <QApplication>
 #include <QScreen>
 #include <QBrush>
@@ -659,33 +660,35 @@ void ScreenshotWidget::handleOCR()
         connect(ocrEngine, &OCREngine::ocrFinished, this, &ScreenshotWidget::onOCRFinished);
         connect(ocrEngine, &OCREngine::ocrProgress, this, &ScreenshotWidget::onOCRProgress);
         connect(ocrEngine, &OCREngine::ocrError, this, &ScreenshotWidget::onOCRError);
-
-        // Load settings from SettingsWindow
-        QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
-
-        // Configure OCR engine based on settings
-        QString engine = settings.value("ocr/engine", "Tesseract").toString();
-        if (engine == "Tesseract") {
-            ocrEngine->setEngine(OCREngine::Tesseract);
-        } else if (engine == "EasyOCR") {
-            ocrEngine->setEngine(OCREngine::EasyOCR);
-        } else if (engine == "PaddleOCR") {
-            ocrEngine->setEngine(OCREngine::PaddleOCR);
-        } else if (engine == "Windows OCR") {
-            ocrEngine->setEngine(OCREngine::WindowsOCR);
-        }
-
-        ocrEngine->setLanguage(settings.value("ocr/language", "English").toString());
-        ocrEngine->setQualityLevel(settings.value("ocr/quality", 3).toInt());
-        ocrEngine->setPreprocessing(settings.value("ocr/preprocessing", true).toBool());
-        ocrEngine->setAutoDetectOrientation(settings.value("ocr/autoDetect", true).toBool());
-
-        // Configure translation settings
-        ocrEngine->setAutoTranslate(settings.value("translation/autoTranslate", true).toBool());
-        ocrEngine->setTranslationEngine(settings.value("translation/engine", "Google Translate (Free)").toString());
-        ocrEngine->setTranslationSourceLanguage(settings.value("translation/sourceLanguage", "Auto-Detect").toString());
-        ocrEngine->setTranslationTargetLanguage(settings.value("translation/targetLanguage", "English").toString());
     }
+
+    // Load settings from SettingsWindow (refresh every time to pick up changes)
+    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
+
+    // Configure OCR engine based on current settings
+    QString engine = settings.value("ocr/engine", "Tesseract").toString();
+    if (engine == "Tesseract") {
+        ocrEngine->setEngine(OCREngine::Tesseract);
+    } else if (engine == "EasyOCR") {
+        ocrEngine->setEngine(OCREngine::EasyOCR);
+    } else if (engine == "PaddleOCR") {
+        ocrEngine->setEngine(OCREngine::PaddleOCR);
+    } else if (engine == "Windows OCR") {
+        ocrEngine->setEngine(OCREngine::WindowsOCR);
+    }
+
+    ocrEngine->setLanguage(settings.value("ocr/language", "English").toString());
+    ocrEngine->setQualityLevel(settings.value("ocr/quality", 3).toInt());
+    ocrEngine->setPreprocessing(settings.value("ocr/preprocessing", true).toBool());
+    ocrEngine->setAutoDetectOrientation(settings.value("ocr/autoDetect", true).toBool());
+
+    // Configure translation settings (refresh every time to pick up language changes)
+    ocrEngine->setAutoTranslate(settings.value("translation/autoTranslate", true).toBool());
+    ocrEngine->setTranslationEngine(settings.value("translation/engine", "Google Translate (Free)").toString());
+    ocrEngine->setTranslationSourceLanguage(settings.value("translation/sourceLanguage", "Auto-Detect").toString());
+    ocrEngine->setTranslationTargetLanguage(settings.value("translation/targetLanguage", "English").toString());
+    
+    qDebug() << "OCR configured with target language:" << settings.value("translation/targetLanguage", "English").toString();
 
     // Debounce if already running
     if (m_ocrInProgress || (ocrEngine && ocrEngine->isBusy())) {
@@ -694,7 +697,6 @@ void ScreenshotWidget::handleOCR()
     }
 
     // Check if auto-OCR is enabled to determine UI behavior
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     bool autoOcr = settings.value("translation/autoOcr", true).toBool();
 
     if (autoOcr) {
@@ -753,6 +755,16 @@ void ScreenshotWidget::onOCRFinished(const OCRResult &result)
     qDebug() << "OCR finished. Success:" << result.success << "Text:" << result.text;
 
     m_ocrInProgress = false;
+
+    // Speak the OCR result if TTS input is enabled
+    if (result.success && !result.text.isEmpty()) {
+        TTSManager::instance().speakInputText(result.text);
+    }
+    
+    // Speak the translation result if TTS output is enabled and translation is available
+    if (result.success && result.hasTranslation && !result.translatedText.isEmpty()) {
+        TTSManager::instance().speakOutputText(result.translatedText);
+    }
 
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     bool autoOcr = settings.value("translation/autoOcr", true).toBool();
