@@ -3,9 +3,9 @@
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QTimer>
-#include "FloatingWidget.h"
-#include "SystemTray.h"
-#include "ThemeManager.h"
+#include "ui/FloatingWidget.h"
+#include "system/SystemTray.h"
+#include "ui/ThemeManager.h"
 
 int main(int argc, char *argv[])
 {
