@@ -20,6 +20,9 @@
 #include <QScrollArea>
 #include <QFrame>
 #include <QListWidget>
+#include <QList>
+#include <QHash>
+#include <QNetworkAccessManager>
 
 class TTSEngine;
 
@@ -45,7 +48,6 @@ private slots:
     void onTestTranslationClicked();
     void onVoiceChanged();
     void onTestTTSClicked();
-    void onEdgeAutoDetect();
 
 private:
     void setupUI();
@@ -61,6 +63,10 @@ private:
     void animateShow();
     void animateHide();
     void updateVoicesForLanguage();
+    void updateProviderUI(const QString& providerId);
+    void checkEdgeTTSAvailability();
+    QString getTestTextForLanguage(const QString& voice, bool isInputVoice) const;
+    QString getLanguageCodeFromVoice(const QString& voice) const;
 
     // UI Components
     QTabWidget *tabWidget;
@@ -102,52 +108,29 @@ private:
     QCheckBox *soundsCheck;
 
     // TTS Tab
-    QWidget *ttsTab;
-    QCheckBox *ttsEnabledCheck;
-    QComboBox *voiceCombo;
-    QComboBox *inputVoiceCombo;   // For input text (OCR language)
-    QComboBox *outputVoiceCombo;  // For output text (translation language)
-    QComboBox *ttsBackendCombo; // System or Azure
-    QSlider *volumeSlider;
-    QSlider *pitchSlider;
-    QSlider *rateSlider;
-    QLineEdit *testTextEdit;
-    QPushButton *testTTSBtn;
-    QPushButton *stopTTSBtn;
-    QTextEdit *ttsStatusText;
+    QWidget *ttsTab { nullptr };
+    QCheckBox *ttsEnabledCheck { nullptr };
+    QComboBox *ttsProviderCombo { nullptr };
+    QLabel *providerInfoLabel { nullptr };
+    QComboBox *voiceCombo { nullptr };
+    QComboBox *inputVoiceCombo { nullptr };   // For input text (OCR language)
+    QComboBox *outputVoiceCombo { nullptr };  // For output text (translation language)
+    QLabel *ttsProviderLabel { nullptr };
+    QCheckBox *advancedVoiceToggle { nullptr };
+    QPushButton *refreshVoicesButton { nullptr };
+    QLabel *inputVoiceLabel { nullptr };
+    QLabel *outputVoiceLabel { nullptr };
+    QLineEdit *testTextEdit { nullptr };
+    QPushButton *testTTSBtn { nullptr };
+    QPushButton *stopTTSBtn { nullptr };
+    QTextEdit *ttsStatusText { nullptr };
+    QLabel *edgeExeLabel { nullptr };
+    QWidget *edgeExeRow { nullptr };
+    QLabel *edgeHintLabel { nullptr };
 
-    // Azure config controls
-    QGroupBox *azureConfigGroup;
-    QLineEdit *azureRegionEdit;
-    QLineEdit *azureKeyEdit;
-    QLineEdit *azureStyleEdit;
-
-    // Google config controls
-    QGroupBox *googleConfigGroup;
-    QLineEdit *googleApiKeyEdit;
-    QLineEdit *googleLanguageCodeEdit;
-
-    // ElevenLabs config controls
-    QGroupBox *elevenConfigGroup;
-    QLineEdit *elevenApiKeyEdit;
-    QLineEdit *elevenVoiceIdEdit;
-
-    // Polly config controls
-    QGroupBox *pollyConfigGroup;
-    QLineEdit *pollyRegionEdit;
-    QLineEdit *pollyAccessKeyEdit;
-    QLineEdit *pollySecretKeyEdit;
-
-    // Piper config controls (free)
-    QGroupBox *piperConfigGroup;
-    QLineEdit *piperExeEdit;
-    QLineEdit *piperModelEdit;
-
-    // Edge (free online) config controls
-    QGroupBox *edgeConfigGroup;
-    QLineEdit *edgeExeEdit;
-    QLineEdit *edgeVoiceEdit;
-    QPushButton *edgeAutoDetectBtn;
+    // Provider extras
+    QLineEdit *edgeExePathEdit { nullptr };
+    QPushButton *edgeBrowseButton { nullptr };
 
     // Buttons
     QPushButton *applyBtn;
@@ -166,4 +149,12 @@ private:
 
     // Language filtering
     // Language now follows Translation target language; no separate picker
+
+    struct VoiceOption {
+        QString label;
+        QString id;
+    };
+    QHash<QString, QList<VoiceOption>> voiceCache;
+    QHash<QString, bool> voiceFetchInFlight;
+    QNetworkAccessManager *ttsNetworkManager { nullptr };
 };

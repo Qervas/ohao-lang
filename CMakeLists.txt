@@ -54,7 +54,8 @@ find_package(Qt6 COMPONENTS TextToSpeech)
       src/GlobalShortcutManager.cpp
       src/TTSEngine.cpp
       src/TTSManager.cpp
-      src/CloudTTSProvider.cpp
+      src/GoogleWebTTSProvider.cpp
+      src/EdgeTTSProvider.cpp
   )
 
   set(HEADERS
@@ -73,7 +74,9 @@ find_package(Qt6 COMPONENTS TextToSpeech)
       src/GlobalShortcutManager.h
       src/TTSEngine.h
       src/TTSManager.h
-      src/CloudTTSProvider.h
+      src/GoogleWebTTSProvider.h
+      src/EdgeTTSProvider.h
+      src/TTSProvider.h
   )
 
   # Create executable

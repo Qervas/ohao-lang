@@ -16,31 +16,25 @@
 GlobalShortcutManager::GlobalShortcutManager(QObject *parent)
     : QObject(parent)
 {
-#ifdef Q_OS_WIN
     if (QCoreApplication::instance()) {
         QCoreApplication::instance()->installNativeEventFilter(this);
     }
     registerShortcuts();
-#else
-    qWarning() << "Global shortcuts are only implemented on Windows for now.";
-#endif
 }
 
 GlobalShortcutManager::~GlobalShortcutManager()
 {
-#ifdef Q_OS_WIN
     unregisterShortcuts();
     if (QCoreApplication::instance()) {
         QCoreApplication::instance()->removeNativeEventFilter(this);
     }
-#endif
 }
 
 void GlobalShortcutManager::registerShortcuts()
 {
-#ifdef Q_OS_WIN
     unregisterShortcuts();
 
+#ifdef Q_OS_WIN
     // Register Ctrl+Shift+S for screenshot
     const UINT screenshotModifiers = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT;
     const UINT screenshotKey = 0x53; // 'S'
@@ -64,6 +58,13 @@ void GlobalShortcutManager::registerShortcuts()
         toggleRegistered = false;
         qWarning() << "Failed to register global shortcut Ctrl+Shift+H. Error:" << GetLastError();
     }
+#else
+    // For non-Windows platforms, global shortcuts require special system permissions
+    // or desktop environment specific APIs
+    qWarning() << "Global shortcuts are currently only fully supported on Windows.";
+    qWarning() << "On Linux, please use your desktop environment's shortcut settings to bind:";
+    qWarning() << "  Ctrl+Shift+S -> Launch this application with --screenshot argument";
+    qWarning() << "  Ctrl+Shift+H -> Launch this application with --toggle argument";
 #endif
 }
 

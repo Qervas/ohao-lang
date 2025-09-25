@@ -9,10 +9,12 @@
 #include <QShowEvent>
 #include <QHideEvent>
 #include <QCoreApplication>
-#include <QProcess>
 #include <QTimer>
-#include <QDir>
-#include <QFileInfo>
+#include <QFileDialog>
+#include <QProcess>
+#include <QIcon>
+#include <QSignalBlocker>
+#include <QtMath>
 #include "ThemeManager.h"
 
 SettingsWindow::SettingsWindow(QWidget *parent)
@@ -120,27 +122,63 @@ void SettingsWindow::setupGeneralTab()
     QFormLayout *langLayout = new QFormLayout(langGroup);
     langLayout->setSpacing(15);
     
-    // Input Language (OCR)
+    // Input Language (OCR) with TTS toggle
     QLabel *inputLabel = new QLabel("📖 Input Language (OCR Recognition):");
     inputLabel->setWordWrap(true);
+
+    QWidget *inputLangWidget = new QWidget();
+    QHBoxLayout *inputLangLayout = new QHBoxLayout(inputLangWidget);
+    inputLangLayout->setContentsMargins(0, 0, 0, 0);
+    inputLangLayout->setSpacing(5);
+
     ocrLanguageCombo = new QComboBox();
     ocrLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
                                "Japanese", "Korean", "Spanish", "French", "German", "Russian",
                                "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
     ocrLanguageCombo->setToolTip("Language for text recognition from screenshots");
     connect(ocrLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString&){ updateVoicesForLanguage(); });
-    langLayout->addRow(inputLabel, ocrLanguageCombo);
+
+    // TTS toggle button for input
+    ttsInputCheckBox = new QCheckBox();
+    ttsInputCheckBox->setText("🔊");
+    ttsInputCheckBox->setToolTip("Enable TTS for Input Text (Read recognized OCR text aloud)");
+    ttsInputCheckBox->setChecked(false);
+    ttsInputCheckBox->setMaximumWidth(50);
+    ttsInputCheckBox->setStyleSheet("QCheckBox { font-size: 18px; }");
+
+    inputLangLayout->addWidget(ocrLanguageCombo, 1);
+    inputLangLayout->addWidget(ttsInputCheckBox);
+
+    langLayout->addRow(inputLabel, inputLangWidget);
     
-    // Output Language (Translation)
+    // Output Language (Translation) with TTS toggle
     QLabel *outputLabel = new QLabel("🌐 Output Language (Translation Target):");
     outputLabel->setWordWrap(true);
+
+    QWidget *outputLangWidget = new QWidget();
+    QHBoxLayout *outputLangLayout = new QHBoxLayout(outputLangWidget);
+    outputLangLayout->setContentsMargins(0, 0, 0, 0);
+    outputLangLayout->setSpacing(5);
+
     targetLanguageCombo = new QComboBox();
     targetLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)", "Japanese", "Korean", "Spanish",
                                   "French", "German", "Russian", "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
     targetLanguageCombo->setCurrentText("English");
     targetLanguageCombo->setToolTip("Target language for translation and TTS voice selection");
     connect(targetLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString&){ updateVoicesForLanguage(); });
-    langLayout->addRow(outputLabel, targetLanguageCombo);
+
+    // TTS toggle button for output
+    ttsOutputCheckBox = new QCheckBox();
+    ttsOutputCheckBox->setText("🔊");
+    ttsOutputCheckBox->setToolTip("Enable TTS for Output Text (Read translation results aloud)");
+    ttsOutputCheckBox->setChecked(true);
+    ttsOutputCheckBox->setMaximumWidth(50);
+    ttsOutputCheckBox->setStyleSheet("QCheckBox { font-size: 18px; }");
+
+    outputLangLayout->addWidget(targetLanguageCombo, 1);
+    outputLangLayout->addWidget(ttsOutputCheckBox);
+
+    langLayout->addRow(outputLabel, outputLangWidget);
     
     // Info text
     QLabel *infoLabel = new QLabel("ℹ️ <i>TTS voice language automatically matches the Output Language setting.<br>"
@@ -148,27 +186,7 @@ void SettingsWindow::setupGeneralTab()
     infoLabel->setWordWrap(true);
     infoLabel->setStyleSheet("color: #666; font-size: 11px; margin-top: 10px;");
     langLayout->addRow(infoLabel);
-    
-    layout->addWidget(langGroup);
-    
-    // TTS Options Group
-    QGroupBox *ttsOptionsGroup = new QGroupBox("🔊 Text-to-Speech Options");
-    ttsOptionsGroup->setStyleSheet("QGroupBox { font-weight: bold; font-size: 14px; padding-top: 10px; }");
-    QVBoxLayout *ttsOptionsLayout = new QVBoxLayout(ttsOptionsGroup);
-    ttsOptionsLayout->setSpacing(10);
-    
-    // TTS Input checkbox (read OCR text)
-    ttsInputCheckBox = new QCheckBox("🎤 Enable TTS for Input Text (Read recognized OCR text aloud)");
-    ttsInputCheckBox->setToolTip("When enabled, the app will read the recognized text from OCR aloud");
-    ttsInputCheckBox->setChecked(false); // Default off
-    ttsOptionsLayout->addWidget(ttsInputCheckBox);
-    
-    // TTS Output checkbox (read translation)
-    ttsOutputCheckBox = new QCheckBox("🗣️ Enable TTS for Output Text (Read translation results aloud)");
-    ttsOutputCheckBox->setToolTip("When enabled, the app will read the translated text aloud");
-    ttsOutputCheckBox->setChecked(true); // Default on
-    ttsOptionsLayout->addWidget(ttsOutputCheckBox);
-    
+
     // Connect TTS checkboxes to engine (if available)
     connect(ttsInputCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
         if (ttsEngine) ttsEngine->setTTSInputEnabled(checked);
@@ -176,15 +194,11 @@ void SettingsWindow::setupGeneralTab()
     connect(ttsOutputCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
         if (ttsEngine) ttsEngine->setTTSOutputEnabled(checked);
     });
+
+    layout->addWidget(langGroup);
     
-    // Info about TTS options
-    QLabel *ttsInfoLabel = new QLabel("ℹ️ <i>You can enable TTS for input text, output text, or both. "
-                                     "Use the TTS tab to configure voice settings and test playback.</i>");
-    ttsInfoLabel->setWordWrap(true);
-    ttsInfoLabel->setStyleSheet("color: #666; font-size: 11px; margin-top: 8px;");
-    ttsOptionsLayout->addWidget(ttsInfoLabel);
-    
-    layout->addWidget(ttsOptionsGroup);
+    // Remove the TTS Options Group as we'll integrate TTS controls with language selectors
+    // The checkboxes are created with the language combos now
     layout->addStretch();
 }
 
@@ -475,260 +489,187 @@ void SettingsWindow::loadSettings()
 
     // TTS Settings
     if (ttsEngine) {
+        if (refreshVoicesButton) {
+            refreshVoicesButton->setEnabled(true);
+        }
         ttsEnabledCheck->setChecked(settings->value("tts/enabled", true).toBool());
-        volumeSlider->setValue(settings->value("tts/volume", 80).toInt());
-        pitchSlider->setValue(settings->value("tts/pitch", 0).toInt());
-        {
-            int savedRate = settings->value("tts/rate", 0).toInt();
-            // Backward compatibility: old builds saved 50..200; map to -100..100 by offsetting from 100
-            if (savedRate >= 50 && savedRate <= 200) {
-                savedRate = qBound(-100, savedRate - 100, 100);
-            } else {
-                // New builds save -100..100 directly
-                savedRate = qBound(-100, savedRate, 100);
-            }
-            rateSlider->setValue(savedRate);
+
+        const int savedVolume = settings->value("tts/volume", 100).toInt();
+        const int savedPitch = settings->value("tts/pitch", 0).toInt();
+        const int savedRate = settings->value("tts/rate", 0).toInt();
+
+        QString providerId = settings->value("tts/provider", settings->value("tts/backend", QStringLiteral("google"))).toString();
+    const QString googleVoiceStored = settings->value("tts/Google/voice").toString();
+    const QString googleWebVoiceStored = settings->value("tts/GoogleWeb/voice").toString();
+        const QString edgeVoiceStored = settings->value("tts/Edge/voice").toString();
+        const QString edgeExeStored = settings->value("tts/Edge/exePath").toString();
+        const QString savedInputVoice = settings->value("tts/inputVoice").toString();
+        const QString savedOutputVoice = settings->value("tts/outputVoice").toString();
+        const QString savedTestText = settings->value("tts/testText", testTextEdit ? testTextEdit->text() : QString()).toString();
+
+        if (providerId == QStringLiteral("google")) {
+            providerId = QStringLiteral("google-web");
+        } else if (providerId == QStringLiteral("edge")) {
+            providerId = QStringLiteral("edge-free");
         }
 
-        // Backend and provider configs
-        const QString backendStr = settings->value("tts/backend", "system").toString();
-        azureConfigGroup->setVisible(false);
-        googleConfigGroup->setVisible(false);
-        elevenConfigGroup->setVisible(false);
-        pollyConfigGroup->setVisible(false);
-        if (backendStr.compare("azure", Qt::CaseInsensitive) == 0) {
-            ttsBackendCombo->setCurrentText("Azure Neural (Cloud)");
-            ttsEngine->setBackend(TTSEngine::Backend::Azure);
-            azureConfigGroup->setVisible(true);
-        } else if (backendStr.compare("google", Qt::CaseInsensitive) == 0) {
-            ttsBackendCombo->setCurrentText("Google Cloud TTS");
-            ttsEngine->setBackend(TTSEngine::Backend::Google);
-            googleConfigGroup->setVisible(true);
-        } else if (backendStr.compare("googlefree", Qt::CaseInsensitive) == 0) {
-            ttsBackendCombo->setCurrentText("Google (Free Online)");
-            ttsEngine->setBackend(TTSEngine::Backend::GoogleFree);
-        } else if (backendStr.compare("elevenlabs", Qt::CaseInsensitive) == 0) {
-            ttsBackendCombo->setCurrentText("ElevenLabs");
-            ttsEngine->setBackend(TTSEngine::Backend::ElevenLabs);
-            elevenConfigGroup->setVisible(true);
-        } else if (backendStr.compare("polly", Qt::CaseInsensitive) == 0) {
-            ttsBackendCombo->setCurrentText("Amazon Polly");
-            ttsEngine->setBackend(TTSEngine::Backend::Polly);
-            pollyConfigGroup->setVisible(true);
-        } else if (backendStr.compare("edge", Qt::CaseInsensitive) == 0) {
-            ttsBackendCombo->setCurrentText("Microsoft Edge (Free Online)");
-            ttsEngine->setBackend(TTSEngine::Backend::Edge);
-            edgeConfigGroup->setVisible(true);
-        } else if (backendStr.compare("piper", Qt::CaseInsensitive) == 0) {
-            ttsBackendCombo->setCurrentText("Piper (Free, Local)");
-            ttsEngine->setBackend(TTSEngine::Backend::Piper);
-            piperConfigGroup->setVisible(true);
+        if (ttsProviderCombo) {
+            const int idx = ttsProviderCombo->findData(providerId);
+            if (idx >= 0) {
+                QSignalBlocker blocker(*ttsProviderCombo);
+                ttsProviderCombo->setCurrentIndex(idx);
+            }
+        }
+
+        if (edgeExePathEdit) {
+            edgeExePathEdit->setText(edgeExeStored);
+        }
+        if (testTextEdit) {
+            testTextEdit->setText(savedTestText);
+        }
+
+        ttsEngine->setProviderId(providerId);
+        ttsEngine->setVolume(savedVolume / 100.0);
+        ttsEngine->setPitch(savedPitch / 100.0);
+        ttsEngine->setRate(savedRate / 100.0);
+
+        QString primaryVoice;
+        if (providerId == QStringLiteral("edge-free")) {
+            primaryVoice = !edgeVoiceStored.isEmpty() ? edgeVoiceStored : savedOutputVoice.isEmpty() ? savedInputVoice : savedOutputVoice;
+            ttsEngine->setEdgeVoice(primaryVoice);
+            ttsEngine->setEdgeExecutable(edgeExeStored);
         } else {
-            ttsBackendCombo->setCurrentText("System (Local)");
-            ttsEngine->setBackend(TTSEngine::Backend::System);
+            primaryVoice = !googleWebVoiceStored.isEmpty() ? googleWebVoiceStored : !googleVoiceStored.isEmpty() ? googleVoiceStored : savedOutputVoice.isEmpty() ? savedInputVoice : savedOutputVoice;
+            QString langCode = getLanguageCodeFromVoice(primaryVoice);
+            ttsEngine->configureGoogle(QString(), primaryVoice, langCode);
         }
-        settings->beginGroup("tts/Azure");
-        azureRegionEdit->setText(settings->value("region").toString());
-        azureKeyEdit->setText(settings->value("key").toString());
-        azureStyleEdit->setText(settings->value("style").toString());
-        const QString azureVoice = settings->value("voice").toString();
-        if (!azureVoice.isEmpty()) ttsEngine->configureAzure(azureRegionEdit->text(), azureKeyEdit->text(), azureVoice, azureStyleEdit->text());
-        settings->endGroup();
 
-        settings->beginGroup("tts/Google");
-        googleApiKeyEdit->setText(settings->value("apiKey").toString());
-        googleLanguageCodeEdit->setText(settings->value("languageCode").toString());
-        const QString googleVoice = settings->value("voice").toString();
-        if (!googleVoice.isEmpty()) ttsEngine->configureGoogle(googleApiKeyEdit->text(), googleVoice, googleLanguageCodeEdit->text());
-        settings->endGroup();
+        ttsEngine->setPrimaryVoice(primaryVoice);
+        ttsEngine->setInputVoice(savedInputVoice);
+        ttsEngine->setOutputVoice(savedOutputVoice);
 
-        settings->beginGroup("tts/ElevenLabs");
-        elevenApiKeyEdit->setText(settings->value("apiKey").toString());
-        elevenVoiceIdEdit->setText(settings->value("voiceId").toString());
-        if (!elevenApiKeyEdit->text().isEmpty() && !elevenVoiceIdEdit->text().isEmpty()) ttsEngine->configureElevenLabs(elevenApiKeyEdit->text(), elevenVoiceIdEdit->text());
-        settings->endGroup();
-
-        settings->beginGroup("tts/Polly");
-        pollyRegionEdit->setText(settings->value("region").toString());
-        pollyAccessKeyEdit->setText(settings->value("accessKey").toString());
-        pollySecretKeyEdit->setText(settings->value("secretKey").toString());
-        const QString pollyVoice = settings->value("voice").toString();
-        if (!pollyRegionEdit->text().isEmpty() && !pollyAccessKeyEdit->text().isEmpty() && !pollySecretKeyEdit->text().isEmpty() && !pollyVoice.isEmpty()) {
-            ttsEngine->configurePolly(pollyRegionEdit->text(), pollyAccessKeyEdit->text(), pollySecretKeyEdit->text(), pollyVoice);
+        if (voiceCombo) voiceCombo->setEditText(primaryVoice);
+        if (inputVoiceCombo) inputVoiceCombo->setEditText(savedInputVoice);
+        if (outputVoiceCombo) outputVoiceCombo->setEditText(savedOutputVoice);
+        if (advancedVoiceToggle) {
+            advancedVoiceToggle->setChecked(!savedInputVoice.isEmpty() || !savedOutputVoice.isEmpty());
         }
-        settings->endGroup();
 
-        settings->beginGroup("tts/Piper");
-        piperExeEdit->setText(settings->value("exePath").toString());
-        piperModelEdit->setText(settings->value("modelPath").toString());
-        if (!piperExeEdit->text().isEmpty() && !piperModelEdit->text().isEmpty()) {
-            ttsEngine->configurePiper(piperExeEdit->text(), piperModelEdit->text());
+        if (ttsProviderLabel) {
+            ttsProviderLabel->setText(tr("Voice service: %1").arg(ttsEngine->providerName()));
         }
-        settings->endGroup();
 
-        settings->beginGroup("tts/Edge");
-        edgeExeEdit->setText(settings->value("exePath").toString());
-        edgeVoiceEdit->setText(settings->value("voice").toString());
-        if (!edgeExeEdit->text().isEmpty()) {
-            ttsEngine->configureEdge(edgeExeEdit->text(), edgeVoiceEdit->text());
-        }
-        settings->endGroup();
+        updateProviderUI(providerId);
 
-        // Load voice selection
-        QString savedVoice = settings->value("tts/voice", "").toString();
-        if (!savedVoice.isEmpty()) {
-            int voiceIndex = voiceCombo->findData(savedVoice);
-            if (voiceIndex >= 0) {
-                voiceCombo->setCurrentIndex(voiceIndex);
+        if (ttsStatusText) {
+            QString status;
+            if (providerId == QStringLiteral("edge-free") && edgeExePathEdit && edgeExePathEdit->text().trimmed().isEmpty()) {
+                status = tr("⚠️ Choose the edge-tts executable to enable playback.");
             }
-        }
-
-        // Load input/output voice selection
-        QString savedInputVoice = settings->value("tts/inputVoice", "").toString();
-        if (!savedInputVoice.isEmpty() && inputVoiceCombo) {
-            int inputVoiceIndex = inputVoiceCombo->findData(savedInputVoice);
-            if (inputVoiceIndex >= 0) {
-                inputVoiceCombo->setCurrentIndex(inputVoiceIndex);
+            if (status.isEmpty()) {
+                status = tr("✅ Ready to speak.");
             }
+            ttsStatusText->setPlainText(status);
         }
-        
-        QString savedOutputVoice = settings->value("tts/outputVoice", "").toString();
-        if (!savedOutputVoice.isEmpty() && outputVoiceCombo) {
-            int outputVoiceIndex = outputVoiceCombo->findData(savedOutputVoice);
-            if (outputVoiceIndex >= 0) {
-                outputVoiceCombo->setCurrentIndex(outputVoiceIndex);
-            }
+    } else if (ttsProviderLabel) {
+        ttsProviderLabel->setText(tr("Voice service unavailable"));
+        if (refreshVoicesButton) {
+            refreshVoicesButton->setEnabled(false);
         }
-
-        // Load test text
-        testTextEdit->setText(settings->value("tts/testText", "Hello! This is a test of the text-to-speech functionality.").toString());
     }
 }
 
 void SettingsWindow::saveSettings()
 {
+    if (!settings) {
+        return;
+    }
+
     // OCR Settings
-    settings->setValue("ocr/engine", ocrEngineCombo->currentText());
-    settings->setValue("ocr/language", ocrLanguageCombo->currentText());
-    settings->setValue("ocr/quality", ocrQualitySlider->value());
-    settings->setValue("ocr/preprocessing", ocrPreprocessingCheck->isChecked());
-    settings->setValue("ocr/autoDetect", ocrAutoDetectCheck->isChecked());
+    if (ocrEngineCombo) settings->setValue("ocr/engine", ocrEngineCombo->currentText());
+    if (ocrLanguageCombo) settings->setValue("ocr/language", ocrLanguageCombo->currentText());
+    if (ocrQualitySlider) settings->setValue("ocr/quality", ocrQualitySlider->value());
+    if (ocrPreprocessingCheck) settings->setValue("ocr/preprocessing", ocrPreprocessingCheck->isChecked());
+    if (ocrAutoDetectCheck) settings->setValue("ocr/autoDetect", ocrAutoDetectCheck->isChecked());
 
     // Translation Settings
-    settings->setValue("translation/autoOcr", autoOcrCheck->isChecked());
-    settings->setValue("translation/autoTranslate", autoTranslateCheck->isChecked());
-    settings->setValue("translation/engine", translationEngineCombo->currentText());
-    settings->setValue("translation/sourceLanguage", sourceLanguageCombo->currentText());
-    settings->setValue("translation/targetLanguage", targetLanguageCombo->currentText());
-    settings->setValue("translation/apiUrl", apiUrlEdit->text());
-    settings->setValue("translation/apiKey", apiKeyEdit->text());
+    if (autoOcrCheck) settings->setValue("translation/autoOcr", autoOcrCheck->isChecked());
+    if (autoTranslateCheck) settings->setValue("translation/autoTranslate", autoTranslateCheck->isChecked());
+    if (translationEngineCombo) settings->setValue("translation/engine", translationEngineCombo->currentText());
+    if (sourceLanguageCombo) settings->setValue("translation/sourceLanguage", sourceLanguageCombo->currentText());
+    if (targetLanguageCombo) settings->setValue("translation/targetLanguage", targetLanguageCombo->currentText());
+    if (apiUrlEdit) settings->setValue("translation/apiUrl", apiUrlEdit->text().trimmed());
+    if (apiKeyEdit) settings->setValue("translation/apiKey", apiKeyEdit->text());
 
     // Appearance Settings
-    settings->setValue("appearance/theme", themeCombo->currentText());
-    settings->setValue("appearance/opacity", opacitySlider->value());
-    settings->setValue("appearance/animations", animationsCheck->isChecked());
-    settings->setValue("appearance/sounds", soundsCheck->isChecked());
+    if (themeCombo) settings->setValue("appearance/theme", themeCombo->currentText());
+    if (opacitySlider) settings->setValue("appearance/opacity", opacitySlider->value());
+    if (animationsCheck) settings->setValue("appearance/animations", animationsCheck->isChecked());
+    if (soundsCheck) settings->setValue("appearance/sounds", soundsCheck->isChecked());
 
-    // General TTS Options
-    settings->setValue("general/ttsInput", ttsInputCheckBox->isChecked());
-    settings->setValue("general/ttsOutput", ttsOutputCheckBox->isChecked());
+    // General Options
+    if (ttsInputCheckBox) settings->setValue("general/ttsInput", ttsInputCheckBox->isChecked());
+    if (ttsOutputCheckBox) settings->setValue("general/ttsOutput", ttsOutputCheckBox->isChecked());
 
     // TTS Settings
+    QString providerId;
+    if (ttsProviderCombo) {
+        providerId = ttsProviderCombo->currentData().toString();
+    }
+    if (providerId.isEmpty() && ttsEngine) {
+        providerId = ttsEngine->providerId();
+    }
+
+    const bool ttsEnabled = ttsEnabledCheck ? ttsEnabledCheck->isChecked() : true;
+    const QString primaryVoice = voiceCombo ? voiceCombo->currentText().trimmed() : QString();
+    const QString inputVoice = inputVoiceCombo ? inputVoiceCombo->currentText().trimmed() : QString();
+    const QString outputVoice = outputVoiceCombo ? outputVoiceCombo->currentText().trimmed() : QString();
+    const QString edgeExePath = edgeExePathEdit ? edgeExePathEdit->text().trimmed() : QString();
+    const QString testPhrase = testTextEdit ? testTextEdit->text() : QString();
+
+    settings->setValue("tts/enabled", ttsEnabled);
+    settings->setValue("tts/provider", providerId);
+    settings->setValue("tts/backend", providerId == QStringLiteral("edge-free") ? QStringLiteral("edge") : QStringLiteral("google"));
+    settings->setValue("tts/inputVoice", inputVoice);
+    settings->setValue("tts/outputVoice", outputVoice);
+    settings->setValue("tts/testText", testPhrase);
+
+    if (providerId == QStringLiteral("edge-free")) {
+        settings->setValue("tts/Edge/voice", primaryVoice);
+        settings->setValue("tts/Edge/exePath", edgeExePath);
+    } else {
+        settings->setValue("tts/Google/voice", primaryVoice);
+        settings->setValue("tts/GoogleWeb/voice", primaryVoice);
+        settings->remove("tts/Google/languageCode");
+        settings->remove("tts/GoogleWeb/languageCode");
+    }
+
     if (ttsEngine) {
-        settings->setValue("tts/enabled", ttsEnabledCheck->isChecked());
-        settings->setValue("tts/volume", volumeSlider->value());
-        settings->setValue("tts/pitch", pitchSlider->value());
-        settings->setValue("tts/rate", rateSlider->value());
-        QString backendWrite = "system";
-        if (ttsBackendCombo->currentText().contains("Azure")) backendWrite = "azure";
-        else if (ttsBackendCombo->currentText() == "Google Cloud TTS") backendWrite = "google";
-        else if (ttsBackendCombo->currentText().contains("Google (Free")) backendWrite = "googlefree";
-        else if (ttsBackendCombo->currentText().contains("ElevenLabs")) backendWrite = "elevenlabs";
-        else if (ttsBackendCombo->currentText().contains("Polly")) backendWrite = "polly";
-        else if (ttsBackendCombo->currentText().contains("Piper")) backendWrite = "piper";
-        else if (ttsBackendCombo->currentText().contains("Edge")) backendWrite = "edge";
-        settings->setValue("tts/backend", backendWrite);
-
-        // Azure
-        settings->beginGroup("tts/Azure");
-        settings->setValue("region", azureRegionEdit->text());
-        settings->setValue("key", azureKeyEdit->text());
-        settings->setValue("style", azureStyleEdit->text());
-        if (ttsBackendCombo->currentText().contains("Azure") && !voiceCombo->currentText().isEmpty()) {
-            settings->setValue("voice", voiceCombo->currentText());
+        if (!providerId.isEmpty()) {
+            ttsEngine->setProviderId(providerId);
         }
-        settings->endGroup();
+        ttsEngine->setPrimaryVoice(primaryVoice);
+        ttsEngine->setInputVoice(inputVoice);
+        ttsEngine->setOutputVoice(outputVoice);
+        ttsEngine->setTTSInputEnabled(ttsInputCheckBox ? ttsInputCheckBox->isChecked() : ttsEngine->isTTSInputEnabled());
+        ttsEngine->setTTSOutputEnabled(ttsOutputCheckBox ? ttsOutputCheckBox->isChecked() : ttsEngine->isTTSOutputEnabled());
 
-        // Google
-        settings->beginGroup("tts/Google");
-        settings->setValue("apiKey", googleApiKeyEdit->text());
-        settings->setValue("languageCode", googleLanguageCodeEdit->text());
-        if (ttsBackendCombo->currentText().contains("Google") && !voiceCombo->currentText().isEmpty()) {
-            settings->setValue("voice", voiceCombo->currentText());
-        }
-        settings->endGroup();
-
-        // ElevenLabs
-        settings->beginGroup("tts/ElevenLabs");
-        settings->setValue("apiKey", elevenApiKeyEdit->text());
-        if (ttsBackendCombo->currentText().contains("ElevenLabs")) {
-            const QString voiceId = voiceCombo->currentText().trimmed().isEmpty() ? elevenVoiceIdEdit->text().trimmed() : voiceCombo->currentText().trimmed();
-            if (!voiceId.isEmpty()) settings->setValue("voiceId", voiceId);
-        }
-        settings->endGroup();
-
-        // Polly
-        settings->beginGroup("tts/Polly");
-        settings->setValue("region", pollyRegionEdit->text());
-        settings->setValue("accessKey", pollyAccessKeyEdit->text());
-        settings->setValue("secretKey", pollySecretKeyEdit->text());
-        if (ttsBackendCombo->currentText().contains("Polly") && !voiceCombo->currentText().isEmpty()) {
-            settings->setValue("voice", voiceCombo->currentText());
-        }
-        settings->endGroup();
-
-    // Piper
-    settings->beginGroup("tts/Piper");
-        settings->setValue("exePath", piperExeEdit->text());
-        settings->setValue("modelPath", piperModelEdit->text());
-        settings->endGroup();
-
-    // Edge
-    settings->beginGroup("tts/Edge");
-    settings->setValue("exePath", edgeExeEdit->text());
-    settings->setValue("voice", edgeVoiceEdit->text());
-    settings->endGroup();
-
-        // Save voice selection (system)
-        if (ttsBackendCombo->currentText().contains("System")) {
-            QString selectedVoice = voiceCombo->currentData().toString();
-            if (!selectedVoice.isEmpty()) settings->setValue("tts/voice", selectedVoice);
+        if (providerId == QStringLiteral("edge-free")) {
+            ttsEngine->setEdgeExecutable(edgeExePath);
+            ttsEngine->setEdgeVoice(primaryVoice);
+        } else {
+            QString langCode = getLanguageCodeFromVoice(primaryVoice);
+            ttsEngine->configureGoogle(QString(), primaryVoice, langCode);
         }
 
-        // Save input/output voice selection
-        if (inputVoiceCombo) {
-            QString selectedInputVoice = inputVoiceCombo->currentData().toString();
-            if (!selectedInputVoice.isEmpty()) {
-                settings->setValue("tts/inputVoice", selectedInputVoice);
-            }
-        }
-        
-        if (outputVoiceCombo) {
-            QString selectedOutputVoice = outputVoiceCombo->currentData().toString();
-            if (!selectedOutputVoice.isEmpty()) {
-                settings->setValue("tts/outputVoice", selectedOutputVoice);
-            }
-        }
+        settings->setValue("tts/volume", qRound(ttsEngine->volume() * 100.0));
+        settings->setValue("tts/pitch", qRound(ttsEngine->pitch() * 100.0));
+        settings->setValue("tts/rate", qRound(ttsEngine->rate() * 100.0));
 
-        // Save test text
-        settings->setValue("tts/testText", testTextEdit->text());
-
-        // Also save to TTS engine
         ttsEngine->saveSettings();
     }
 
     settings->sync();
-    qDebug() << "Settings saved to:" << settings->fileName();
 }
 
 void SettingsWindow::resetToDefaults()
@@ -758,6 +699,29 @@ void SettingsWindow::resetToDefaults()
     // Reset General TTS Options
     ttsInputCheckBox->setChecked(false);
     ttsOutputCheckBox->setChecked(true);
+    if (ttsProviderCombo) {
+        const int idx = ttsProviderCombo->findData(QStringLiteral("google-web"));
+        if (idx >= 0) {
+            QSignalBlocker blocker(*ttsProviderCombo);
+            ttsProviderCombo->setCurrentIndex(idx);
+        }
+    }
+    if (edgeExePathEdit) edgeExePathEdit->clear();
+    if (advancedVoiceToggle) advancedVoiceToggle->setChecked(false);
+    if (voiceCombo) voiceCombo->clearEditText();
+    if (inputVoiceCombo) inputVoiceCombo->clearEditText();
+    if (outputVoiceCombo) outputVoiceCombo->clearEditText();
+
+    if (ttsEngine) {
+        ttsEngine->setProviderId(QStringLiteral("google-web"));
+        ttsEngine->setPrimaryVoice(QString());
+        ttsEngine->setEdgeVoice(QString());
+        ttsEngine->setEdgeExecutable(QString());
+        ttsEngine->setInputVoice(QString());
+        ttsEngine->setOutputVoice(QString());
+        ttsEngine->saveSettings();
+        updateProviderUI(QStringLiteral("google-web"));
+    }
 }
 
 void SettingsWindow::showEvent(QShowEvent *event)
@@ -893,11 +857,11 @@ void SettingsWindow::onTestOcrClicked()
     ocrEngineCombo->setProperty("valid", engineAvailable ? "true" : "false");
     ocrEngineCombo->style()->unpolish(ocrEngineCombo);
     ocrEngineCombo->style()->polish(ocrEngineCombo);
-    QTimer::singleShot(3000, [this]() {
-        ocrEngineCombo->setProperty("valid", QVariant());
-        ocrEngineCombo->style()->unpolish(ocrEngineCombo);
-        ocrEngineCombo->style()->polish(ocrEngineCombo);
-    });
+        QTimer::singleShot(3000, [this]() {
+            ocrEngineCombo->setProperty("valid", QVariant());
+            ocrEngineCombo->style()->unpolish(ocrEngineCombo);
+            ocrEngineCombo->style()->polish(ocrEngineCombo);
+        });
 }
 
 void SettingsWindow::onTestTranslationClicked()
@@ -928,7 +892,6 @@ void SettingsWindow::setupTTSTab()
     ttsTab = new QWidget();
     tabWidget->addTab(ttsTab, "🔊 Text-to-Speech");
 
-    // Use scroll area to handle content that might not fit
     QScrollArea *scrollArea = new QScrollArea(ttsTab);
     scrollArea->setWidgetResizable(true);
     scrollArea->setFrameShape(QFrame::NoFrame);
@@ -945,252 +908,145 @@ void SettingsWindow::setupTTSTab()
     QVBoxLayout *layout = new QVBoxLayout(scrollContent);
     layout->setSpacing(20);
 
-    // TTS Enable/Disable
-    QGroupBox *enableGroup = new QGroupBox("Text-to-Speech Settings");
+    QGroupBox *enableGroup = new QGroupBox(tr("Text-to-Speech Quick Setup"));
     QVBoxLayout *enableLayout = new QVBoxLayout(enableGroup);
-
-    ttsEnabledCheck = new QCheckBox("Enable Text-to-Speech for OCR results");
+    ttsEnabledCheck = new QCheckBox(tr("Turn on voice playback"));
     ttsEnabledCheck->setChecked(true);
     enableLayout->addWidget(ttsEnabledCheck);
 
+    QLabel *enableInfo = new QLabel(tr("Pick a free voice provider, choose a voice, then tap test."));
+    enableInfo->setWordWrap(true);
+    enableInfo->setStyleSheet("color: #666; font-size: 11px;");
+    enableLayout->addWidget(enableInfo);
+
+    ttsProviderLabel = new QLabel;
+    ttsProviderLabel->setStyleSheet("color: #666; font-size: 11px;");
+    enableLayout->addWidget(ttsProviderLabel);
     layout->addWidget(enableGroup);
 
-    // Backend selection
-    QFormLayout *backendLayout = new QFormLayout();
-    ttsBackendCombo = new QComboBox();
-    ttsBackendCombo->addItems({"System (Local)", "Piper (Free, Local)", "Google (Free Online)", "Microsoft Edge (Free Online)", "Azure Neural (Cloud)", "Google Cloud TTS", "ElevenLabs", "Amazon Polly"});
-    connect(ttsBackendCombo, &QComboBox::currentTextChanged, this, [this](const QString& text){
-        const bool isSystem = text.contains("System", Qt::CaseInsensitive);
-        const bool isPiper = text.contains("Piper", Qt::CaseInsensitive);
-        const bool isAzure = text.contains("Azure", Qt::CaseInsensitive);
-        const bool isGoogle = text == "Google Cloud TTS";
-        const bool isGoogleFree = text.contains("Google (Free", Qt::CaseInsensitive);
-        const bool isEdge = text.contains("Edge", Qt::CaseInsensitive);
-        const bool isEleven = text.contains("ElevenLabs", Qt::CaseInsensitive);
-        const bool isPolly = text.contains("Polly", Qt::CaseInsensitive);
-        if (ttsEngine) {
-            if (isSystem) ttsEngine->setBackend(TTSEngine::Backend::System);
-            else if (isPiper) ttsEngine->setBackend(TTSEngine::Backend::Piper);
-            else if (isGoogleFree) ttsEngine->setBackend(TTSEngine::Backend::GoogleFree);
-            else if (isEdge) ttsEngine->setBackend(TTSEngine::Backend::Edge);
-            else if (isAzure) ttsEngine->setBackend(TTSEngine::Backend::Azure);
-            else if (isGoogle) ttsEngine->setBackend(TTSEngine::Backend::Google);
-            else if (isEleven) ttsEngine->setBackend(TTSEngine::Backend::ElevenLabs);
-            else if (isPolly) ttsEngine->setBackend(TTSEngine::Backend::Polly);
-        }
-        if (azureConfigGroup) azureConfigGroup->setVisible(isAzure);
-        if (googleConfigGroup) googleConfigGroup->setVisible(isGoogle);
-        if (edgeConfigGroup) edgeConfigGroup->setVisible(isEdge);
-        if (elevenConfigGroup) elevenConfigGroup->setVisible(isEleven);
-        if (pollyConfigGroup) pollyConfigGroup->setVisible(isPolly);
-        if (piperConfigGroup) piperConfigGroup->setVisible(isPiper);
-        updateVoicesForLanguage();
+    QGroupBox *providerGroup = new QGroupBox(tr("Step 1 — Choose a voice service"));
+    QVBoxLayout *providerLayout = new QVBoxLayout(providerGroup);
+    ttsProviderCombo = new QComboBox();
+    ttsProviderCombo->addItem(tr("Google Translate (Free)"), QStringLiteral("google-web"));
+    ttsProviderCombo->addItem(tr("Microsoft Edge (Free)"), QStringLiteral("edge-free"));
+    providerLayout->addWidget(ttsProviderCombo);
+
+    providerInfoLabel = new QLabel(tr("Google Translate works instantly with many languages. Edge voices need the edge-tts tool installed (pip install edge-tts)."));
+    providerInfoLabel->setWordWrap(true);
+    providerInfoLabel->setStyleSheet("color: #666; font-size: 11px;");
+    providerLayout->addWidget(providerInfoLabel);
+    layout->addWidget(providerGroup);
+
+    connect(ttsProviderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        const QString providerId = ttsProviderCombo->itemData(index).toString();
+        updateProviderUI(providerId);
     });
-    backendLayout->addRow("TTS Engine:", ttsBackendCombo);
-    
-    // Add helpful info section for free options
-    QLabel *freeInfo = new QLabel("💡 <b>Free Options:</b> System (built-in), Piper (offline), Google Free (online), Edge (online)<br>"
-                                 "🔊 <b>Premium Options:</b> Azure, Google Cloud, ElevenLabs, Amazon Polly (requires API keys)");
-    freeInfo->setWordWrap(true);
-    freeInfo->setStyleSheet("color: #666; font-size: 11px; margin: 8px 0; padding: 8px; background-color: #f8f9fa; border-radius: 4px;");
-    freeInfo->setAlignment(Qt::AlignTop);
-    backendLayout->addRow(freeInfo);
-    
-    enableLayout->addLayout(backendLayout);
 
-    // Language picker removed; language follows Translation target
-
-    // Voice Selection Group - Bilingual Support
-    QGroupBox *voiceGroup = new QGroupBox("Voice Selection (Bilingual Support)");
-    voiceGroup->setStyleSheet("QGroupBox { font-weight: bold; font-size: 14px; padding-top: 10px; }");
+    QGroupBox *voiceGroup = new QGroupBox(tr("Step 2 — Select voices"));
     QFormLayout *voiceLayout = new QFormLayout(voiceGroup);
-    voiceLayout->setSpacing(12);
 
-    // Info label for bilingual TTS
-    QLabel *bilingualInfo = new QLabel("🌍 <i>Configure separate voices for input (OCR) and output (translated) text.<br>"
-                                      "This allows optimal pronunciation for each language in bilingual scenarios.</i>");
-    bilingualInfo->setWordWrap(true);
-    bilingualInfo->setStyleSheet("color: #666; font-size: 11px; margin-bottom: 8px; padding: 8px; background-color: #f8f9fa; border-radius: 4px;");
-    voiceLayout->addRow(bilingualInfo);
+    refreshVoicesButton = new QPushButton(tr("Refresh"));
+    refreshVoicesButton->setIcon(QIcon::fromTheme("view-refresh"));
+    refreshVoicesButton->setToolTip(tr("Reload voices based on the current provider and language."));
 
-    // Input Voice (matches OCR language)
-    inputVoiceCombo = new QComboBox();
-    inputVoiceCombo->setToolTip("Voice for reading input text (OCR language)");
-    connect(inputVoiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](){
-        if (ttsEngine) {
-            QString selectedVoice = inputVoiceCombo->currentData().toString();
-            if (!selectedVoice.isEmpty()) {
-                ttsEngine->setInputVoice(selectedVoice);
-            }
-        }
-    });
-    voiceLayout->addRow("🎤 Input Voice (OCR):", inputVoiceCombo);
-
-    // Output Voice (matches translation target language)
-    outputVoiceCombo = new QComboBox();
-    outputVoiceCombo->setToolTip("Voice for reading output text (translation target language)");
-    connect(outputVoiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](){
-        if (ttsEngine) {
-            QString selectedVoice = outputVoiceCombo->currentData().toString();
-            if (!selectedVoice.isEmpty()) {
-                ttsEngine->setOutputVoice(selectedVoice);
-            }
-        }
-    });
-    voiceLayout->addRow("🔊 Output Voice (Translation):", outputVoiceCombo);
-
-    // Legacy single voice combo (for backwards compatibility and simple use)
+    // We'll now show input and output voices directly instead of the old single voice combo
+    // Keep the old voiceCombo for compatibility (hidden)
     voiceCombo = new QComboBox();
-    voiceCombo->setToolTip("Single voice for both input and output (simple mode)");
+    voiceCombo->setVisible(false);
     connect(voiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsWindow::onVoiceChanged);
-    voiceLayout->addRow("📢 Universal Voice (Both):", voiceCombo);
 
-    layout->addWidget(voiceGroup);
+    // Input voice combo with test buttons
+    inputVoiceCombo = new QComboBox();
+    inputVoiceCombo->setEditable(true);
+    inputVoiceCombo->setPlaceholderText(tr("Select input voice"));
+    inputVoiceCombo->setToolTip(tr("Voice used when reading OCR/input text"));
 
-    // Azure Config Group
-    azureConfigGroup = new QGroupBox("Azure Neural TTS Configuration");
-    QFormLayout *azureLayout = new QFormLayout(azureConfigGroup);
-    azureRegionEdit = new QLineEdit(); azureRegionEdit->setPlaceholderText("e.g. eastus, westeurope");
-    azureKeyEdit = new QLineEdit(); azureKeyEdit->setEchoMode(QLineEdit::Password); azureKeyEdit->setPlaceholderText("Azure Speech key");
-    azureStyleEdit = new QLineEdit(); azureStyleEdit->setPlaceholderText("Optional style, e.g. chat, newscast");
-    azureLayout->addRow("Region:", azureRegionEdit);
-    azureLayout->addRow("API Key:", azureKeyEdit);
-    azureLayout->addRow("Style:", azureStyleEdit);
-    azureConfigGroup->setVisible(false);
-    layout->addWidget(azureConfigGroup);
+    QPushButton *testInputTTSBtn = new QPushButton(tr("🔊 Test"));
+    testInputTTSBtn->setToolTip(tr("Test input voice"));
+    QPushButton *stopInputTTSBtn = new QPushButton(tr("⏹"));
+    stopInputTTSBtn->setToolTip(tr("Stop playback"));
+    stopInputTTSBtn->setEnabled(false);
 
-    // Google Config Group
-    googleConfigGroup = new QGroupBox("Google Cloud TTS Configuration");
-    QFormLayout *googleLayout = new QFormLayout(googleConfigGroup);
-    googleApiKeyEdit = new QLineEdit(); googleApiKeyEdit->setEchoMode(QLineEdit::Password); googleApiKeyEdit->setPlaceholderText("Google API key");
-    googleLanguageCodeEdit = new QLineEdit(); googleLanguageCodeEdit->setPlaceholderText("Optional, e.g. en-US");
-    googleLayout->addRow("API Key:", googleApiKeyEdit);
-    googleLayout->addRow("Language Code:", googleLanguageCodeEdit);
-    googleConfigGroup->setVisible(false);
-    layout->addWidget(googleConfigGroup);
+    // Connect input voice test button
+    connect(testInputTTSBtn, &QPushButton::clicked, this, [this, stopInputTTSBtn, testInputTTSBtn]() {
+        if (!ttsEngine) {
+            ttsStatusText->setPlainText("❌ TTS engine not available");
+            return;
+        }
 
-    // ElevenLabs Config Group
-    elevenConfigGroup = new QGroupBox("ElevenLabs Configuration");
-    QFormLayout *elevenLayout = new QFormLayout(elevenConfigGroup);
-    elevenApiKeyEdit = new QLineEdit(); elevenApiKeyEdit->setEchoMode(QLineEdit::Password); elevenApiKeyEdit->setPlaceholderText("ElevenLabs API key");
-    elevenVoiceIdEdit = new QLineEdit(); elevenVoiceIdEdit->setPlaceholderText("Voice ID (e.g., 21m00Tcm4TlvDq8ikWAM)");
-    elevenLayout->addRow("API Key:", elevenApiKeyEdit);
-    elevenLayout->addRow("Voice ID:", elevenVoiceIdEdit);
-    elevenConfigGroup->setVisible(false);
-    layout->addWidget(elevenConfigGroup);
+        if (!ttsEnabledCheck->isChecked()) {
+            ttsStatusText->setPlainText("⚠️ Enable Text-to-Speech to play audio.");
+            return;
+        }
 
-    // Polly Config Group
-    pollyConfigGroup = new QGroupBox("Amazon Polly Configuration");
-    QFormLayout *pollyLayout = new QFormLayout(pollyConfigGroup);
-    pollyRegionEdit = new QLineEdit(); pollyRegionEdit->setPlaceholderText("e.g. us-east-1");
-    pollyAccessKeyEdit = new QLineEdit(); pollyAccessKeyEdit->setPlaceholderText("AWS Access Key ID");
-    pollySecretKeyEdit = new QLineEdit(); pollySecretKeyEdit->setEchoMode(QLineEdit::Password); pollySecretKeyEdit->setPlaceholderText("AWS Secret Access Key");
-    pollyLayout->addRow("Region:", pollyRegionEdit);
-    pollyLayout->addRow("Access Key:", pollyAccessKeyEdit);
-    pollyLayout->addRow("Secret Key:", pollySecretKeyEdit);
-    pollyConfigGroup->setVisible(false);
-    layout->addWidget(pollyConfigGroup);
+        const QString providerId = ttsProviderCombo ? ttsProviderCombo->currentData().toString() : ttsEngine->providerId();
+        QString voice = inputVoiceCombo ? inputVoiceCombo->currentText().trimmed() : QString();
 
-    // Piper Config Group
-    piperConfigGroup = new QGroupBox("Piper TTS (Free, Local)");
-    QFormLayout *piperLayout = new QFormLayout(piperConfigGroup);
-    piperExeEdit = new QLineEdit(); piperExeEdit->setPlaceholderText("piper.exe path");
-    piperModelEdit = new QLineEdit(); piperModelEdit->setPlaceholderText("voice model .onnx path");
-    piperLayout->addRow("Executable:", piperExeEdit);
-    piperLayout->addRow("Model:", piperModelEdit);
-    piperConfigGroup->setVisible(false);
-    layout->addWidget(piperConfigGroup);
+        if (voice.isEmpty()) {
+            ttsStatusText->setPlainText(tr("⚠️ Select an input voice before testing."));
+            return;
+        }
 
-    // Edge Config Group - Auto-detect and user-friendly
-    edgeConfigGroup = new QGroupBox("Microsoft Edge TTS (Free Online) - Natural Voices");
-    QVBoxLayout *edgeMainLayout = new QVBoxLayout(edgeConfigGroup);
-    
-    QLabel *edgeInfoLabel = new QLabel("✨ High-quality neural voices from Microsoft. Auto-installs edge-tts if needed.");
-    edgeInfoLabel->setWordWrap(true);
-    edgeInfoLabel->setStyleSheet("color: #666; font-size: 11px; margin-bottom: 8px;");
-    edgeMainLayout->addWidget(edgeInfoLabel);
-    
-    QFormLayout *edgeLayout = new QFormLayout();
-    
-    QHBoxLayout *edgeExeLayout = new QHBoxLayout();
-    edgeExeEdit = new QLineEdit(); 
-    edgeExeEdit->setPlaceholderText("Auto-detected or enter path to edge-tts");
-    edgeAutoDetectBtn = new QPushButton("Auto-Detect");
-    edgeAutoDetectBtn->setToolTip("Automatically find or install edge-tts");
-    connect(edgeAutoDetectBtn, &QPushButton::clicked, this, &SettingsWindow::onEdgeAutoDetect);
-    edgeExeLayout->addWidget(edgeExeEdit, 1);
-    edgeExeLayout->addWidget(edgeAutoDetectBtn);
-    edgeLayout->addRow("Executable:", edgeExeLayout);
-    
-    edgeVoiceEdit = new QLineEdit(); 
-    edgeVoiceEdit->setPlaceholderText("Voice will be auto-selected based on language");
-    edgeLayout->addRow("Voice:", edgeVoiceEdit);
-    
-    edgeMainLayout->addLayout(edgeLayout);
-    edgeConfigGroup->setVisible(false);
-    layout->addWidget(edgeConfigGroup);
+        QString testText = testTextEdit ? testTextEdit->text().trimmed() : "";
+        if (testText.isEmpty()) {
+            testText = getTestTextForLanguage(inputVoiceCombo->currentText(), true);
+        }
 
-    // Audio Controls Group
-    QGroupBox *audioGroup = new QGroupBox("Audio Controls");
-    QFormLayout *audioLayout = new QFormLayout(audioGroup);
+        // Get the language code for this voice
+        QString langCode = getLanguageCodeFromVoice(voice);
 
-    // Volume control
-    volumeSlider = new QSlider(Qt::Horizontal);
-    volumeSlider->setRange(0, 100);
-    volumeSlider->setValue(80);
-    QLabel *volumeLabel = new QLabel("80%");
-    connect(volumeSlider, &QSlider::valueChanged, [volumeLabel](int value) {
-        volumeLabel->setText(QString("%1%").arg(value));
+        ttsEngine->setProviderId(providerId);
+        ttsEngine->setPrimaryVoice(voice);
+        ttsEngine->setVolume(1.0);
+        ttsEngine->setPitch(0.0);
+        ttsEngine->setRate(0.0);
+
+        if (providerId == QStringLiteral("google-web")) {
+            // CRUCIAL: Set the language code for Google TTS
+            ttsEngine->configureGoogle(QString(), voice, langCode);
+        } else {
+            const QString exePath = ttsEngine->edgeExecutable();
+            if (exePath.isEmpty() || exePath == "edge-tts") {
+                ttsEngine->setEdgeExecutable("edge-tts");
+            } else if (exePath.isEmpty()) {
+                checkEdgeTTSAvailability();
+                ttsStatusText->setPlainText(tr("⚠️ Edge TTS not configured. Please install it first."));
+                return;
+            }
+            ttsEngine->setEdgeVoice(voice);
+        }
+
+        ttsStatusText->setPlainText(tr("▶️ Playing input voice test..."));
+        ttsEngine->speak(testText);
     });
-    QHBoxLayout *volumeHBox = new QHBoxLayout();
-    volumeHBox->addWidget(volumeSlider);
-    volumeHBox->addWidget(volumeLabel);
-    audioLayout->addRow("Volume:", volumeHBox);
 
-    // Pitch control
-    pitchSlider = new QSlider(Qt::Horizontal);
-    pitchSlider->setRange(-50, 50);
-    pitchSlider->setValue(0);
-    QLabel *pitchLabel = new QLabel("0%");
-    connect(pitchSlider, &QSlider::valueChanged, [pitchLabel](int value) {
-        pitchLabel->setText(QString("%1%").arg(value));
+    connect(stopInputTTSBtn, &QPushButton::clicked, [this]() {
+        if (ttsEngine) {
+            ttsEngine->stop();
+        }
     });
-    QHBoxLayout *pitchHBox = new QHBoxLayout();
-    pitchHBox->addWidget(pitchSlider);
-    pitchHBox->addWidget(pitchLabel);
-    audioLayout->addRow("Pitch:", pitchHBox);
 
-    // Rate control (-100%..+100% maps to -1.0..+1.0)
-    rateSlider = new QSlider(Qt::Horizontal);
-    rateSlider->setRange(-100, 100);
-    rateSlider->setValue(0);
-    QLabel *rateLabel = new QLabel("0%");
-    connect(rateSlider, &QSlider::valueChanged, [rateLabel](int value) {
-        rateLabel->setText(QString("%1%").arg(value));
-    });
-    QHBoxLayout *rateHBox = new QHBoxLayout();
-    rateHBox->addWidget(rateSlider);
-    rateHBox->addWidget(rateLabel);
-    audioLayout->addRow("Rate:", rateHBox);
+    QWidget *inputVoiceWidget = new QWidget();
+    QHBoxLayout *inputVoiceRow = new QHBoxLayout(inputVoiceWidget);
+    inputVoiceRow->setContentsMargins(0, 0, 0, 0);
+    inputVoiceRow->addWidget(inputVoiceCombo, 1);
+    inputVoiceRow->addWidget(testInputTTSBtn);
+    inputVoiceRow->addWidget(stopInputTTSBtn);
 
-    layout->addWidget(audioGroup);
+    inputVoiceLabel = new QLabel(tr("Input voice:"));
+    voiceLayout->addRow(inputVoiceLabel, inputVoiceWidget);
 
-    // Test Section Group
-    QGroupBox *testGroup = new QGroupBox("Voice Testing");
-    QVBoxLayout *testLayout = new QVBoxLayout(testGroup);
+    // Output voice combo with test buttons
+    outputVoiceCombo = new QComboBox();
+    outputVoiceCombo->setEditable(true);
+    outputVoiceCombo->setPlaceholderText(tr("Select output voice"));
+    outputVoiceCombo->setToolTip(tr("Voice used when reading translated text"));
 
-    // Test text input
-    testTextEdit = new QLineEdit();
-    testTextEdit->setText("Hello! This is a test of the text-to-speech functionality.");
-    testLayout->addWidget(new QLabel("Test Text:"));
-    testLayout->addWidget(testTextEdit);
-
-    // Test buttons
-    QHBoxLayout *testButtonLayout = new QHBoxLayout();
-    testTTSBtn = new QPushButton("🔊 Test Voice");
-    stopTTSBtn = new QPushButton("⏹ Stop");
+    testTTSBtn = new QPushButton(tr("🔊 Test"));
+    testTTSBtn->setToolTip(tr("Test output voice"));
+    stopTTSBtn = new QPushButton(tr("⏹"));
+    stopTTSBtn->setToolTip(tr("Stop playback"));
     stopTTSBtn->setEnabled(false);
-
     connect(testTTSBtn, &QPushButton::clicked, this, &SettingsWindow::onTestTTSClicked);
     connect(stopTTSBtn, &QPushButton::clicked, [this]() {
         if (ttsEngine) {
@@ -1198,61 +1054,146 @@ void SettingsWindow::setupTTSTab()
         }
     });
 
-    testButtonLayout->addWidget(testTTSBtn);
-    testButtonLayout->addWidget(stopTTSBtn);
-    testButtonLayout->addStretch();
-    testLayout->addLayout(testButtonLayout);
+    QWidget *outputVoiceWidget = new QWidget();
+    QHBoxLayout *outputVoiceRow = new QHBoxLayout(outputVoiceWidget);
+    outputVoiceRow->setContentsMargins(0, 0, 0, 0);
+    outputVoiceRow->addWidget(outputVoiceCombo, 1);
+    outputVoiceRow->addWidget(testTTSBtn);
+    outputVoiceRow->addWidget(stopTTSBtn);
+    outputVoiceRow->addWidget(refreshVoicesButton);
 
-    // Status text
+    outputVoiceLabel = new QLabel(tr("Output voice:"));
+    voiceLayout->addRow(outputVoiceLabel, outputVoiceWidget);
+
+    // Edge TTS auto-detection section (only shown for Edge provider)
+    edgeExePathEdit = new QLineEdit();
+    edgeExePathEdit->setPlaceholderText(tr("Auto-detecting edge-tts..."));
+    edgeExePathEdit->setReadOnly(true);
+    edgeExePathEdit->setVisible(false); // Hidden since we auto-detect
+
+    edgeBrowseButton = new QPushButton();
+    edgeBrowseButton->setVisible(false); // Hidden, not needed anymore
+
+    QPushButton *installEdgeButton = new QPushButton(tr("Install Edge TTS"));
+    installEdgeButton->setToolTip(tr("Install edge-tts using pip (Python required)"));
+
+    edgeExeLabel = new QLabel(tr("Edge TTS Status:"));
+    edgeExeRow = new QWidget();
+    QHBoxLayout *edgeExeLayout = new QHBoxLayout(edgeExeRow);
+    edgeExeLayout->setContentsMargins(0, 0, 0, 0);
+
+    QLabel *edgeStatusLabel = new QLabel(tr("Checking..."));
+    edgeStatusLabel->setObjectName("edgeStatusLabel");
+    edgeExeLayout->addWidget(edgeStatusLabel, 1);
+    edgeExeLayout->addWidget(installEdgeButton);
+
+    voiceLayout->addRow(edgeExeLabel, edgeExeRow);
+
+    edgeHintLabel = new QLabel();
+    edgeHintLabel->setStyleSheet("color: #666; font-size: 11px;");
+    edgeHintLabel->setWordWrap(true);
+    voiceLayout->addRow(QString(), edgeHintLabel);
+
+    // No more advanced voice toggle - always show input/output
+    advancedVoiceToggle = new QCheckBox();
+    advancedVoiceToggle->setVisible(false);
+
+    QLabel *testTextLabel = new QLabel(tr("Sample text:"));
+    testTextEdit = new QLineEdit();
+    testTextEdit->setText(tr("Hello! This is a test of the text-to-speech functionality."));
+    testTextEdit->setPlaceholderText(tr("Enter custom test text or leave empty for language-specific test"));
+    voiceLayout->addRow(testTextLabel, testTextEdit);
+
+    layout->addWidget(voiceGroup);
+
     ttsStatusText = new QTextEdit();
-    ttsStatusText->setMaximumHeight(80);
     ttsStatusText->setReadOnly(true);
-    testLayout->addWidget(ttsStatusText);
-
-    layout->addWidget(testGroup);
+    ttsStatusText->setMaximumHeight(90);
+    layout->addWidget(ttsStatusText);
 
     layout->addStretch();
 
-    // Initialize TTS status and voices
-    if (ttsEngine) {
-        // Preselect backend by settings
-        switch (ttsEngine->backend()) {
-            case TTSEngine::Backend::Azure: ttsBackendCombo->setCurrentText("Azure Neural (Cloud)"); azureConfigGroup->setVisible(true); break;
-            case TTSEngine::Backend::Google: ttsBackendCombo->setCurrentText("Google Cloud TTS"); googleConfigGroup->setVisible(true); break;
-            case TTSEngine::Backend::ElevenLabs: ttsBackendCombo->setCurrentText("ElevenLabs"); elevenConfigGroup->setVisible(true); break;
-            case TTSEngine::Backend::Polly: ttsBackendCombo->setCurrentText("Amazon Polly"); pollyConfigGroup->setVisible(true); break;
-            case TTSEngine::Backend::Piper: ttsBackendCombo->setCurrentText("Piper (Free, Local)"); piperConfigGroup->setVisible(true); break;
-            default: ttsBackendCombo->setCurrentText("System (Local)"); break;
+    connect(refreshVoicesButton, &QPushButton::clicked, this, [this]() {
+        updateVoicesForLanguage();
+        if (ttsStatusText) {
+            ttsStatusText->setPlainText(tr("Voice suggestions refreshed."));
         }
+    });
 
-        // Info about local engines
-        const QStringList engines = ttsEngine->availableEngines();
-        const QString engineName = ttsEngine->currentEngine();
+    // Connect install button for Edge TTS
+    connect(installEdgeButton, &QPushButton::clicked, this, [this, edgeStatusLabel, installEdgeButton]() {
+        installEdgeButton->setEnabled(false);
+        edgeStatusLabel->setText(tr("Installing edge-tts..."));
 
-        // Connect TTS engine signals
-        connect(ttsEngine, &TTSEngine::stateChanged, this, [this](QTextToSpeech::State state) {
-            stopTTSBtn->setEnabled(state == QTextToSpeech::Speaking);
-            testTTSBtn->setEnabled(state != QTextToSpeech::Speaking);
+        QProcess *process = new QProcess(this);
+        connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                [this, process, edgeStatusLabel, installEdgeButton](int exitCode, QProcess::ExitStatus) {
+            process->deleteLater();
+            if (exitCode == 0) {
+                edgeStatusLabel->setText(tr("✅ Installed successfully"));
+                checkEdgeTTSAvailability();
+            } else {
+                const QString errorMsg = QString::fromLocal8Bit(process->readAllStandardError());
+                edgeStatusLabel->setText(tr("❌ Installation failed"));
+                if (edgeHintLabel) {
+                    edgeHintLabel->setText(tr("Error: %1").arg(errorMsg.left(200)));
+                }
+                installEdgeButton->setEnabled(true);
+            }
         });
 
-    QString status = QString("✅ TTS ready. Local: %1. Backends — Piper %2, Azure %3, Google %4, ElevenLabs %5, Polly %6\nSelect voice; language follows Translation target.")
-                .arg(engineName.isEmpty()? "unknown" : engineName)
-                .arg((!ttsEngine->piperExePath().isEmpty() && !ttsEngine->piperModelPath().isEmpty()) ? "(configured)" : "(not configured)")
-                .arg(ttsEngine->azureRegion().isEmpty() ? "(not configured)" : "(configured)")
-                .arg(ttsEngine->googleApiKey().isEmpty() ? "(not configured)" : "(configured)")
-                .arg(ttsEngine->elevenApiKey().isEmpty() ? "(not configured)" : "(configured)")
-                .arg(ttsEngine->pollyRegion().isEmpty() ? "(not configured)" : "(configured)");
-        if (engines.size() == 1 && engines.first().contains("mock", Qt::CaseInsensitive)) {
-            status += "\n⚠️ Only the 'mock' local engine is available. Use Azure for natural voices or install Windows voices.";
+        // Try to install edge-tts
+        process->start("pip", {"install", "edge-tts"});
+        if (!process->waitForStarted(1000)) {
+            // If pip doesn't work, try pip3
+            process->start("pip3", {"install", "edge-tts"});
+            if (!process->waitForStarted(1000)) {
+                // Try python -m pip
+                process->start("python", {"-m", "pip", "install", "edge-tts"});
+                if (!process->waitForStarted(1000)) {
+                    // Try python3 -m pip
+                    process->start("python3", {"-m", "pip", "install", "edge-tts"});
+                    if (!process->waitForStarted(1000)) {
+                        edgeStatusLabel->setText(tr("❌ Python/pip not found"));
+                        edgeHintLabel->setText(tr("Please install Python first from python.org"));
+                        installEdgeButton->setEnabled(true);
+                        process->deleteLater();
+                    }
+                }
+            }
         }
-        ttsStatusText->setPlainText(status);
-        // Populate voices based on current Translation target
-        updateVoicesForLanguage();
+    });
+
+    if (ttsEngine) {
+        connect(ttsEngine, &TTSEngine::stateChanged, this, [this, stopInputTTSBtn, testInputTTSBtn](QTextToSpeech::State state) {
+            const bool isSpeaking = (state == QTextToSpeech::Speaking);
+            stopTTSBtn->setEnabled(isSpeaking);
+            testTTSBtn->setEnabled(!isSpeaking);
+            stopInputTTSBtn->setEnabled(isSpeaking);
+            testInputTTSBtn->setEnabled(!isSpeaking);
+        });
+
+        refreshVoicesButton->setEnabled(true);
+
+        const QString providerId = ttsEngine->providerId();
+        if (ttsProviderCombo) {
+            const int idx = ttsProviderCombo->findData(providerId);
+            if (idx >= 0) {
+                QSignalBlocker blocker(ttsProviderCombo);
+                ttsProviderCombo->setCurrentIndex(idx);
+            }
+        }
+        updateProviderUI(providerId);
     } else {
-        ttsStatusText->setPlainText("❌ Text-to-Speech engine is not available on this system.\nPlease check your Qt installation and system TTS support.");
         ttsEnabledCheck->setEnabled(false);
-        voiceCombo->setEnabled(false);
+        if (ttsProviderCombo) ttsProviderCombo->setEnabled(false);
+        if (voiceCombo) voiceCombo->setEnabled(false);
+        if (inputVoiceCombo) inputVoiceCombo->setEnabled(false);
+        if (outputVoiceCombo) outputVoiceCombo->setEnabled(false);
+        if (refreshVoicesButton) refreshVoicesButton->setEnabled(false);
+        advancedVoiceToggle->setEnabled(false);
         testTTSBtn->setEnabled(false);
+        ttsStatusText->setPlainText(tr("❌ Text-to-Speech engine is unavailable."));
     }
 }
 
@@ -1268,240 +1209,196 @@ void SettingsWindow::onTestTTSClicked()
         return;
     }
 
-    QString testText = testTextEdit->text().trimmed();
-    if (testText.isEmpty()) {
-        testText = "Hello! This is a test of the text-to-speech functionality.";
-    }
-
-    // Apply current settings
-    ttsEngine->setVolume(volumeSlider->value() / 100.0);
-    ttsEngine->setPitch((pitchSlider->value()) / 100.0);
-    ttsEngine->setRate(rateSlider->value() / 100.0);
-
-    // Use the actual voice settings from General tab instead of TTS tab
-    // Check which language and voice should be used based on General tab settings
-    QString inputLanguage = ocrLanguageCombo ? ocrLanguageCombo->currentText() : QString();
-    QString outputLanguage = targetLanguageCombo ? targetLanguageCombo->currentText() : QString();
-    
-    // Determine which voice to test based on TTS options in General tab
-    bool ttsInput = ttsInputCheckBox ? ttsInputCheckBox->isChecked() : false;
-    bool ttsOutput = ttsOutputCheckBox ? ttsOutputCheckBox->isChecked() : false;
-    
-    QString testLanguage;
-    QString voiceToUse;
-    
-    // Prioritize output voice if both are enabled, otherwise use whichever is enabled
-    if (ttsOutput && outputVoiceCombo) {
-        testLanguage = outputLanguage;
-        voiceToUse = outputVoiceCombo->currentData().toString();
-    } else if (ttsInput && inputVoiceCombo) {
-        testLanguage = inputLanguage;
-        voiceToUse = inputVoiceCombo->currentData().toString();
-    } else {
-        // Fallback to output voice if no TTS options are enabled
-        testLanguage = outputLanguage;
-        voiceToUse = outputVoiceCombo ? outputVoiceCombo->currentData().toString() : QString();
-    }
-    
-    if (voiceToUse.isEmpty()) {
-        ttsStatusText->setPlainText("❌ No voice selected in General tab");
+    if (!ttsEnabledCheck->isChecked()) {
+        ttsStatusText->setPlainText("⚠️ Enable Text-to-Speech to play audio.");
         return;
     }
 
-    // Determine locale from the selected language
-    auto mapLanguageToLocale = [](const QString &name)->QLocale {
-        if (name.contains("English", Qt::CaseInsensitive)) return QLocale(QLocale::English, QLocale::UnitedStates);
-        if (name.contains("Chinese") && name.contains("Simplified")) return QLocale(QLocale::Chinese, QLocale::China);
-        if (name.contains("Chinese") && name.contains("Traditional")) return QLocale(QLocale::Chinese, QLocale::Taiwan);
-        if (name.contains("Japanese", Qt::CaseInsensitive)) return QLocale(QLocale::Japanese, QLocale::Japan);
-        if (name.contains("Korean", Qt::CaseInsensitive)) return QLocale(QLocale::Korean, QLocale::SouthKorea);
-        if (name.contains("Spanish", Qt::CaseInsensitive)) return QLocale(QLocale::Spanish, QLocale::Spain);
-        if (name.contains("French", Qt::CaseInsensitive)) return QLocale(QLocale::French, QLocale::France);
-        if (name.contains("German", Qt::CaseInsensitive)) return QLocale(QLocale::German, QLocale::Germany);
-        if (name.contains("Russian", Qt::CaseInsensitive)) return QLocale(QLocale::Russian, QLocale::Russia);
-        if (name.contains("Portuguese", Qt::CaseInsensitive)) return QLocale(QLocale::Portuguese, QLocale::Portugal);
-        if (name.contains("Italian", Qt::CaseInsensitive)) return QLocale(QLocale::Italian, QLocale::Italy);
-        if (name.contains("Dutch", Qt::CaseInsensitive)) return QLocale(QLocale::Dutch, QLocale::Netherlands);
-        if (name.contains("Polish", Qt::CaseInsensitive)) return QLocale(QLocale::Polish, QLocale::Poland);
-        if (name.contains("Swedish", Qt::CaseInsensitive)) return QLocale(QLocale::Swedish, QLocale::Sweden);
-        if (name.contains("Arabic", Qt::CaseInsensitive)) return QLocale(QLocale::Arabic, QLocale::SaudiArabia);
-        if (name.contains("Hindi", Qt::CaseInsensitive)) return QLocale(QLocale::Hindi, QLocale::India);
-        if (name.contains("Thai", Qt::CaseInsensitive)) return QLocale(QLocale::Thai, QLocale::Thailand);
-        if (name.contains("Vietnamese", Qt::CaseInsensitive)) return QLocale(QLocale::Vietnamese, QLocale::Vietnam);
-        return QLocale::system();
-    };
-    
-    QLocale selectedLocale = mapLanguageToLocale(testLanguage);
-    
-    // Configure TTS with the selected voice from General tab
-    const QString backendText = ttsBackendCombo->currentText();
-    if (backendText.contains("Azure")) {
-        ttsEngine->configureAzure(azureRegionEdit->text(), azureKeyEdit->text(), voiceToUse, azureStyleEdit->text());
-    } else if (backendText == "Google Cloud TTS") {
-        ttsEngine->configureGoogle(googleApiKeyEdit->text(), voiceToUse, googleLanguageCodeEdit->text());
-    } else if (backendText.contains("Google (Free")) {
-        ttsEngine->configureGoogleFree(voiceToUse);
-        ttsEngine->setBackend(TTSEngine::Backend::GoogleFree);
-    } else if (backendText.contains("ElevenLabs")) {
-        ttsEngine->configureElevenLabs(elevenApiKeyEdit->text(), voiceToUse);
-    } else if (backendText.contains("Polly")) {
-        ttsEngine->configurePolly(pollyRegionEdit->text(), pollyAccessKeyEdit->text(), pollySecretKeyEdit->text(), voiceToUse);
-    } else if (backendText.contains("Piper")) {
-        ttsEngine->configurePiper(piperExeEdit->text(), piperModelEdit->text());
-    } else if (backendText.contains("Edge")) {
-        ttsEngine->configureEdge(edgeExeEdit->text(), voiceToUse);
-    } else {
-        // System backend
-        ttsEngine->setLocale(selectedLocale);
-        int voiceIndex = voiceCombo->currentIndex();
-        if (voiceIndex >= 0) {
-            QList<QVoice> voices = ttsEngine->getVoicesForLanguage(selectedLocale);
-            if (voiceIndex < voices.size()) {
-                QVoice selectedVoice = voices[voiceIndex];
-                ttsEngine->setVoice(selectedVoice);
-                qDebug() << "Set system voice to:" << selectedVoice.name() << "for locale:" << selectedLocale;
-            }
-        }
+    const QString providerId = ttsProviderCombo ? ttsProviderCombo->currentData().toString() : ttsEngine->providerId();
+
+    // Use output voice for testing (since we test the translation output)
+    QString voice = outputVoiceCombo ? outputVoiceCombo->currentText().trimmed() : QString();
+    if (voice.isEmpty() && voiceCombo) {
+        voice = voiceCombo->currentText().trimmed(); // Fallback for compatibility
     }
 
-    QString statusMessage = QString("🔊 Testing %1 voice: \"%2\" - %3")
-                           .arg(ttsOutput && outputVoiceCombo ? "Output" : "Input")
-                           .arg(voiceToUse)
-                           .arg(testText);
-    ttsStatusText->setPlainText(statusMessage);
+    if (voice.isEmpty()) {
+        ttsStatusText->setPlainText(tr("⚠️ Select an output voice before testing."));
+        return;
+    }
+
+    QString testText = testTextEdit->text().trimmed();
+    if (testText.isEmpty()) {
+        testText = getTestTextForLanguage(outputVoiceCombo ? outputVoiceCombo->currentText() : voice, false);
+    }
+
+    // Get the language code for this voice
+    QString langCode = getLanguageCodeFromVoice(voice);
+
+    ttsEngine->setProviderId(providerId);
+    ttsEngine->setPrimaryVoice(voice);
+    ttsEngine->setInputVoice(inputVoiceCombo ? inputVoiceCombo->currentText().trimmed() : QString());
+    ttsEngine->setOutputVoice(outputVoiceCombo ? outputVoiceCombo->currentText().trimmed() : QString());
+    ttsEngine->setVolume(1.0);
+    ttsEngine->setPitch(0.0);
+    ttsEngine->setRate(0.0);
+
+    if (providerId == QStringLiteral("google-web")) {
+        // CRUCIAL: Set the language code for Google TTS
+        ttsEngine->configureGoogle(QString(), voice, langCode);
+    } else {
+        // For Edge TTS, use the auto-detected or installed edge-tts command
+        const QString exePath = ttsEngine->edgeExecutable();
+        if (exePath.isEmpty() || exePath == "edge-tts") {
+            // Set default command if not already set
+            ttsEngine->setEdgeExecutable("edge-tts");
+        } else if (exePath.isEmpty()) {
+            // Try to auto-detect again
+            checkEdgeTTSAvailability();
+            ttsStatusText->setPlainText(tr("⚠️ Edge TTS not configured. Please install it first."));
+            return;
+        }
+        ttsEngine->setEdgeVoice(voice);
+    }
+
+    ttsStatusText->setPlainText(tr("▶️ Playing test text..."));
     ttsEngine->speak(testText);
 }
 
-void SettingsWindow::onEdgeAutoDetect() {
-    edgeAutoDetectBtn->setEnabled(false);
-    edgeAutoDetectBtn->setText("Detecting...");
-    
-    // Common paths to check for edge-tts
-    QStringList possiblePaths = {
-        "edge-tts",  // If it's in PATH
-        "edge-tts.exe",
-        QDir::home().absolutePath() + "/.local/bin/edge-tts",
-        QDir::home().absolutePath() + "/AppData/Local/Programs/Python/Python*/Scripts/edge-tts.exe",
-        QDir::home().absolutePath() + "/AppData/Roaming/Python/Python*/Scripts/edge-tts.exe",
-        "C:/Python*/Scripts/edge-tts.exe",
-        "C:/Program Files/Python*/Scripts/edge-tts.exe",
-        "C:/Users/" + qgetenv("USERNAME") + "/AppData/Local/Programs/Python/Python*/Scripts/edge-tts.exe"
-    };
-    
-    // First try direct execution (if in PATH)
-    QProcess testProcess;
-    testProcess.start("edge-tts", QStringList() << "--help");
-    testProcess.waitForFinished(3000);
-    
-    if (testProcess.exitCode() == 0) {
-        edgeExeEdit->setText("edge-tts");
-        edgeAutoDetectBtn->setText("✓ Found");
-        edgeAutoDetectBtn->setStyleSheet("background-color: #28a745; color: white;");
-        QTimer::singleShot(2000, [this]() {
-            edgeAutoDetectBtn->setText("Auto-Detect");
-            edgeAutoDetectBtn->setStyleSheet("");
-            edgeAutoDetectBtn->setEnabled(true);
-        });
-        return;
+void SettingsWindow::updateProviderUI(const QString& providerId)
+{
+    const bool isGoogle = providerId.isEmpty() || providerId == QStringLiteral("google-web");
+
+    if (edgeExeLabel) {
+        edgeExeLabel->setVisible(!isGoogle);
     }
-    
-    // If not in PATH, try to find executable files
-    bool found = false;
-    for (const QString &pathPattern : possiblePaths) {
-        if (pathPattern.contains("*")) {
-            // Handle wildcard patterns - expand them manually
-            QString basePath = pathPattern.section("*", 0, 0);  // Before first *
-            QString afterPath = pathPattern.section("*", 1);    // After first *
-            
-            QDir baseDir(basePath);
-            if (baseDir.exists()) {
-                QStringList subdirs = baseDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-                for (const QString &subdir : subdirs) {
-                    QString fullPath = basePath + subdir + afterPath;
-                    QFileInfo fileInfo(fullPath);
-                    if (fileInfo.exists() && fileInfo.isExecutable()) {
-                        QProcess testWildcard;
-                        testWildcard.start(fullPath, QStringList() << "--help");
-                        testWildcard.waitForFinished(3000);
-                        
-                        if (testWildcard.exitCode() == 0) {
-                            edgeExeEdit->setText(fullPath);
-                            found = true;
-                            break;
-                        }
+    if (edgeExeRow) {
+        edgeExeRow->setVisible(!isGoogle);
+    }
+    if (edgeHintLabel) {
+        edgeHintLabel->setVisible(!isGoogle);
+    }
+
+    if (providerInfoLabel) {
+        if (isGoogle) {
+            providerInfoLabel->setText(tr("Instant playback via Google Translate. Works best for short phrases."));
+        } else {
+            providerInfoLabel->setText(tr("Microsoft Edge TTS provides natural-sounding voices in many languages."));
+        }
+    }
+
+    if (ttsEngine) {
+        ttsEngine->setProviderId(providerId);
+        if (isGoogle) {
+            QString langCode = getLanguageCodeFromVoice(ttsEngine->primaryVoice());
+            ttsEngine->configureGoogle(QString(), ttsEngine->primaryVoice(), langCode);
+        } else {
+            // Auto-detect edge-tts when Edge provider is selected
+            checkEdgeTTSAvailability();
+        }
+
+        if (ttsProviderLabel) {
+            ttsProviderLabel->setText(tr("Voice service: %1").arg(ttsEngine->providerName()));
+        }
+    }
+
+    updateVoicesForLanguage();
+}
+
+void SettingsWindow::checkEdgeTTSAvailability()
+{
+    // Find the edge status label
+    QLabel *edgeStatusLabel = findChild<QLabel*>("edgeStatusLabel");
+    QPushButton *installButton = edgeExeRow ? edgeExeRow->findChild<QPushButton*>() : nullptr;
+
+    if (!edgeStatusLabel) return;
+
+    // Check if edge-tts is available
+    QProcess *checkProcess = new QProcess(this);
+    connect(checkProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+            [this, checkProcess, edgeStatusLabel, installButton](int exitCode, QProcess::ExitStatus) {
+        checkProcess->deleteLater();
+
+        if (exitCode == 0) {
+            // edge-tts is installed, get its path
+            QProcess *whichProcess = new QProcess(this);
+            connect(whichProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                    [this, whichProcess, edgeStatusLabel, installButton](int exitCode2, QProcess::ExitStatus) {
+                QString edgePath;
+                if (exitCode2 == 0) {
+                    edgePath = QString::fromLocal8Bit(whichProcess->readAllStandardOutput()).trimmed();
+                }
+                whichProcess->deleteLater();
+
+                if (!edgePath.isEmpty()) {
+                    edgeStatusLabel->setText(tr("✅ Edge TTS is installed"));
+                    if (edgeHintLabel) {
+                        edgeHintLabel->setText(tr("Ready to use Microsoft Edge voices"));
+                    }
+                    if (installButton) {
+                        installButton->setVisible(false);
+                    }
+                    // Set the executable path
+                    if (ttsEngine) {
+                        ttsEngine->setEdgeExecutable("edge-tts"); // Use command name directly
+                    }
+                    if (edgeExePathEdit) {
+                        edgeExePathEdit->setText("edge-tts");
+                    }
+                } else {
+                    // Installed but can't find path, still usable
+                    edgeStatusLabel->setText(tr("✅ Edge TTS is installed"));
+                    if (ttsEngine) {
+                        ttsEngine->setEdgeExecutable("edge-tts");
                     }
                 }
-            }
+            });
+
+            // Try to find edge-tts location
+            #ifdef Q_OS_WIN
+            whichProcess->start("where", {"edge-tts"});
+            #else
+            whichProcess->start("which", {"edge-tts"});
+            #endif
         } else {
-            QFileInfo fileInfo(pathPattern);
-            if (fileInfo.exists() && fileInfo.isExecutable()) {
-                QProcess testDirect;
-                testDirect.start(pathPattern, QStringList() << "--help");
-                testDirect.waitForFinished(3000);
-                
-                if (testDirect.exitCode() == 0) {
-                    edgeExeEdit->setText(pathPattern);
-                    found = true;
-                    break;
-                }
+            // edge-tts not found
+            edgeStatusLabel->setText(tr("⚠️ Edge TTS not installed"));
+            if (edgeHintLabel) {
+                edgeHintLabel->setText(tr("Click 'Install Edge TTS' to enable Microsoft voices"));
+            }
+            if (installButton) {
+                installButton->setVisible(true);
+                installButton->setEnabled(true);
             }
         }
-        
-        if (found) break;
-    }
-    
-    if (found) {
-        edgeAutoDetectBtn->setText("✓ Found");
-        edgeAutoDetectBtn->setStyleSheet("background-color: #28a745; color: white;");
-        QTimer::singleShot(2000, [this]() {
-            edgeAutoDetectBtn->setText("Auto-Detect");
-            edgeAutoDetectBtn->setStyleSheet("");
-            edgeAutoDetectBtn->setEnabled(true);
-        });
-    } else {
-        // Try to install via pip
-        edgeAutoDetectBtn->setText("Installing...");
-        QProcess *pipProcess = new QProcess(this);
-        
-        connect(pipProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                [this, pipProcess](int exitCode, QProcess::ExitStatus exitStatus) {
-            if (exitCode == 0) {
-                // Installation successful, try to find it again
-                QTimer::singleShot(1000, this, &SettingsWindow::onEdgeAutoDetect);
-            } else {
-                edgeAutoDetectBtn->setText("❌ Not Found");
-                edgeAutoDetectBtn->setStyleSheet("background-color: #dc3545; color: white;");
-                
-                // Show helpful message
-                QMessageBox::information(this, "Edge TTS Not Found", 
-                    "Could not find or install edge-tts automatically.\n\n"
-                    "Please install manually using:\n"
-                    "pip install edge-tts\n\n"
-                    "Then click Auto-Detect again or enter the path manually.");
-                
-                QTimer::singleShot(3000, [this]() {
-                    edgeAutoDetectBtn->setText("Auto-Detect");
-                    edgeAutoDetectBtn->setStyleSheet("");
-                    edgeAutoDetectBtn->setEnabled(true);
-                });
-            }
-            pipProcess->deleteLater();
-        });
-        
-        pipProcess->start("pip", QStringList() << "install" << "edge-tts");
+    });
+
+    // Check if edge-tts command exists
+    checkProcess->start("edge-tts", {"--version"});
+    if (!checkProcess->waitForStarted(1000)) {
+        // Command not found
+        edgeStatusLabel->setText(tr("⚠️ Edge TTS not installed"));
+        if (edgeHintLabel) {
+            edgeHintLabel->setText(tr("Click 'Install Edge TTS' to enable Microsoft voices"));
+        }
+        if (installButton) {
+            installButton->setVisible(true);
+            installButton->setEnabled(true);
+        }
+        checkProcess->deleteLater();
     }
 }
 
 void SettingsWindow::updateVoicesForLanguage()
 {
-    if (!voiceCombo) return;
-    
     if (!ttsEngine) {
         return;
     }
 
-    // Helper function to map language names to locales
-    auto mapLanguageToLocale = [](const QString &name)->QLocale {
+    // Rebuild the voice suggestions whenever the OCR or translation language changes so
+    // that the first entry in each list always reflects the newly selected locale.
+
+    auto mapLanguageToLocale = [](const QString &name) -> QLocale {
         if (name.contains("English", Qt::CaseInsensitive)) return QLocale(QLocale::English, QLocale::UnitedStates);
         if (name.contains("Chinese") && name.contains("Simplified")) return QLocale(QLocale::Chinese, QLocale::China);
         if (name.contains("Chinese") && name.contains("Traditional")) return QLocale(QLocale::Chinese, QLocale::Taiwan);
@@ -1523,72 +1420,134 @@ void SettingsWindow::updateVoicesForLanguage()
         return QLocale::system();
     };
 
-    // Get input locale (from OCR language) and output locale (from translation target language)
     QLocale inputLocale = QLocale::system();
     QLocale outputLocale = QLocale::system();
-    
-    // Input locale: from OCR language (now unified in General tab)
+
     if (ocrLanguageCombo && !ocrLanguageCombo->currentText().isEmpty()) {
         inputLocale = mapLanguageToLocale(ocrLanguageCombo->currentText());
     } else if (sourceLanguageCombo && !sourceLanguageCombo->currentText().isEmpty()) {
-        // Fallback to translation source if OCR language not set (backward compatibility)
         inputLocale = mapLanguageToLocale(sourceLanguageCombo->currentText());
     }
-    
-    // Output locale: from translation target language  
+
     if (targetLanguageCombo && !targetLanguageCombo->currentText().isEmpty()) {
         outputLocale = mapLanguageToLocale(targetLanguageCombo->currentText());
     }
 
-    // Helper function to populate a voice combo with voices for a specific locale
-    auto populateVoiceCombo = [this](QComboBox* combo, const QLocale& locale, const QString& currentVoice) {
-        if (!combo) return;
-        
+    auto populateCombo = [this](QComboBox *combo, const QLocale &locale, const QString &preferredVoice) {
+        if (!combo) {
+            return;
+        }
+
+        const QString preserved = preferredVoice.isEmpty() ? combo->currentText().trimmed() : preferredVoice.trimmed();
+        QStringList suggestions;
+        if (ttsEngine) {
+            suggestions = ttsEngine->suggestedVoicesFor(locale);
+        }
+
+        combo->blockSignals(true);
         combo->clear();
         combo->setEditable(true);
-
-        QStringList suggestions;
-        const QString backendText = ttsBackendCombo->currentText();
-        
-        if (ttsEngine->backend() == TTSEngine::Backend::System) {
-            QStringList voiceNames = ttsEngine->getVoiceNamesForLanguage(locale);
-            for (const QString& voiceName : voiceNames) {
-                combo->addItem(voiceName, voiceName);
-            }
-        } else {
-            // Get cloud voice suggestions based on backend
-            if (backendText.contains("Azure")) {
-                suggestions = CloudTTSProvider::azureSuggestedVoicesFor(locale);
-            } else if (backendText == "Google Cloud TTS") {
-                suggestions = CloudTTSProvider::googleSuggestedVoicesFor(locale);
-            } else if (backendText.contains("Google (Free")) {
-                suggestions = CloudTTSProvider::googleFreeSuggestedVoicesFor(locale);
-            } else if (backendText.contains("Edge")) {
-                suggestions = CloudTTSProvider::edgeSuggestedVoicesFor(locale);
-            } else if (backendText.contains("ElevenLabs")) {
-                suggestions = { "Rachel", "Adam", "Bella", "Antoni" }; // Default ElevenLabs voices
-            } else if (backendText.contains("Polly")) {
-                suggestions = CloudTTSProvider::pollySuggestedVoicesFor(locale);
-            }
-
-            for (const QString& suggestion : suggestions) {
-                combo->addItem(suggestion, suggestion);
-            }
+        for (const QString &voice : suggestions) {
+            combo->addItem(voice, voice);
         }
-        
-        // Try to restore the current voice selection
-        if (!currentVoice.isEmpty()) {
-            int index = combo->findData(currentVoice);
-            if (index >= 0) {
-                combo->setCurrentIndex(index);
-            }
+
+        if (!preserved.isEmpty() && combo->findText(preserved, Qt::MatchFixedString) != -1) {
+            combo->setCurrentText(preserved);
         } else if (combo->count() > 0) {
             combo->setCurrentIndex(0);
+        } else if (!preserved.isEmpty()) {
+            combo->setCurrentText(preserved);
         }
+        combo->blockSignals(false);
     };
 
-    // Update all voice combos
-    populateVoiceCombo(inputVoiceCombo, inputLocale, ttsEngine ? ttsEngine->inputVoice() : QString());
-    populateVoiceCombo(outputVoiceCombo, outputLocale, ttsEngine ? ttsEngine->outputVoice() : QString());
-    populateVoiceCombo(voiceCombo, outputLocale, QString()); // Universal voice uses output locale by default
+    populateCombo(inputVoiceCombo, inputLocale, ttsEngine->inputVoice());
+    populateCombo(outputVoiceCombo, outputLocale, ttsEngine->outputVoice());
+    populateCombo(voiceCombo, outputLocale, ttsEngine->primaryVoice());
+
+    ttsEngine->setInputVoice(inputVoiceCombo ? inputVoiceCombo->currentText().trimmed() : QString());
+    ttsEngine->setOutputVoice(outputVoiceCombo ? outputVoiceCombo->currentText().trimmed() : QString());
+    if (voiceCombo) {
+        ttsEngine->setPrimaryVoice(voiceCombo->currentText().trimmed());
+    }
+}
+
+QString SettingsWindow::getTestTextForLanguage(const QString& voice, bool isInputVoice) const
+{
+    // Get the language code for this voice and use it to determine test text
+    QString langCode = getLanguageCodeFromVoice(voice);
+
+    if (langCode.startsWith("zh-TW") || langCode == "zh-TW") {
+        return isInputVoice ? "這是語音識別測試。" : "這是翻譯輸出的語音測試。";
+    } else if (langCode.startsWith("zh") || langCode == "zh-CN") {
+        return isInputVoice ? "这是语音识别测试。" : "这是翻译输出的语音测试。";
+    } else if (langCode == "ja") {
+        return isInputVoice ? "これは音声認識のテストです。" : "これは翻訳出力の音声テストです。";
+    } else if (langCode == "ko") {
+        return isInputVoice ? "이것은 음성 인식 테스트입니다." : "이것은 번역 출력 음성 테스트입니다.";
+    } else if (langCode.startsWith("es")) {
+        return isInputVoice ? "Esta es una prueba de reconocimiento de voz." : "Esta es una prueba de voz para la salida de traducción.";
+    } else if (langCode.startsWith("fr")) {
+        return isInputVoice ? "Ceci est un test de reconnaissance vocale." : "Ceci est un test vocal pour la sortie de traduction.";
+    } else if (langCode == "de") {
+        return isInputVoice ? "Dies ist ein Spracherkennungstest." : "Dies ist ein Sprachtest für die Übersetzungsausgabe.";
+    } else if (langCode == "it") {
+        return isInputVoice ? "Questo è un test di riconoscimento vocale." : "Questo è un test vocale per l'output di traduzione.";
+    } else if (langCode.startsWith("pt")) {
+        return isInputVoice ? "Este é um teste de reconhecimento de voz." : "Este é um teste de voz para saída de tradução.";
+    } else if (langCode == "ru") {
+        return isInputVoice ? "Это тест распознавания речи." : "Это голосовой тест для вывода перевода.";
+    } else if (langCode == "ar") {
+        return isInputVoice ? "هذا اختبار للتعرف على الصوت." : "هذا اختبار صوتي لمخرجات الترجمة.";
+    } else if (langCode == "hi") {
+        return isInputVoice ? "यह वॉयस रिकग्निशन टेस्ट है।" : "यह अनुवाद आउटपुट के लिए वॉयस टेस्ट है।";
+    } else if (langCode == "th") {
+        return isInputVoice ? "นี่คือการทดสอบการรู้จำเสียง" : "นี่คือการทดสอบเสียงสำหรับเอาต์พุตการแปล";
+    } else if (langCode == "sv") {
+        return isInputVoice ? "Det här är ett röstigenkänningstest." : "Det här är ett rösttest för översättningsutdata.";
+    } else if (langCode == "vi") {
+        return isInputVoice ? "Đây là bài kiểm tra nhận dạng giọng nói." : "Đây là bài kiểm tra giọng nói cho đầu ra dịch.";
+    } else if (langCode == "nl") {
+        return isInputVoice ? "Dit is een spraakherkenningstest." : "Dit is een spraaktest voor vertaaluitvoer.";
+    } else if (langCode == "pl") {
+        return isInputVoice ? "To jest test rozpoznawania mowy." : "To jest test głosowy dla wyjścia tłumaczenia.";
+    }
+
+    // Default to English
+    return isInputVoice ? "This is a voice recognition test." : "This is a voice test for translation output.";
+}
+
+QString SettingsWindow::getLanguageCodeFromVoice(const QString& voice) const
+{
+    const QString lower = voice.toLower();
+
+    // Chinese variants
+    if (voice.contains("繁體") || lower.contains("traditional")) return "zh-TW";
+    if (voice.contains("简体") || lower.contains("simplified") || lower.contains("pǔtōnghuà")) return "zh-CN";
+    if (lower.contains("chinese") || voice.contains("中文")) {
+        return voice.contains("繁") ? "zh-TW" : "zh-CN";
+    }
+
+    // Other languages
+    if (lower.contains("japan") || voice.contains("日本")) return "ja";
+    if (lower.contains("korean") || voice.contains("한국")) return "ko";
+    if (voice.contains("(mx)", Qt::CaseInsensitive)) return "es-MX";
+    if (lower.contains("span") || lower.contains("español")) return "es";
+    if (voice.contains("(ca)", Qt::CaseInsensitive)) return "fr-CA";
+    if (lower.contains("french") || lower.contains("fran") || lower.contains("français")) return "fr";
+    if (lower.contains("german") || lower.contains("deutsch")) return "de";
+    if (lower.contains("italian") || lower.contains("italiano")) return "it";
+    if (voice.contains("(br)", Qt::CaseInsensitive)) return "pt-BR";
+    if (lower.contains("portuguese") || lower.contains("português")) return "pt";
+    if (lower.contains("russian") || lower.contains("русский")) return "ru";
+    if (lower.contains("arab") || voice.contains("العربية")) return "ar";
+    if (lower.contains("hindi") || voice.contains("हिन्दी")) return "hi";
+    if (lower.contains("thai") || voice.contains("ไทย")) return "th";
+    if (lower.contains("swed") || voice.contains("svenska")) return "sv";
+    if (lower.contains("vietnam") || voice.contains("tiếng việt")) return "vi";
+    if (lower.contains("dutch") || lower.contains("nederlands")) return "nl";
+    if (lower.contains("polish") || lower.contains("polski")) return "pl";
+
+    // Default to English
+    return "en-US";
 }

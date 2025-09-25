@@ -72,7 +72,7 @@ void ThemeManager::applyLight() {
     const QString style = R"(
         /* Floating widget */
         #floatingWidget { background:rgba(255,255,255,205); border:1px solid rgba(190,195,205,0.65); border-radius:18px; }
-        #floatingWidget[highlight="true"] { box-shadow: none; }
+        #floatingWidget[highlight="true"] { border: 2px solid rgba(74, 144, 226, 0.5); }
         #floatingWidget QPushButton#floatingButton { background:transparent; border:none; font-size:18px; font-weight:600; color:#4A5568; }
         #floatingWidget QPushButton#floatingButton:hover { background:rgba(0,0,0,0.08); border-radius:12px; }
         #floatingWidget QPushButton#floatingButton:pressed { background:rgba(0,0,0,0.15); }

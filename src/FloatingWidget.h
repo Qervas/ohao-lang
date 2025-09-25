@@ -22,6 +22,7 @@ public:
     // Public methods that can be called by SystemTray
     void takeScreenshot();
     void openSettings();
+    void toggleVisibility();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -33,7 +34,6 @@ protected:
     void moveEvent(QMoveEvent *event) override;
 
 private slots:
-    void toggleVisibility();
     void animateHover(bool hover);
 
 private:
