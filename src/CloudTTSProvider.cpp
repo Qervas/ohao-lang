@@ -77,11 +77,11 @@ QStringList CloudTTSProvider::azureSuggestedVoicesFor(const QLocale& locale)
     // Users can override by typing a specific voice name
     switch (locale.language()) {
     case QLocale::English:
-        if (locale.country() == QLocale::UnitedStates) return {"en-US-JennyNeural", "en-US-AriaNeural", "en-US-GuyNeural"};
-        if (locale.country() == QLocale::UnitedKingdom) return {"en-GB-LibbyNeural", "en-GB-RyanNeural"};
+        if (locale.territory() == QLocale::UnitedStates) return {"en-US-JennyNeural", "en-US-AriaNeural", "en-US-GuyNeural"};
+        if (locale.territory() == QLocale::UnitedKingdom) return {"en-GB-LibbyNeural", "en-GB-RyanNeural"};
         return {"en-US-JennyNeural"};
     case QLocale::Chinese:
-        if (locale.script() == QLocale::SimplifiedChineseScript || locale.country() == QLocale::China)
+        if (locale.script() == QLocale::SimplifiedChineseScript || locale.territory() == QLocale::China)
             return {"zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural"};
         return {"zh-TW-HsiaoChenNeural", "zh-HK-HiuMaanNeural"};
     case QLocale::Japanese:
@@ -372,13 +372,13 @@ QStringList CloudTTSProvider::edgeSuggestedVoicesFor(const QLocale& locale)
     // Microsoft Edge TTS has many high-quality neural voices
     switch (locale.language()) {
     case QLocale::English:
-        if (locale.country() == QLocale::UnitedStates) 
+        if (locale.territory() == QLocale::UnitedStates) 
             return {"en-US-AriaNeural", "en-US-JennyNeural", "en-US-GuyNeural", "en-US-DavisNeural", "en-US-AmberNeural"};
-        if (locale.country() == QLocale::UnitedKingdom)
+        if (locale.territory() == QLocale::UnitedKingdom)
             return {"en-GB-SoniaNeural", "en-GB-RyanNeural", "en-GB-LibbyNeural"};
         return {"en-US-AriaNeural", "en-US-JennyNeural", "en-GB-SoniaNeural"};
     case QLocale::Chinese:
-        if (locale.script() == QLocale::SimplifiedChineseScript || locale.country() == QLocale::China)
+        if (locale.script() == QLocale::SimplifiedChineseScript || locale.territory() == QLocale::China)
             return {"zh-CN-XiaoxiaoNeural", "zh-CN-YunxiNeural", "zh-CN-YunjianNeural", "zh-CN-XiaoyiNeural"};
         return {"zh-TW-HsiaoChenNeural", "zh-TW-YunJheNeural", "zh-HK-HiuMaanNeural", "zh-HK-WanLungNeural"};
     case QLocale::Japanese:
@@ -438,7 +438,7 @@ void CloudTTSProvider::postGoogle(const QString& text, const QLocale& locale, do
         return;
     }
     const QString voiceName = m_googleVoice;
-    const QString languageCode = !m_googleLanguageCode.isEmpty() ? m_googleLanguageCode : QString("%1-%2").arg(QLocale::languageToString(locale.language())).arg(QLocale::countryToString(locale.country()));
+    const QString languageCode = !m_googleLanguageCode.isEmpty() ? m_googleLanguageCode : QString("%1-%2").arg(QLocale::languageToString(locale.language())).arg(QLocale::territoryToString(locale.territory()));
     const QUrl url(QString("https://texttospeech.googleapis.com/v1/text:synthesize?key=%1").arg(m_googleApiKey));
     QNetworkRequest req(url);
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");

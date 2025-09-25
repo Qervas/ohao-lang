@@ -1,13 +1,62 @@
 #pragma once
 
 #include <QObject>
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
 #include <QTextToSpeech>
 #include <QVoice>
+#endif
 #include <QLocale>
 #include <QSettings>
 #include <QStringList>
 #include <QMap>
 #include "CloudTTSProvider.h"
+
+#ifndef QT_TEXTTOSPEECH_AVAILABLE
+class QVoice {
+public:
+    enum Gender { Male, Female, Unknown };
+    enum Age { Child, Teenager, Adult, Senior, Other };
+    QVoice() {}
+    QVoice(Gender gender, Age age, const QString &name = QString()) {}
+    Gender gender() const { return Unknown; }
+    Age age() const { return Other; }
+    QString name() const { return QString(); }
+};
+#endif
+
+#ifndef QT_TEXTTOSPEECH_AVAILABLE
+class QTextToSpeech : public QObject {
+    Q_OBJECT
+public:
+    enum State { Ready, Speaking, Paused, Error };
+    QTextToSpeech(QObject *parent = nullptr) : QObject(parent) {}
+    QTextToSpeech(const QString &engine, QObject *parent = nullptr) : QObject(parent) {}
+    ~QTextToSpeech() {}
+    void say(const QString &text) {}
+    void stop() {}
+    void pause() {}
+    void resume() {}
+    State state() const { return Ready; }
+    void setLocale(const QLocale &locale) {}
+    QLocale locale() const { return QLocale(); }
+    void setVoice(const QVoice &voice) {}
+    QVoice voice() const { return QVoice(); }
+    void setVolume(double volume) {}
+    double volume() const { return 1.0; }
+    void setPitch(double pitch) {}
+    double pitch() const { return 0.0; }
+    void setRate(double rate) {}
+    double rate() const { return 1.0; }
+    QList<QLocale> availableLocales() const { return QList<QLocale>(); }
+    QList<QVoice> availableVoices() const { return QList<QVoice>(); }
+    QString engine() const { return QString(); }
+    static QStringList availableEngines() { return QStringList(); }
+signals:
+    void stateChanged(State state);
+    void localeChanged(const QLocale &locale);
+    void voiceChanged(const QVoice &voice);
+};
+#endif
 
 class TTSEngine : public QObject
 {

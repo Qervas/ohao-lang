@@ -24,11 +24,13 @@ FloatingWidget::FloatingWidget(QWidget *parent)
     applyModernStyle();
 
     // Initialize global shortcut manager
+#ifdef Q_OS_WIN
     shortcutManager = new GlobalShortcutManager(this);
     connect(shortcutManager, &GlobalShortcutManager::screenshotRequested, 
             this, &FloatingWidget::takeScreenshot);
     connect(shortcutManager, &GlobalShortcutManager::toggleVisibilityRequested,
             this, &FloatingWidget::toggleVisibility);
+#endif
 
     // Restore saved position or fall back to default using a timer to ensure it's set after initialization
     QTimer::singleShot(100, [this]() {
@@ -215,7 +217,7 @@ void FloatingWidget::mousePressEvent(QMouseEvent *event)
         currentOpacity = 100;
         update();
         
-        qDebug() << "Started dragging from position:" << dragPosition << "Global pos:" << event->globalPos();
+        qDebug() << "Started dragging from position:" << dragPosition << "Global pos:" << event->globalPosition().toPoint();
     } else {
         event->ignore();
     }
@@ -235,9 +237,9 @@ void FloatingWidget::mouseMoveEvent(QMouseEvent *event)
             event->accept();
             return;
         }
-        QPoint newPos = event->globalPos() - dragPosition;
+        QPoint newPos = event->globalPosition().toPoint() - dragPosition;
         
-        qDebug() << "Calculated new position:" << newPos << "from global:" << event->globalPos() << "dragPosition:" << dragPosition;
+        qDebug() << "Calculated new position:" << newPos << "from global:" << event->globalPosition().toPoint() << "dragPosition:" << dragPosition;
 
         // Keep widget on screen
         QScreen *screen = QApplication::primaryScreen();

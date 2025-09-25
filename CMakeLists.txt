@@ -32,7 +32,8 @@
       endif()
   endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui DBus Network TextToSpeech Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui DBus Network Multimedia)
+find_package(Qt6 COMPONENTS TextToSpeech)
 
   qt_standard_project_setup()
 
@@ -78,7 +79,11 @@ find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui DBus Network TextToSpeech 
   # Create executable
   # WIN32 flag creates Windows subsystem app (no console window)
   # Remove WIN32 for console subsystem (useful for debugging)
-  qt_add_executable(ohao-lang WIN32 ${SOURCES} ${HEADERS})
+  if(WIN32)
+      qt_add_executable(ohao-lang WIN32 ${SOURCES} ${HEADERS})
+  else()
+      qt_add_executable(ohao-lang ${SOURCES} ${HEADERS})
+  endif()
   
   # Optional: Allow enabling console for release builds via CMake option
   option(ENABLE_CONSOLE "Enable console window for debugging" OFF)
@@ -88,7 +93,14 @@ find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui DBus Network TextToSpeech 
       )
   endif()
 
-target_link_libraries(ohao-lang PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui Qt6::DBus Qt6::Network Qt6::TextToSpeech Qt6::Multimedia)
+target_link_libraries(ohao-lang PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui Qt6::DBus Qt6::Network Qt6::Multimedia)
+
+if(Qt6TextToSpeech_FOUND)
+    target_link_libraries(ohao-lang PRIVATE Qt6::TextToSpeech)
+    target_compile_definitions(ohao-lang PRIVATE QT_TEXTTOSPEECH_AVAILABLE)
+else()
+    message(WARNING "Qt6 TextToSpeech not found. TTS features will be disabled.")
+endif()
 
   # Deploy Qt runtime on Windows so the .exe can run standalone
   if (WIN32)

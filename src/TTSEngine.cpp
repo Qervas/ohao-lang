@@ -327,9 +327,9 @@ QString TTSEngine::getLanguageDisplayName(const QLocale &locale) const
         name = QLocale::languageToString(locale.language());
     }
 
-    QString country = locale.nativeCountryName();
+    QString country = locale.nativeTerritoryName();
     if (country.isEmpty()) {
-        country = QLocale::countryToString(locale.country());
+        country = QLocale::territoryToString(locale.territory());
     }
 
     if (!country.isEmpty() && country != name) {
