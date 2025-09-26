@@ -2,6 +2,7 @@
 #include "OCREngine.h"
 #include "TTSEngine.h"
 #include "TTSManager.h"
+#include "../core/LanguageManager.h"
 #include <QApplication>
 #include <QScreen>
 #include <QDebug>
@@ -1017,7 +1018,11 @@ void SettingsWindow::setupTTSTab()
         }
 
         ttsStatusText->setPlainText(tr("▶️ Playing input voice test..."));
-        ttsEngine->speak(testText);
+
+        // Convert language code to QLocale using LanguageManager
+        QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
+
+        ttsEngine->speak(testText, true, testLocale);
     });
 
     connect(stopInputTTSBtn, &QPushButton::clicked, [this]() {
@@ -1262,7 +1267,11 @@ void SettingsWindow::onTestTTSClicked()
     }
 
     ttsStatusText->setPlainText(tr("▶️ Playing test text..."));
-    ttsEngine->speak(testText);
+
+    // Convert language code to QLocale using LanguageManager
+    QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
+
+    ttsEngine->speak(testText, false, testLocale);
 }
 
 void SettingsWindow::updateProviderUI(const QString& providerId)

@@ -66,6 +66,7 @@ public:
 
     void speak(const QString &text);
     void speak(const QString &text, bool isInputText);
+    void speak(const QString &text, bool isInputText, const QLocale& locale);
     void stop();
 
     bool isAvailable() const;

@@ -14,7 +14,9 @@ public:
     
     // TTS convenience methods
     void speakInputText(const QString& text);   // For OCR results
+    void speakInputText(const QString& text, const QString& languageCode);   // For OCR results with language
     void speakOutputText(const QString& text);  // For translation results
+    void speakOutputText(const QString& text, const QString& languageCode);  // For translation results with language
     
     bool isInputTTSEnabled() const;
     bool isOutputTTSEnabled() const;

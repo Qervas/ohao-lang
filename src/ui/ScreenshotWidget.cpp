@@ -758,12 +758,12 @@ void ScreenshotWidget::onOCRFinished(const OCRResult &result)
 
     // Speak the OCR result if TTS input is enabled
     if (result.success && !result.text.isEmpty()) {
-        TTSManager::instance().speakInputText(result.text);
+        TTSManager::instance().speakInputText(result.text, result.language);
     }
-    
+
     // Speak the translation result if TTS output is enabled and translation is available
     if (result.success && result.hasTranslation && !result.translatedText.isEmpty()) {
-        TTSManager::instance().speakOutputText(result.translatedText);
+        TTSManager::instance().speakOutputText(result.translatedText, result.targetLanguage);
     }
 
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());

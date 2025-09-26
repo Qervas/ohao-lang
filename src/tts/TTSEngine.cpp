@@ -185,6 +185,11 @@ void TTSEngine::speak(const QString &text)
 
 void TTSEngine::speak(const QString &text, bool isInputText)
 {
+    speak(text, isInputText, QLocale());
+}
+
+void TTSEngine::speak(const QString &text, bool isInputText, const QLocale& locale)
+{
     if (text.trimmed().isEmpty()) {
         return;
     }
@@ -197,7 +202,7 @@ void TTSEngine::speak(const QString &text, bool isInputText)
     applyProviderConfig(effectiveVoice(isInputText));
     ensureProvider();
     if (auto *prov = provider()) {
-        prov->speak(text, QLocale(), m_rate, m_pitch, m_volume);
+        prov->speak(text, locale, m_rate, m_pitch, m_volume);
     }
 }
 

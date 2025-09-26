@@ -1,4 +1,5 @@
 #include "TTSManager.h"
+#include "../core/LanguageManager.h"
 #include <QDebug>
 
 TTSManager* TTSManager::s_instance = nullptr;
@@ -31,17 +32,29 @@ TTSEngine* TTSManager::ttsEngine()
 
 void TTSManager::speakInputText(const QString& text)
 {
+    speakInputText(text, QString());
+}
+
+void TTSManager::speakInputText(const QString& text, const QString& languageCode)
+{
     if (m_ttsEngine && isInputTTSEnabled() && !text.isEmpty()) {
-        qDebug() << "Speaking input text:" << text.left(50);
-        m_ttsEngine->speak(text, true);  // true = isInputText
+        QLocale locale = languageCode.isEmpty() ? QLocale() : LanguageManager::instance().localeFromLanguageCode(languageCode);
+        qDebug() << "Speaking input text:" << text.left(50) << "with locale:" << locale.name();
+        m_ttsEngine->speak(text, true, locale);  // true = isInputText
     }
 }
 
 void TTSManager::speakOutputText(const QString& text)
 {
+    speakOutputText(text, QString());
+}
+
+void TTSManager::speakOutputText(const QString& text, const QString& languageCode)
+{
     if (m_ttsEngine && isOutputTTSEnabled() && !text.isEmpty()) {
-        qDebug() << "Speaking output text:" << text.left(50);
-        m_ttsEngine->speak(text, false); // false = isInputText (i.e., output text)
+        QLocale locale = languageCode.isEmpty() ? QLocale() : LanguageManager::instance().localeFromLanguageCode(languageCode);
+        qDebug() << "Speaking output text:" << text.left(50) << "with locale:" << locale.name();
+        m_ttsEngine->speak(text, false, locale); // false = isInputText (i.e., output text)
     }
 }
 
