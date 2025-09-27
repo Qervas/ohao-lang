@@ -993,20 +993,8 @@ void LanguageLearningOverlay::applyTheme()
 
 ThemeManager::Theme LanguageLearningOverlay::getCurrentTheme() const
 {
-    // Detect current theme from application settings
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
-    const QString themeName = settings.value("appearance/theme", "Auto (System)").toString();
-
-    ThemeManager::Theme theme = ThemeManager::fromString(themeName);
-
-    // If it's auto, detect from system
-    if (theme == ThemeManager::Theme::Auto) {
-        auto hints = QGuiApplication::styleHints();
-        const bool dark = hints ? hints->colorScheme() == Qt::ColorScheme::Dark : false;
-        theme = dark ? ThemeManager::Theme::Dark : ThemeManager::Theme::Light;
-    }
-
-    return theme;
+    // Use the singleton ThemeManager for consistent theme detection
+    return ThemeManager::instance().getCurrentTheme();
 }
 
 void LanguageLearningOverlay::onThemeChanged()

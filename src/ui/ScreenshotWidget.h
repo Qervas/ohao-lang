@@ -13,7 +13,6 @@
 #include "TextReplacementOverlay.h"
 #include "LanguageLearningOverlay.h"
 
-class OCRResultWindow;
 
 enum class ToolbarButton {
     None,
@@ -75,7 +74,6 @@ private:
 
     // OCR functionality
     OCREngine *ocrEngine;
-    OCRResultWindow *ocrResultWindow;
     QPixmap m_lastOCRImage;
 
     // Results overlay

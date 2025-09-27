@@ -7,13 +7,36 @@
 #include <QLocalSocket>
 #include <QLocalServer>
 #include <QMessageBox>
+#include <QDebug>
 #include "ui/FloatingWidget.h"
 #include "system/SystemTray.h"
 #include "ui/ThemeManager.h"
 
+#ifdef _WIN32
+#include <Windows.h>
+#include <io.h>
+#include <fcntl.h>
+#include <iostream>
+#endif
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+
+#ifdef _WIN32
+#ifdef _DEBUG
+    // Allocate console for debug builds only
+    if (AllocConsole()) {
+        freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
+        freopen_s((FILE**)stderr, "CONOUT$", "w", stderr);
+        freopen_s((FILE**)stdin, "CONIN$", "r", stdin);
+        std::ios::sync_with_stdio(true);
+        SetConsoleTitle(L"OHAO Debug Console");
+        qDebug() << "Debug console allocated successfully";
+    }
+#endif
+#endif
+
     app.setQuitOnLastWindowClosed(false);
     app.setApplicationName("ohao-lang");
     QCoreApplication::setOrganizationName("ohao");
@@ -51,7 +74,7 @@ int main(int argc, char *argv[])
     parser.process(app);
 
     // Apply theme early so all widgets inherit styles
-    ThemeManager::applyFromSettings();
+    ThemeManager::instance().applyFromSettings();
 
     // Create and show floating widget as a top-level window
     FloatingWidget *widget = new FloatingWidget(nullptr);

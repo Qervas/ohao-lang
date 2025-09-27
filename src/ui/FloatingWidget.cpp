@@ -236,11 +236,6 @@ void FloatingWidget::mousePressEvent(QMouseEvent *event)
 
 void FloatingWidget::mouseMoveEvent(QMouseEvent *event)
 {
-    static int moveCount = 0;
-    moveCount++;
-    
-    qDebug() << "Mouse move event #" << moveCount << " - isDragging:" << isDragging << "buttons:" << event->buttons() << "pos:" << event->pos();
-    
     if (isDragging) {
         // If on Wayland, system move is already in progress; ignore manual move
         const QString platformName = QGuiApplication::platformName();
@@ -249,8 +244,6 @@ void FloatingWidget::mouseMoveEvent(QMouseEvent *event)
             return;
         }
         QPoint newPos = event->globalPosition().toPoint() - dragPosition;
-        
-        qDebug() << "Calculated new position:" << newPos << "from global:" << event->globalPosition().toPoint() << "dragPosition:" << dragPosition;
 
         // Keep widget on screen
         QScreen *screen = QApplication::primaryScreen();
@@ -263,8 +256,6 @@ void FloatingWidget::mouseMoveEvent(QMouseEvent *event)
         move(newPos);
         if (savePosTimer) savePosTimer->start();
         event->accept();
-        
-        qDebug() << "Moved widget to position:" << newPos;
     } else {
         event->ignore();
     }

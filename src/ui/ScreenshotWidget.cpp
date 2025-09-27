@@ -1,6 +1,5 @@
 #include "ScreenshotWidget.h"
 #include "SelectionToolbar.h"
-#include "OCRResultWindow.h"
 #include "TTSManager.h"
 #include "TTSEngine.h"
 #include "ThemeManager.h"
@@ -22,7 +21,7 @@
 
 ScreenshotWidget::ScreenshotWidget(QWidget *parent)
     : QWidget(parent), selecting(false), hasSelection(false), showingToolbar(false)
-    , ocrEngine(nullptr), ocrResultWindow(nullptr), showingResults(false)
+    , ocrEngine(nullptr), showingResults(false)
 {
     // Make fullscreen and frameless
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
@@ -40,7 +39,7 @@ ScreenshotWidget::ScreenshotWidget(QWidget *parent)
 
 ScreenshotWidget::ScreenshotWidget(const QPixmap &screenshot, QWidget *parent)
     : QWidget(parent), selecting(false), hasSelection(false), showingToolbar(false)
-    , ocrEngine(nullptr), ocrResultWindow(nullptr), showingResults(false)
+    , ocrEngine(nullptr), showingResults(false)
 {
     // Make fullscreen and frameless
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
@@ -333,9 +332,19 @@ void ScreenshotWidget::drawResultsOverlay(QPainter &painter)
     const int minWidth = 300;
     const int maxWidth = 500;
 
-    // Use the application palette directly - no need to re-detect theme
-    // The ThemeManager has already configured the correct palette
-    QPalette appPalette = QApplication::palette();
+    // CRITICAL FIX: Get theme colors directly from the singleton
+    // This ensures we always get the current theme's colors
+    ThemeManager& themeManager = ThemeManager::instance();
+    QPalette appPalette = themeManager.getCurrentPalette();
+
+    qDebug() << "=== OVERLAY COLOR DEBUG ===";
+    qDebug() << "Current theme:" << ThemeManager::toString(themeManager.getCurrentTheme());
+    qDebug() << "Palette Window:" << appPalette.color(QPalette::Window).name()
+             << "RGB(" << appPalette.color(QPalette::Window).red()
+             << "," << appPalette.color(QPalette::Window).green()
+             << "," << appPalette.color(QPalette::Window).blue() << ")";
+    qDebug() << "Palette WindowText:" << appPalette.color(QPalette::WindowText).name();
+    qDebug() << "Palette Highlight:" << appPalette.color(QPalette::Highlight).name();
 
     // Set up content font
     QFont textFont = painter.font();
@@ -571,19 +580,9 @@ void ScreenshotWidget::mouseReleaseEvent(QMouseEvent *event)
                   << " " << selection.width() << "x" << selection.height() << std::endl;
 
         if (selection.width() > 10 && selection.height() > 10) {
-            // Check if auto-OCR is enabled
-            QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
-            bool autoOcr = settings.value("translation/autoOcr", true).toBool();
-
-            if (autoOcr) {
-                std::cout << "*** Auto-OCR enabled, starting OCR automatically" << std::endl;
-                // Start OCR automatically without showing toolbar
-                handleOCR();
-            } else {
-                std::cout << "*** Auto-OCR disabled, showing integrated toolbar" << std::endl;
-                showingToolbar = true;
-                update(); // Redraw to show toolbar
-            }
+            // Always start OCR automatically - no manual mode needed
+            qDebug() << "Starting OCR automatically on selection";
+            handleOCR();
         } else {
             std::cout << "*** Selection too small, ignoring and staying active" << std::endl;
             // Reset selection state and keep the overlay active
@@ -774,49 +773,35 @@ void ScreenshotWidget::handleOCR()
         return;
     }
 
-    // Check if auto-OCR is enabled to determine UI behavior
-    bool autoOcr = settings.value("translation/autoOcr", true).toBool();
+    // Always use unified overlay display for consistent theming (merged OCRResultWindow functionality)
+    showingToolbar = false;
+    showingResults = true;
+    m_progressText = "🔍 Starting OCR processing...";
+    m_currentResult = OCRResult(); // Reset result
 
-    if (autoOcr) {
-        // Use overlay display for auto-OCR mode
-        showingToolbar = false;
-        showingResults = true;
-        m_progressText = "🔍 Starting OCR processing...";
-        m_currentResult = OCRResult(); // Reset result
-        if (!m_textOverlay) {
-            m_textOverlay = new TextReplacementOverlay(nullptr);
-            m_textOverlay->setAttribute(Qt::WA_DeleteOnClose, false);
-            m_textOverlay->setDebugBoxes(true); // start with debug boxes; can toggle via setting later
-        }
-        if (!m_learningOverlay) {
-            m_learningOverlay = new LanguageLearningOverlay(nullptr);
-            m_learningOverlay->setAttribute(Qt::WA_DeleteOnClose, false);
-        }
-        if (!m_lastOCRImage.isNull()) {
-            m_textOverlay->setSourceImageSize(m_lastOCRImage.size());
-        }
-        // Position overlay over selection rect in global coordinates
-        if (hasSelection) {
-            QRect selRect(QPoint(qMin(startPoint.x(), endPoint.x()), qMin(startPoint.y(), endPoint.y())),
-                          QPoint(qMax(startPoint.x(), endPoint.x()), qMax(startPoint.y(), endPoint.y())));
-            QPoint globalTopLeft = mapToGlobal(selRect.topLeft());
-            m_textOverlay->setGeometry(QRect(globalTopLeft, selRect.size()));
-            m_textOverlay->show();
-            m_textOverlay->raise();
-        }
-        update(); // Redraw to show overlay
-    } else {
-        // Use separate window for manual OCR mode
-        if (!ocrResultWindow) {
-            ocrResultWindow = new OCRResultWindow(nullptr);
-            connect(ocrResultWindow, &OCRResultWindow::retryRequested, this, &ScreenshotWidget::onOCRRetryRequested);
-        }
-        ocrResultWindow->show();
-        ocrResultWindow->raise();
-        ocrResultWindow->activateWindow();
-        ocrResultWindow->showOCRProgress("Preparing image for OCR processing...");
-        hide();
+    if (!m_textOverlay) {
+        m_textOverlay = new TextReplacementOverlay(nullptr);
+        m_textOverlay->setAttribute(Qt::WA_DeleteOnClose, false);
+        m_textOverlay->setDebugBoxes(true); // start with debug boxes; can toggle via setting later
     }
+    if (!m_learningOverlay) {
+        m_learningOverlay = new LanguageLearningOverlay(nullptr);
+        m_learningOverlay->setAttribute(Qt::WA_DeleteOnClose, false);
+    }
+    if (!m_lastOCRImage.isNull()) {
+        m_textOverlay->setSourceImageSize(m_lastOCRImage.size());
+    }
+
+    // Position overlay over selection rect in global coordinates
+    if (hasSelection) {
+        QRect selRect(QPoint(qMin(startPoint.x(), endPoint.x()), qMin(startPoint.y(), endPoint.y())),
+                      QPoint(qMax(startPoint.x(), endPoint.x()), qMax(startPoint.y(), endPoint.y())));
+        QPoint globalTopLeft = mapToGlobal(selRect.topLeft());
+        m_textOverlay->setGeometry(QRect(globalTopLeft, selRect.size()));
+        m_textOverlay->show();
+        m_textOverlay->raise();
+    }
+    update(); // Redraw to show overlay
 
     // Store the selected area for potential retry
     m_lastOCRImage = selectedArea;
@@ -890,9 +875,7 @@ void ScreenshotWidget::onOCRFinished(const OCRResult &result)
     qDebug();
 
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
-    bool autoOcr = settings.value("translation/autoOcr", true).toBool();
-
-    if (autoOcr && showingResults) {
+    if (showingResults) {
         // Update overlay with results
         m_currentResult = result;
         m_progressText.clear();
@@ -929,11 +912,6 @@ void ScreenshotWidget::onOCRFinished(const OCRResult &result)
             }
         }
         update(); // Redraw to show results
-    } else if (ocrResultWindow) {
-        // Use separate window
-        ocrResultWindow->showOCRResult(result, m_lastOCRImage);
-        emit screenshotFinished();
-        close();
     }
 }
 
@@ -942,9 +920,7 @@ void ScreenshotWidget::onOCRProgress(const QString &status)
     qDebug() << "OCR progress:" << status;
 
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
-    bool autoOcr = settings.value("translation/autoOcr", true).toBool();
-
-    if (autoOcr && showingResults) {
+    if (showingResults) {
         // Update overlay progress
         m_progressText = status;
         if (m_textOverlay && m_textOverlay->isVisible()) {
@@ -952,8 +928,6 @@ void ScreenshotWidget::onOCRProgress(const QString &status)
             // We don't yet have tokens; nothing to update here.
         }
         update(); // Redraw to show progress
-    } else if (ocrResultWindow) {
-        ocrResultWindow->showOCRProgress(status);
     }
 }
 
@@ -964,9 +938,7 @@ void ScreenshotWidget::onOCRError(const QString &error)
     m_ocrInProgress = false;
 
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
-    bool autoOcr = settings.value("translation/autoOcr", true).toBool();
-
-    if (autoOcr && showingResults) {
+    if (showingResults) {
         // Update overlay with error
         m_progressText = QString("❌ Error: %1").arg(error);
         OCRResult errorResult;
@@ -977,11 +949,6 @@ void ScreenshotWidget::onOCRError(const QString &error)
             m_textOverlay->hide();
         }
         update(); // Redraw to show error
-    } else {
-        if (ocrResultWindow) {
-            ocrResultWindow->showOCRError(error);
-        }
-        show();
     }
 }
 
@@ -990,9 +957,9 @@ void ScreenshotWidget::onOCRRetryRequested()
     qDebug() << "OCR retry requested";
 
     if (!m_lastOCRImage.isNull() && ocrEngine) {
-        if (ocrResultWindow) {
-            ocrResultWindow->showOCRProgress("Retrying OCR processing...");
-        }
+        // Show retry progress in overlay
+        m_progressText = "🔄 Retrying OCR processing...";
+        update();
 
         // Retry OCR with the same image
         ocrEngine->performOCR(m_lastOCRImage);

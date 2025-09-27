@@ -1,7 +1,9 @@
 ﻿#include "TextReplacementOverlay.h"
+#include "ThemeManager.h"
 #include <QPainter>
 #include <QFontMetrics>
 #include <QtMath>
+#include <QApplication>
 
 TextReplacementOverlay::TextReplacementOverlay(QWidget *parent)
     : QWidget(parent)
@@ -106,12 +108,25 @@ void TextReplacementOverlay::paintEvent(QPaintEvent *event)
             box = QRect(int(box.x()*sx), int(box.y()*sy), int(box.width()*sx), int(box.height()*sy));
         }
         if (m_debugBoxes) {
-            QColor c = (m_mode == ShowTranslated) ? QColor(0,255,180,60) : QColor(0,120,255,60);
+            // Get theme-aware colors from the singleton ThemeManager
+            QPalette themePalette = ThemeManager::instance().getCurrentPalette();
+            QColor highlightColor = themePalette.color(QPalette::Highlight);
+            QColor windowColor = themePalette.color(QPalette::Window);
+            QColor textColor = themePalette.color(QPalette::WindowText);
+
+            // Use theme colors with transparency for overlay effect
+            QColor c = (m_mode == ShowTranslated) ?
+                QColor(highlightColor.red(), highlightColor.green(), highlightColor.blue(), 60) :
+                QColor(windowColor.red(), windowColor.green(), windowColor.blue(), 80);
+
             p.fillRect(box, c);
-            p.setPen(QPen(Qt::white, 1));
+            p.setPen(QPen(textColor, 1));
             p.drawRect(box.adjusted(0,0,-1,-1));
         }
-        p.setPen(Qt::white);
+
+        // Use theme text color instead of hardcoded white
+        QPalette themePalette = ThemeManager::instance().getCurrentPalette();
+        p.setPen(themePalette.color(QPalette::WindowText));
         p.setFont(rt.font);
         // Simple fit: shrink font if text wider than box
         QFont f = rt.font;

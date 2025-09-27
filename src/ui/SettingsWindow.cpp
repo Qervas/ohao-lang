@@ -319,10 +319,6 @@ void SettingsWindow::setupTranslationTab()
     QGroupBox *autoGroup = new QGroupBox("Automatic Processing", translationTab);
     QVBoxLayout *autoLayout = new QVBoxLayout(autoGroup);
 
-    autoOcrCheck = new QCheckBox("Auto-OCR: Automatically extract text when area is selected");
-    autoOcrCheck->setChecked(true);
-    autoLayout->addWidget(autoOcrCheck);
-
     autoTranslateCheck = new QCheckBox("Auto-Translate: Automatically translate after OCR");
     autoTranslateCheck->setChecked(true);
     autoLayout->addWidget(autoTranslateCheck);
@@ -432,7 +428,7 @@ void SettingsWindow::setupAppearanceTab()
     themeCombo->addItems({"Auto (System)", "Light", "Dark", "High Contrast", "Cyberpunk"});
     connect(themeCombo, &QComboBox::currentTextChanged, this, [this](const QString &text){
         // Preview theme instantly
-        ThemeManager::applyTheme(ThemeManager::fromString(text));
+        ThemeManager::instance().applyTheme(ThemeManager::fromString(text));
     });
     themeLayout->addRow("Theme:", themeCombo);
 
@@ -481,7 +477,6 @@ void SettingsWindow::loadSettings()
     ocrAutoDetectCheck->setChecked(settings->value("ocr/autoDetect", true).toBool());
 
     // Translation Settings
-    autoOcrCheck->setChecked(settings->value("translation/autoOcr", true).toBool());
     autoTranslateCheck->setChecked(settings->value("translation/autoTranslate", true).toBool());
     overlayModeCombo->setCurrentText(settings->value("translation/overlayMode", "Deep Learning Mode").toString());
     translationEngineCombo->setCurrentText(settings->value("translation/engine", "Google Translate (Free)").toString());
@@ -608,7 +603,6 @@ void SettingsWindow::saveSettings()
     if (ocrAutoDetectCheck) settings->setValue("ocr/autoDetect", ocrAutoDetectCheck->isChecked());
 
     // Translation Settings
-    if (autoOcrCheck) settings->setValue("translation/autoOcr", autoOcrCheck->isChecked());
     if (autoTranslateCheck) settings->setValue("translation/autoTranslate", autoTranslateCheck->isChecked());
     if (overlayModeCombo) settings->setValue("translation/overlayMode", overlayModeCombo->currentText());
     if (translationEngineCombo) settings->setValue("translation/engine", translationEngineCombo->currentText());
@@ -698,7 +692,6 @@ void SettingsWindow::resetToDefaults()
     ocrAutoDetectCheck->setChecked(true);
 
     // Reset Translation settings
-    autoOcrCheck->setChecked(true);
     autoTranslateCheck->setChecked(true);
     translationEngineCombo->setCurrentText("Google Translate (Free)");
     sourceLanguageCombo->setCurrentText("Auto-Detect");

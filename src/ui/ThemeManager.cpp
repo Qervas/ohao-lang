@@ -2,8 +2,20 @@
 #include <QApplication>
 #include <QGuiApplication>
 #include <QStyleHints>
+#include <QDebug>
 
-ThemeManager::ThemeManager(QObject *parent) : QObject(parent) {}
+ThemeManager* ThemeManager::s_instance = nullptr;
+
+ThemeManager::ThemeManager(QObject *parent) : QObject(parent) {
+    qDebug() << "ThemeManager singleton created";
+}
+
+ThemeManager& ThemeManager::instance() {
+    if (!s_instance) {
+        s_instance = new ThemeManager();
+    }
+    return *s_instance;
+}
 
 ThemeManager::Theme ThemeManager::fromString(const QString &name) {
     const QString n = name.toLower();
@@ -27,20 +39,28 @@ QString ThemeManager::toString(ThemeManager::Theme theme) {
 void ThemeManager::saveToSettings(Theme theme) {
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     settings.setValue("appearance/theme", toString(theme));
+    qDebug() << "Theme saved to settings:" << toString(theme);
 }
 
 void ThemeManager::applyFromSettings() {
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     const QString name = settings.value("appearance/theme", "Auto (System)").toString();
     applyTheme(fromString(name));
+    qDebug() << "Applied theme from settings:" << name;
 }
 
 void ThemeManager::applyTheme(Theme theme) {
+    Theme originalTheme = theme;
     if (theme == Theme::Auto) {
         auto hints = QGuiApplication::styleHints();
         const bool dark = hints ? hints->colorScheme() == Qt::ColorScheme::Dark : false;
         theme = dark ? Theme::Dark : Theme::Light;
     }
+
+    // Store the resolved theme
+    m_currentTheme = theme;
+
+    qDebug() << "Applying theme:" << toString(originalTheme) << "-> resolved to:" << toString(theme);
 
     switch (theme) {
         case Theme::Light: applyLight(); break;
@@ -49,6 +69,12 @@ void ThemeManager::applyTheme(Theme theme) {
         case Theme::Cyberpunk: applyCyberpunk(); break;
         case Theme::Auto: default: applyLight(); break;
     }
+
+    // Store current palette and emit signal
+    m_currentPalette = QApplication::palette();
+    emit themeChanged(m_currentTheme);
+
+    qDebug() << "Theme applied successfully. Current palette Window color:" << m_currentPalette.color(QPalette::Window).name();
 }
 
 static void setAppPaletteAndStyle(const QPalette &pal, const QString &styleSheet) {
@@ -228,4 +254,12 @@ void ThemeManager::applyCyberpunk() {
     )";
 
     setAppPaletteAndStyle(pal, style);
+}
+
+QPalette ThemeManager::getCurrentPalette() const {
+    return m_currentPalette;
+}
+
+ThemeManager::Theme ThemeManager::getCurrentTheme() const {
+    return m_currentTheme;
 }
