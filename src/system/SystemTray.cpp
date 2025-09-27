@@ -1,5 +1,5 @@
 #include "SystemTray.h"
-#include "FloatingWidget.h"
+#include "../ui/core/FloatingWidget.h"
 #include <QApplication>
 #include <QStyle>
 

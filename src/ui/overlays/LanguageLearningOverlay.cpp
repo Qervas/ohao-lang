@@ -1,6 +1,7 @@
 #include "LanguageLearningOverlay.h"
-#include "../tts/TTSManager.h"
-#include "../ui/ThemeManager.h"
+#include "../tts/ModernTTSManager.h"
+#include "../core/ThemeManager.h"
+#include "../core/AppSettings.h"
 #include <QPainter>
 #include <QMouseEvent>
 #include <QKeyEvent>
@@ -420,18 +421,18 @@ void LanguageLearningOverlay::onWordClicked(const QString& word)
     }
 
     // Speak the word
-    TTSManager::instance().speakInputText(word, m_currentResult.language);
+    ModernTTSManager::instance().speak(word, m_currentResult.language);
 }
 
 void LanguageLearningOverlay::onPlayOriginal()
 {
-    TTSManager::instance().speakInputText(m_currentResult.text, m_currentResult.language);
+    ModernTTSManager::instance().speak(m_currentResult.text, m_currentResult.language);
 }
 
 void LanguageLearningOverlay::onPlayTranslation()
 {
     if (m_currentResult.hasTranslation) {
-        TTSManager::instance().speakOutputText(m_currentResult.translatedText, m_currentResult.targetLanguage);
+        ModernTTSManager::instance().speak(m_currentResult.translatedText, m_currentResult.targetLanguage);
     }
 }
 
@@ -625,368 +626,8 @@ void LanguageLearningOverlay::animateIn()
 
 void LanguageLearningOverlay::applyTheme()
 {
-    ThemeManager::Theme currentTheme = getCurrentTheme();
-    QString styleSheet;
-
-    switch (currentTheme) {
-        case ThemeManager::Theme::Dark:
-            styleSheet = R"(
-                LanguageLearningOverlay {
-                    background-color: #1C2026;
-                    border-radius: 12px;
-                    border: 1px solid #3A404B;
-                }
-
-                QFrame#headerFrame {
-                    background-color: #2A2F37;
-                    border-radius: 8px;
-                    border: none;
-                    padding: 5px;
-                }
-
-                QFrame#section {
-                    background-color: #22262C;
-                    border-radius: 8px;
-                    border: 1px solid #3A404B;
-                    padding: 10px;
-                }
-
-                QLabel#titleLabel {
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #E6E9EF;
-                }
-
-                QLabel#languageLabel {
-                    font-size: 11px;
-                    color: #C7CDD7;
-                }
-
-                QLabel#sectionLabel {
-                    font-size: 13px;
-                    font-weight: bold;
-                    color: #E6E9EF;
-                    margin-bottom: 5px;
-                }
-
-                QPushButton {
-                    background-color: #5082E6;
-                    color: #E6E9EF;
-                    border: 1px solid #3C6DD9;
-                    border-radius: 6px;
-                    padding: 6px 12px;
-                    font-weight: 500;
-                }
-
-                QPushButton:hover {
-                    background-color: #3C6DD9;
-                    border-color: #5082E6;
-                }
-
-                QPushButton:pressed {
-                    background-color: #2A5BC4;
-                }
-
-                QPushButton#wordButton {
-                    background-color: #2A2F37;
-                    color: #E6E9EF;
-                    border: 1px solid #3A404B;
-                    font-size: 11px;
-                    padding: 4px 8px;
-                }
-
-                QPushButton#wordButton:hover {
-                    background-color: #303642;
-                    border-color: #5082E6;
-                }
-
-                QTextEdit {
-                    background-color: #22262C;
-                    border: 1px solid #3A404B;
-                    border-radius: 4px;
-                    padding: 8px;
-                    font-size: 12px;
-                    color: #E6E9EF;
-                }
-
-                QProgressBar {
-                    border: 1px solid #3A404B;
-                    border-radius: 4px;
-                    background-color: #2A2F37;
-                }
-
-                QProgressBar::chunk {
-                    background-color: #4CCA6A;
-                    border-radius: 3px;
-                }
-
-                QSlider::groove:horizontal {
-                    height: 4px;
-                    background-color: #2A2F37;
-                    border-radius: 2px;
-                }
-
-                QSlider::handle:horizontal {
-                    background-color: #5082E6;
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 8px;
-                    margin: -6px 0;
-                }
-
-                QCheckBox {
-                    color: #E6E9EF;
-                }
-
-                QScrollArea {
-                    background-color: #1C2026;
-                    border: none;
-                }
-            )";
-            break;
-
-        case ThemeManager::Theme::HighContrast:
-            styleSheet = R"(
-                LanguageLearningOverlay {
-                    background-color: #000000;
-                    border-radius: 12px;
-                    border: 2px solid #FFFF00;
-                }
-
-                QFrame#headerFrame {
-                    background-color: #000000;
-                    border-radius: 8px;
-                    border: 1px solid #FFFF00;
-                    padding: 5px;
-                }
-
-                QFrame#section {
-                    background-color: #000000;
-                    border-radius: 8px;
-                    border: 2px solid #FFFF00;
-                    padding: 10px;
-                }
-
-                QLabel {
-                    color: #FFFF00;
-                    font-weight: bold;
-                }
-
-                QPushButton {
-                    background-color: #FFFF00;
-                    color: #000000;
-                    border: 2px solid #FFFF00;
-                    border-radius: 6px;
-                    padding: 6px 12px;
-                    font-weight: bold;
-                }
-
-                QPushButton:hover {
-                    background-color: #000000;
-                    color: #FFFF00;
-                }
-
-                QTextEdit {
-                    background-color: #000000;
-                    border: 2px solid #FFFF00;
-                    color: #FFFF00;
-                    font-weight: bold;
-                }
-
-                QProgressBar {
-                    border: 2px solid #FFFF00;
-                    background-color: #000000;
-                }
-
-                QProgressBar::chunk {
-                    background-color: #FFFF00;
-                }
-            )";
-            break;
-
-        case ThemeManager::Theme::Cyberpunk:
-            styleSheet = R"(
-                LanguageLearningOverlay {
-                    background-color: #0a0e1a;
-                    border-radius: 12px;
-                    border: 1px solid #00ff88;
-                }
-
-                QFrame#headerFrame {
-                    background-color: #1a1f2e;
-                    border-radius: 8px;
-                    border: none;
-                    padding: 5px;
-                }
-
-                QFrame#section {
-                    background-color: #0f1419;
-                    border-radius: 8px;
-                    border: 1px solid #00ff88;
-                    padding: 10px;
-                }
-
-                QLabel#titleLabel {
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #00ff88;
-                }
-
-                QLabel#languageLabel {
-                    font-size: 11px;
-                    color: #ff006e;
-                }
-
-                QLabel#sectionLabel {
-                    font-size: 13px;
-                    font-weight: bold;
-                    color: #00d4ff;
-                    margin-bottom: 5px;
-                }
-
-                QPushButton {
-                    background-color: #00ff88;
-                    color: #0a0e1a;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 6px 12px;
-                    font-weight: bold;
-                }
-
-                QPushButton:hover {
-                    background-color: #00d4ff;
-                }
-
-                QPushButton#wordButton {
-                    background-color: #1a1f2e;
-                    color: #00ff88;
-                    border: 1px solid #00ff88;
-                    font-size: 11px;
-                    padding: 4px 8px;
-                }
-
-                QTextEdit {
-                    background-color: #0f1419;
-                    border: 1px solid #00ff88;
-                    color: #ffffff;
-                }
-
-                QProgressBar {
-                    border: 1px solid #00ff88;
-                    background-color: #1a1f2e;
-                }
-
-                QProgressBar::chunk {
-                    background-color: #00ff88;
-                }
-            )";
-            break;
-
-        default: // Light theme
-            styleSheet = R"(
-                LanguageLearningOverlay {
-                    background-color: #ffffff;
-                    border-radius: 12px;
-                    border: 1px solid #e0e0e0;
-                }
-
-                QFrame#headerFrame {
-                    background-color: #f8f9fa;
-                    border-radius: 8px;
-                    border: none;
-                    padding: 5px;
-                }
-
-                QFrame#section {
-                    background-color: #fafbfc;
-                    border-radius: 8px;
-                    border: 1px solid #e6e8ea;
-                    padding: 10px;
-                }
-
-                QLabel#titleLabel {
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #2c3e50;
-                }
-
-                QLabel#languageLabel {
-                    font-size: 11px;
-                    color: #7f8c8d;
-                }
-
-                QLabel#sectionLabel {
-                    font-size: 13px;
-                    font-weight: bold;
-                    color: #34495e;
-                    margin-bottom: 5px;
-                }
-
-                QPushButton {
-                    background-color: #3498db;
-                    color: white;
-                    border: none;
-                    border-radius: 6px;
-                    padding: 6px 12px;
-                    font-weight: 500;
-                }
-
-                QPushButton:hover {
-                    background-color: #2980b9;
-                }
-
-                QPushButton:pressed {
-                    background-color: #21618c;
-                }
-
-                QPushButton#wordButton {
-                    background-color: #ecf0f1;
-                    color: #2c3e50;
-                    border: 1px solid #bdc3c7;
-                    font-size: 11px;
-                    padding: 4px 8px;
-                }
-
-                QPushButton#wordButton:hover {
-                    background-color: #d5dbdb;
-                }
-
-                QTextEdit {
-                    background-color: #ffffff;
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                    padding: 8px;
-                    font-size: 12px;
-                }
-
-                QProgressBar {
-                    border: 1px solid #bdc3c7;
-                    border-radius: 4px;
-                    background-color: #ecf0f1;
-                }
-
-                QProgressBar::chunk {
-                    background-color: #27ae60;
-                    border-radius: 3px;
-                }
-
-                QSlider::groove:horizontal {
-                    height: 4px;
-                    background-color: #bdc3c7;
-                    border-radius: 2px;
-                }
-
-                QSlider::handle:horizontal {
-                    background-color: #3498db;
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 8px;
-                    margin: -6px 0;
-                }
-            )";
-            break;
-    }
-
+    // Use centralized theming system from AppSettings
+    QString styleSheet = AppSettings::instance().getComponentStyleSheet("LanguageLearningOverlay");
     setStyleSheet(styleSheet);
     update();
 }
@@ -1053,7 +694,7 @@ void LanguageLearningOverlay::mousePressEvent(QMouseEvent* event)
 void LanguageLearningOverlay::keyPressEvent(QKeyEvent* event)
 {
     if (event->key() == Qt::Key_Escape) {
-        hide();
+        emit escapePressed(); // Signal OverlayManager to hide overlays and close screenshot
         return;
     }
 

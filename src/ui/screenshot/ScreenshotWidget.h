@@ -10,8 +10,7 @@
 
 #include "OCREngine.h"
 #include "ScreenCapture.h"
-#include "TextReplacementOverlay.h"
-#include "LanguageLearningOverlay.h"
+#include "../overlays/OverlayManager.h"
 
 
 enum class ToolbarButton {
@@ -46,16 +45,11 @@ private slots:
     void handleSave();
     void handleOCR();
     void handleCancel();
-    void onOCRFinished(const OCRResult &result);
-    void onOCRProgress(const QString &status);
-    void onOCRError(const QString &error);
-    void onOCRRetryRequested();
 
 private:
     void captureScreen();
     void setupWidget();
     void drawToolbar(QPainter &painter);
-    void drawResultsOverlay(QPainter &painter);
     QRect getToolbarRect();
     ToolbarButton getButtonAt(QPoint pos);
     void handleToolbarClick(ToolbarButton button);
@@ -72,18 +66,13 @@ private:
     QRect ocrButtonRect;
     QRect cancelButtonRect;
 
-    // OCR functionality
-    OCREngine *ocrEngine;
     QPixmap m_lastOCRImage;
 
-    // Results overlay
+    // Results overlay - now managed by OverlayManager
     bool showingResults;
     OCRResult m_currentResult;
     QString m_progressText;
     QRect m_resultAreaRect;
-    TextReplacementOverlay *m_textOverlay = nullptr;
-    LanguageLearningOverlay *m_learningOverlay = nullptr;
+    OverlayManager *m_overlayManager;
 
-    // Guard to debounce OCR when already running
-    bool m_ocrInProgress = false;
 };

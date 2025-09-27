@@ -111,6 +111,9 @@ private:
     void startTranslation(const QString &text);
     QString mergeParagraphLines(const QStringList &lines, const QVector<OCRResult::OCRToken> &tokens);
 
+    // Helper to ensure tokens are always provided
+    void ensureTokensExist(OCRResult &result, const QSize &imageSize = QSize());
+
     // Helper to stop any running process safely
     void stopRunningProcess();
 

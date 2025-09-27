@@ -2,16 +2,15 @@
 #include "OCREngine.h"
 #include "TTSEngine.h"
 #include "TTSManager.h"
+#include "../tts/ModernTTSManager.h"
 #include "../core/LanguageManager.h"
 #include <QApplication>
 #include <QScreen>
 #include <QDebug>
 #include <QMessageBox>
-#include <QShowEvent>
 #include <QHideEvent>
 #include <QCoreApplication>
 #include <QTimer>
-#include <QFileDialog>
 #include <QProcess>
 #include <QIcon>
 #include <QSignalBlocker>
@@ -1030,13 +1029,16 @@ void SettingsWindow::setupTTSTab()
         // Convert language code to QLocale using LanguageManager
         QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
 
-        ttsEngine->speak(testText, true, testLocale);
+        // Use ModernTTSManager for voice testing - much more reliable!
+        ModernTTSManager::instance().speak(testText, testLocale);
     });
 
     connect(stopInputTTSBtn, &QPushButton::clicked, [this]() {
+        // Stop both old and new TTS systems
         if (ttsEngine) {
             ttsEngine->stop();
         }
+        ModernTTSManager::instance().stop();
     });
 
     QWidget *inputVoiceWidget = new QWidget();
@@ -1062,9 +1064,11 @@ void SettingsWindow::setupTTSTab()
     stopTTSBtn->setEnabled(false);
     connect(testTTSBtn, &QPushButton::clicked, this, &SettingsWindow::onTestTTSClicked);
     connect(stopTTSBtn, &QPushButton::clicked, [this]() {
+        // Stop both old and new TTS systems
         if (ttsEngine) {
             ttsEngine->stop();
         }
+        ModernTTSManager::instance().stop();
     });
 
     QWidget *outputVoiceWidget = new QWidget();
@@ -1259,7 +1263,8 @@ void SettingsWindow::onTestTTSClicked()
     // Convert language code to QLocale using LanguageManager
     QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
 
-    ttsEngine->speak(testText, false, testLocale);
+    // Use ModernTTSManager for voice testing - much more reliable!
+    ModernTTSManager::instance().speak(testText, testLocale);
 }
 
 void SettingsWindow::updateProviderUI(const QString& providerId)

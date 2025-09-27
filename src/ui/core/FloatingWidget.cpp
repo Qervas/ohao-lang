@@ -1,8 +1,9 @@
 #include "FloatingWidget.h"
 #include "GlobalShortcutManager.h"
-#include "ScreenshotWidget.h"
+#include "../screenshot/ScreenshotWidget.h"
 #include "ScreenCapture.h"
 #include "SettingsWindow.h"
+#include "ThemeManager.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QHBoxLayout>
@@ -306,7 +307,10 @@ void FloatingWidget::animateHover(bool hover)
         currentOpacity = 255;
         currentScale = 1.05; // Subtle scale up
         shadowEffect->setBlurRadius(30);
-        shadowEffect->setColor(QColor(0, 150, 255, 100)); // Blue glow on hover
+        QPalette themePalette = ThemeManager::instance().getCurrentPalette();
+        QColor accentColor = themePalette.color(QPalette::Highlight);
+        accentColor.setAlpha(100);
+        shadowEffect->setColor(accentColor); // Theme accent glow on hover
         shadowEffect->setOffset(0, 6);
 
         // Note: Qt stylesheets don't support CSS transform

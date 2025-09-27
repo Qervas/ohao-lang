@@ -1,4 +1,5 @@
 #include "ThemeManager.h"
+#include "AppSettings.h"
 #include <QApplication>
 #include <QGuiApplication>
 #include <QStyleHints>
@@ -37,16 +38,14 @@ QString ThemeManager::toString(ThemeManager::Theme theme) {
 }
 
 void ThemeManager::saveToSettings(Theme theme) {
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
-    settings.setValue("appearance/theme", toString(theme));
-    qDebug() << "Theme saved to settings:" << toString(theme);
+    AppSettings::instance().setTheme(toString(theme));
+    qDebug() << "Theme saved to centralized settings:" << toString(theme);
 }
 
 void ThemeManager::applyFromSettings() {
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
-    const QString name = settings.value("appearance/theme", "Auto (System)").toString();
+    const QString name = AppSettings::instance().theme();
     applyTheme(fromString(name));
-    qDebug() << "Applied theme from settings:" << name;
+    qDebug() << "Applied theme from centralized settings:" << name;
 }
 
 void ThemeManager::applyTheme(Theme theme) {

@@ -7,6 +7,8 @@
 #include <QStandardPaths>
 #include <QJsonArray>
 #include <QUrlQuery>
+#include <QRegularExpression>
+#include <QtMath>
 
 OCREngine::OCREngine(QObject *parent)
     : QObject(parent)
@@ -695,10 +697,16 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
 
     // Store the OCR result and start translation if auto-translate is enabled
     m_currentOCRResult = result;
+
+    // Ensure tokens exist before emitting or starting translation
+    if (result.success) {
+        ensureTokensExist(m_currentOCRResult);
+    }
+
     if (result.success && m_autoTranslate && !result.text.isEmpty()) {
         startTranslation(result.text);
     } else {
-        emit ocrFinished(result);
+        emit ocrFinished(m_currentOCRResult);
     }
 }
 
@@ -762,10 +770,16 @@ void OCREngine::onPythonOCRFinished(int exitCode, QProcess::ExitStatus exitStatu
 
     // Store the OCR result and start translation if auto-translate is enabled
     m_currentOCRResult = result;
+
+    // Ensure tokens exist before emitting or starting translation
+    if (result.success) {
+        ensureTokensExist(m_currentOCRResult);
+    }
+
     if (result.success && m_autoTranslate && !result.text.isEmpty()) {
         startTranslation(result.text);
     } else {
-        emit ocrFinished(result);
+        emit ocrFinished(m_currentOCRResult);
     }
 }
 
@@ -802,6 +816,11 @@ void OCREngine::onNetworkReplyFinished()
                 result.errorMessage = "No text found in image";
             }
         }
+    }
+
+    // Ensure tokens exist for network OCR results
+    if (result.success) {
+        ensureTokensExist(result);
     }
 
     reply->deleteLater();
@@ -903,6 +922,11 @@ void OCREngine::onTranslationFinished(const TranslationResult &translationResult
         emit ocrProgress("Translation failed: " + translationResult.errorMessage);
     }
 
+    // Ensure tokens exist before final emission
+    if (m_currentOCRResult.success) {
+        ensureTokensExist(m_currentOCRResult);
+    }
+
     emit ocrFinished(m_currentOCRResult);
 }
 
@@ -911,8 +935,71 @@ void OCREngine::onTranslationError(const QString &error)
     m_currentOCRResult.hasTranslation = false;
     m_currentOCRResult.translatedText = "Translation error: " + error;
 
+    // Ensure tokens exist even for translation errors
+    if (m_currentOCRResult.success) {
+        ensureTokensExist(m_currentOCRResult);
+    }
+
     emit ocrProgress("Translation error: " + error);
     emit ocrFinished(m_currentOCRResult);
+}
+
+void OCREngine::ensureTokensExist(OCRResult &result, const QSize &imageSize)
+{
+    // If tokens already exist, nothing to do
+    if (!result.tokens.isEmpty()) {
+        return;
+    }
+
+    // If no text, nothing to tokenize
+    if (result.text.isEmpty()) {
+        return;
+    }
+
+    qDebug() << "OCREngine: Creating fallback tokens for result without token data";
+
+    // Use provided image size or default
+    QSize actualSize = imageSize.isValid() ? imageSize : QSize(800, 600);
+
+    // Split text into words and create a token for each
+    QStringList words = result.text.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    if (words.isEmpty()) {
+        // Create single token for entire text
+        OCRResult::OCRToken token;
+        token.text = result.text;
+        token.box = QRect(0, 0, actualSize.width(), actualSize.height());
+        token.confidence = 1.0f;
+        token.lineId = 0;
+        result.tokens.append(token);
+        qDebug() << "OCREngine: Created single fallback token for entire text";
+        return;
+    }
+
+    // Estimate token positioning (simple left-to-right flow)
+    int wordsPerLine = qMax(1, static_cast<int>(qSqrt(words.size()))); // Square-ish layout
+    int lineHeight = actualSize.height() / qMax(1, (words.size() + wordsPerLine - 1) / wordsPerLine);
+    int wordWidth = actualSize.width() / wordsPerLine;
+
+    for (int i = 0; i < words.size(); ++i) {
+        OCRResult::OCRToken token;
+        token.text = words[i];
+        token.confidence = 1.0f; // Fallback tokens have full confidence
+        token.lineId = i / wordsPerLine;
+
+        // Calculate position
+        int col = i % wordsPerLine;
+        int row = i / wordsPerLine;
+        token.box = QRect(
+            col * wordWidth,
+            row * lineHeight,
+            wordWidth,
+            lineHeight
+        );
+
+        result.tokens.append(token);
+    }
+
+    qDebug() << "OCREngine: Created" << result.tokens.size() << "fallback tokens";
 }
 
 void OCREngine::stopRunningProcess()

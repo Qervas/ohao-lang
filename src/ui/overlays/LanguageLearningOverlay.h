@@ -17,11 +17,14 @@
 #include <QSlider>
 #include "OCREngine.h"
 #include "../core/LanguageManager.h"
-#include "ThemeManager.h"
+#include "../core/ThemeManager.h"
 
 class LanguageLearningOverlay : public QWidget
 {
     Q_OBJECT
+
+signals:
+    void escapePressed();
 
 public:
     enum LearningMode {
@@ -42,6 +45,9 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     bool eventFilter(QObject* object, QEvent* event) override;
+
+public slots:
+    void applyTheme();
 
 private slots:
     void onWordClicked(const QString& word);
@@ -73,7 +79,6 @@ private:
     void animateIn();
     void animateOut();
 
-    void applyTheme();
     ThemeManager::Theme getCurrentTheme() const;
     QString getLanguageDirection(const QString& langCode);
     QFont getLanguageFont(const QString& langCode, int size = 12);

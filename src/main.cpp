@@ -8,9 +8,9 @@
 #include <QLocalServer>
 #include <QMessageBox>
 #include <QDebug>
-#include "ui/FloatingWidget.h"
+#include "ui/core/FloatingWidget.h"
 #include "system/SystemTray.h"
-#include "ui/ThemeManager.h"
+#include "ui/core/ThemeManager.h"
 
 #ifdef _WIN32
 #include <Windows.h>
