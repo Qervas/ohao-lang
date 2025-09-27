@@ -15,6 +15,8 @@
 #include <QDebug>
 #include <QTransform>
 #include <QWindow>
+#include <QLocalServer>
+#include <QLocalSocket>
 
 FloatingWidget::FloatingWidget(QWidget *parent)
     : QWidget(parent), isDragging(false), currentScale(1.0), currentOpacity(200)
@@ -31,6 +33,15 @@ FloatingWidget::FloatingWidget(QWidget *parent)
     connect(shortcutManager, &GlobalShortcutManager::toggleVisibilityRequested,
             this, &FloatingWidget::toggleVisibility);
 #endif
+
+    // Setup local server for single instance support
+    localServer = new QLocalServer(this);
+    connect(localServer, &QLocalServer::newConnection, this, &FloatingWidget::handleNewConnection);
+    if (!localServer->listen("ohao-lang-server")) {
+        qDebug() << "Failed to start local server:" << localServer->errorString();
+    } else {
+        qDebug() << "Local server started successfully";
+    }
 
     // Restore saved position or fall back to default using a timer to ensure it's set after initialization
     QTimer::singleShot(100, [this]() {
@@ -447,5 +458,41 @@ void FloatingWidget::toggleVisibility()
         show();
         raise();
         activateWindow();
+    }
+}
+
+void FloatingWidget::activateWindow()
+{
+    qDebug() << "Activating FloatingWidget window";
+    show();
+    raise();
+    QWidget::activateWindow();
+
+    // Force focus and bring to front
+    setWindowState(windowState() & ~Qt::WindowMinimized | Qt::WindowActive);
+
+    // Flash the window to get user attention
+    QApplication::alert(this, 1000);
+}
+
+void FloatingWidget::handleNewConnection()
+{
+    qDebug() << "Handling new connection from another instance";
+    QLocalSocket *socket = localServer->nextPendingConnection();
+
+    if (socket) {
+        connect(socket, &QLocalSocket::readyRead, [this, socket]() {
+            QByteArray data = socket->readAll();
+            QString command = QString::fromUtf8(data);
+            qDebug() << "Received command from another instance:" << command;
+
+            if (command == "activate") {
+                activateWindow();
+            }
+
+            socket->deleteLater();
+        });
+
+        connect(socket, &QLocalSocket::disconnected, socket, &QLocalSocket::deleteLater);
     }
 }

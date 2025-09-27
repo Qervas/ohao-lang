@@ -28,6 +28,10 @@ ScreenshotWidget::ScreenshotWidget(QWidget *parent)
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
 
+    // Ensure this widget uses the application's theme palette
+    setPalette(QApplication::palette());
+    qDebug() << "ScreenshotWidget palette set. Window color:" << palette().color(QPalette::Window).name();
+
     // Capture screen immediately (for backward compatibility)
     captureScreen();
 
@@ -41,6 +45,10 @@ ScreenshotWidget::ScreenshotWidget(const QPixmap &screenshot, QWidget *parent)
     // Make fullscreen and frameless
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
+
+    // Ensure this widget uses the application's theme palette
+    setPalette(QApplication::palette());
+    qDebug() << "ScreenshotWidget palette set. Window color:" << palette().color(QPalette::Window).name();
 
     // Use the provided screenshot
     this->screenshot = screenshot;
@@ -325,18 +333,9 @@ void ScreenshotWidget::drawResultsOverlay(QPainter &painter)
     const int minWidth = 300;
     const int maxWidth = 500;
 
-    // Get current theme colors from the actual application palette
+    // Use the application palette directly - no need to re-detect theme
+    // The ThemeManager has already configured the correct palette
     QPalette appPalette = QApplication::palette();
-    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
-    const QString themeName = settings.value("appearance/theme", "Auto (System)").toString();
-    ThemeManager::Theme theme = ThemeManager::fromString(themeName);
-
-    // If it's auto, detect from system
-    if (theme == ThemeManager::Theme::Auto) {
-        auto hints = QGuiApplication::styleHints();
-        const bool dark = hints ? hints->colorScheme() == Qt::ColorScheme::Dark : false;
-        theme = dark ? ThemeManager::Theme::Dark : ThemeManager::Theme::Light;
-    }
 
     // Set up content font
     QFont textFont = painter.font();
@@ -404,17 +403,17 @@ void ScreenshotWidget::drawResultsOverlay(QPainter &painter)
 
     textColor = appPalette.color(QPalette::WindowText);
 
-    // Progress color: use highlight color with different saturation
+    // Progress color: use a vibrant variant of the highlight color
     progressColor = appPalette.color(QPalette::Highlight);
-    // Make progress color more vibrant/orange-ish
-    if (theme == ThemeManager::Theme::Light) {
-        progressColor = QColor(200, 100, 20);  // Orange for light theme
-    } else {
-        progressColor = QColor(255, 180, 50);  // Warm orange for dark themes
-    }
+    // Make it more vibrant by adjusting saturation
+    progressColor = progressColor.lighter(120);
 
     qDebug() << "Using theme colors - Background:" << backgroundColor.name()
-             << "Border:" << borderColor.name() << "Text:" << textColor.name();
+             << "Border:" << borderColor.name() << "Text:" << textColor.name()
+             << "Progress:" << progressColor.name();
+    qDebug() << "Application palette Window:" << appPalette.color(QPalette::Window).name()
+             << "WindowText:" << appPalette.color(QPalette::WindowText).name()
+             << "Highlight:" << appPalette.color(QPalette::Highlight).name();
 
     // Fill background
     painter.fillPath(backgroundPath, backgroundColor);

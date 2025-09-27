@@ -8,6 +8,7 @@
 #include <QSettings>
 #include <QCoreApplication>
 #include <QMoveEvent>
+#include <QLocalServer>
 
 class SettingsWindow;
 class GlobalShortcutManager;
@@ -23,6 +24,7 @@ public:
     void takeScreenshot();
     void openSettings();
     void toggleVisibility();
+    void activateWindow();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -35,6 +37,7 @@ protected:
 
 private slots:
     void animateHover(bool hover);
+    void handleNewConnection();
 
 private:
     void setupUI();
@@ -72,4 +75,7 @@ private:
 #endif
 
     bool screenshotInProgress = false;
+
+    // Single instance support
+    QLocalServer *localServer = nullptr;
 };

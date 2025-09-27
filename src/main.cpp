@@ -3,6 +3,10 @@
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QTimer>
+#include <QSharedMemory>
+#include <QLocalSocket>
+#include <QLocalServer>
+#include <QMessageBox>
 #include "ui/FloatingWidget.h"
 #include "system/SystemTray.h"
 #include "ui/ThemeManager.h"
@@ -14,6 +18,24 @@ int main(int argc, char *argv[])
     app.setApplicationName("ohao-lang");
     QCoreApplication::setOrganizationName("ohao");
     QCoreApplication::setOrganizationDomain("ohao.local");
+
+    // Single instance check using shared memory
+    const QString uniqueKey = "ohao-lang-single-instance";
+    QSharedMemory sharedMemory(uniqueKey);
+
+    if (!sharedMemory.create(1)) {
+        // Another instance is already running
+        // Try to communicate with existing instance via local socket
+        QLocalSocket socket;
+        socket.connectToServer("ohao-lang-server");
+        if (socket.waitForConnected(1000)) {
+            // Send activation signal to existing instance
+            socket.write("activate");
+            socket.waitForBytesWritten(1000);
+            socket.disconnectFromServer();
+        }
+        return 0; // Exit silently
+    }
 
     // Parse command line arguments for Linux desktop shortcuts
     QCommandLineParser parser;
