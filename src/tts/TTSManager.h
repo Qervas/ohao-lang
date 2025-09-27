@@ -22,6 +22,7 @@ public:
     bool isOutputTTSEnabled() const;
 
 private:
+    void configureFromSettings();  // Load and apply TTS settings
     explicit TTSManager(QObject* parent = nullptr);
     ~TTSManager();
     

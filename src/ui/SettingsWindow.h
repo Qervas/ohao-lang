@@ -92,6 +92,7 @@ private:
     QWidget *translationTab;
     QCheckBox *autoOcrCheck;
     QCheckBox *autoTranslateCheck;
+    QComboBox *overlayModeCombo;
     QComboBox *translationEngineCombo;
     QComboBox *sourceLanguageCombo;
     QComboBox *targetLanguageCombo;

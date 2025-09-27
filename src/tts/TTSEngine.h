@@ -64,6 +64,9 @@ public:
     void setTTSInputEnabled(bool enabled);
     void setTTSOutputEnabled(bool enabled);
 
+    // Unified configuration method
+    void configureFromCurrentSettings();
+
     void speak(const QString &text);
     void speak(const QString &text, bool isInputText);
     void speak(const QString &text, bool isInputText, const QLocale& locale);

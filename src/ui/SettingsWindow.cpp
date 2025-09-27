@@ -143,7 +143,7 @@ void SettingsWindow::setupGeneralTab()
     ttsInputCheckBox = new QCheckBox();
     ttsInputCheckBox->setText("🔊");
     ttsInputCheckBox->setToolTip("Enable TTS for Input Text (Read recognized OCR text aloud)");
-    ttsInputCheckBox->setChecked(false);
+    ttsInputCheckBox->setChecked(true);
     ttsInputCheckBox->setMaximumWidth(50);
     ttsInputCheckBox->setStyleSheet("QCheckBox { font-size: 18px; }");
 
@@ -327,6 +327,19 @@ void SettingsWindow::setupTranslationTab()
     autoTranslateCheck->setChecked(true);
     autoLayout->addWidget(autoTranslateCheck);
 
+    // Overlay Mode Selection
+    QHBoxLayout *overlayModeLayout = new QHBoxLayout();
+    QLabel *overlayModeLabel = new QLabel("Overlay Mode:");
+    overlayModeCombo = new QComboBox();
+    overlayModeCombo->addItems({"Quick Translation", "Deep Learning Mode"});
+    overlayModeCombo->setToolTip("Quick Translation: Simple overlay with text replacement\nDeep Learning Mode: Interactive learning overlay with word analysis");
+
+    overlayModeLayout->addWidget(overlayModeLabel);
+    overlayModeLayout->addWidget(overlayModeCombo);
+    overlayModeLayout->addStretch();
+
+    autoLayout->addLayout(overlayModeLayout);
+
     layout->addWidget(autoGroup);
 
     // Translation Engine Group
@@ -470,6 +483,7 @@ void SettingsWindow::loadSettings()
     // Translation Settings
     autoOcrCheck->setChecked(settings->value("translation/autoOcr", true).toBool());
     autoTranslateCheck->setChecked(settings->value("translation/autoTranslate", true).toBool());
+    overlayModeCombo->setCurrentText(settings->value("translation/overlayMode", "Deep Learning Mode").toString());
     translationEngineCombo->setCurrentText(settings->value("translation/engine", "Google Translate (Free)").toString());
     sourceLanguageCombo->setCurrentText(settings->value("translation/sourceLanguage", "Auto-Detect").toString());
     targetLanguageCombo->setCurrentText(settings->value("translation/targetLanguage", "English").toString());
@@ -485,7 +499,7 @@ void SettingsWindow::loadSettings()
     soundsCheck->setChecked(settings->value("appearance/sounds", false).toBool());
 
     // General TTS Options
-    ttsInputCheckBox->setChecked(settings->value("general/ttsInput", false).toBool());
+    ttsInputCheckBox->setChecked(settings->value("general/ttsInput", true).toBool());
     ttsOutputCheckBox->setChecked(settings->value("general/ttsOutput", true).toBool());
 
     // TTS Settings
@@ -596,6 +610,7 @@ void SettingsWindow::saveSettings()
     // Translation Settings
     if (autoOcrCheck) settings->setValue("translation/autoOcr", autoOcrCheck->isChecked());
     if (autoTranslateCheck) settings->setValue("translation/autoTranslate", autoTranslateCheck->isChecked());
+    if (overlayModeCombo) settings->setValue("translation/overlayMode", overlayModeCombo->currentText());
     if (translationEngineCombo) settings->setValue("translation/engine", translationEngineCombo->currentText());
     if (sourceLanguageCombo) settings->setValue("translation/sourceLanguage", sourceLanguageCombo->currentText());
     if (targetLanguageCombo) settings->setValue("translation/targetLanguage", targetLanguageCombo->currentText());
@@ -698,7 +713,7 @@ void SettingsWindow::resetToDefaults()
     soundsCheck->setChecked(false);
     
     // Reset General TTS Options
-    ttsInputCheckBox->setChecked(false);
+    ttsInputCheckBox->setChecked(true);
     ttsOutputCheckBox->setChecked(true);
     if (ttsProviderCombo) {
         const int idx = ttsProviderCombo->findData(QStringLiteral("google-web"));
@@ -1240,31 +1255,11 @@ void SettingsWindow::onTestTTSClicked()
     // Get the language code for this voice
     QString langCode = getLanguageCodeFromVoice(voice);
 
-    ttsEngine->setProviderId(providerId);
-    ttsEngine->setPrimaryVoice(voice);
-    ttsEngine->setInputVoice(inputVoiceCombo ? inputVoiceCombo->currentText().trimmed() : QString());
-    ttsEngine->setOutputVoice(outputVoiceCombo ? outputVoiceCombo->currentText().trimmed() : QString());
-    ttsEngine->setVolume(1.0);
-    ttsEngine->setPitch(0.0);
-    ttsEngine->setRate(0.0);
+    // Use the unified configuration method
+    ttsEngine->configureFromCurrentSettings();
 
-    if (providerId == QStringLiteral("google-web")) {
-        // CRUCIAL: Set the language code for Google TTS
-        ttsEngine->configureGoogle(QString(), voice, langCode);
-    } else {
-        // For Edge TTS, use the auto-detected or installed edge-tts command
-        const QString exePath = ttsEngine->edgeExecutable();
-        if (exePath.isEmpty() || exePath == "edge-tts") {
-            // Set default command if not already set
-            ttsEngine->setEdgeExecutable("edge-tts");
-        } else if (exePath.isEmpty()) {
-            // Try to auto-detect again
-            checkEdgeTTSAvailability();
-            ttsStatusText->setPlainText(tr("⚠️ Edge TTS not configured. Please install it first."));
-            return;
-        }
-        ttsEngine->setEdgeVoice(voice);
-    }
+    // Override with test-specific settings for the test
+    ttsEngine->setVolume(1.0);  // Full volume for test
 
     ttsStatusText->setPlainText(tr("▶️ Playing test text..."));
 

@@ -2,6 +2,9 @@
 #include "SelectionToolbar.h"
 #include "OCRResultWindow.h"
 #include "TTSManager.h"
+#include "TTSEngine.h"
+#include "ThemeManager.h"
+#include "../core/LanguageManager.h"
 #include <QApplication>
 #include <QScreen>
 #include <QBrush>
@@ -13,6 +16,8 @@
 #include <QDir>
 #include <QPainterPath>
 #include <QTimer>
+#include <QStyleHints>
+#include <QGuiApplication>
 #include <iostream>
 
 ScreenshotWidget::ScreenshotWidget(QWidget *parent)
@@ -205,9 +210,14 @@ void ScreenshotWidget::paintEvent(QPaintEvent *event)
         drawToolbar(painter);
     }
 
-    // Draw results overlay if showing
+    // Draw results overlay if showing and in Quick Translation mode
     if (showingResults) {
-        drawResultsOverlay(painter);
+        QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
+        QString overlayMode = settings.value("translation/overlayMode", "Deep Learning Mode").toString();
+
+        if (overlayMode == "Quick Translation") {
+            drawResultsOverlay(painter);
+        }
     }
 }
 
@@ -312,18 +322,25 @@ void ScreenshotWidget::drawResultsOverlay(QPainter &painter)
     QRect screenGeometry = screen->geometry();
     const int margin = 20;
     const int padding = 20;
-    const int minWidth = 400;
-    const int maxWidth = 600;
+    const int minWidth = 300;
+    const int maxWidth = 500;
 
-    // Calculate text dimensions
-    QFont titleFont = painter.font();
-    titleFont.setPointSize(14);
-    titleFont.setWeight(QFont::Bold);
+    // Get current theme colors from the actual application palette
+    QPalette appPalette = QApplication::palette();
+    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
+    const QString themeName = settings.value("appearance/theme", "Auto (System)").toString();
+    ThemeManager::Theme theme = ThemeManager::fromString(themeName);
 
+    // If it's auto, detect from system
+    if (theme == ThemeManager::Theme::Auto) {
+        auto hints = QGuiApplication::styleHints();
+        const bool dark = hints ? hints->colorScheme() == Qt::ColorScheme::Dark : false;
+        theme = dark ? ThemeManager::Theme::Dark : ThemeManager::Theme::Light;
+    }
+
+    // Set up content font
     QFont textFont = painter.font();
     textFont.setPointSize(12);
-
-    QFontMetrics titleFM(titleFont);
     QFontMetrics textFM(textFont);
 
     // Progress or results content
@@ -342,15 +359,13 @@ void ScreenshotWidget::drawResultsOverlay(QPainter &painter)
         content = "Processing...";
     }
 
-    // Calculate content area
-    int contentWidth = qBound(minWidth, qMax(titleFM.horizontalAdvance("OCR & Translation Results"),
-                                           textFM.horizontalAdvance(content)), maxWidth);
-
+    // Calculate content area (no title)
+    int contentWidth = qBound(minWidth, textFM.horizontalAdvance(content), maxWidth);
     QRect textRect(0, 0, contentWidth - padding * 2, 0);
     QRect boundingRect = textFM.boundingRect(textRect, Qt::TextWordWrap, content);
 
     int overlayWidth = contentWidth;
-    int overlayHeight = titleFM.height() + padding + boundingRect.height() + padding * 2;
+    int overlayHeight = boundingRect.height() + padding * 2;
 
     // Position overlay (prefer right side of selection, fall back to left/below)
     int x = selection.right() + margin;
@@ -374,63 +389,127 @@ void ScreenshotWidget::drawResultsOverlay(QPainter &painter)
     QRect overlayRect(x, y, overlayWidth, overlayHeight);
     m_resultAreaRect = overlayRect;
 
-    // Draw background with glassmorphism effect
+    // Draw background with theme-aware colors
     QPainterPath backgroundPath;
-    backgroundPath.addRoundedRect(overlayRect, 15, 15);
+    backgroundPath.addRoundedRect(overlayRect, 12, 12);
 
-    // Background with blur effect simulation
-    painter.fillPath(backgroundPath, QColor(20, 20, 30, 240));
+    QColor backgroundColor, borderColor, textColor, progressColor;
 
-    // Border with gradient
-    QPen borderPen;
-    borderPen.setWidth(2);
-    QLinearGradient borderGradient(overlayRect.topLeft(), overlayRect.bottomRight());
-    borderGradient.setColorAt(0, QColor(100, 150, 255, 180));
-    borderGradient.setColorAt(1, QColor(150, 100, 255, 180));
-    borderPen.setBrush(borderGradient);
+    // Use actual theme colors from application palette
+    backgroundColor = appPalette.color(QPalette::Window);
+    backgroundColor.setAlpha(240);  // Make it semi-transparent for overlay effect
+
+    borderColor = appPalette.color(QPalette::Highlight);
+    borderColor.setAlpha(180);  // Semi-transparent border
+
+    textColor = appPalette.color(QPalette::WindowText);
+
+    // Progress color: use highlight color with different saturation
+    progressColor = appPalette.color(QPalette::Highlight);
+    // Make progress color more vibrant/orange-ish
+    if (theme == ThemeManager::Theme::Light) {
+        progressColor = QColor(200, 100, 20);  // Orange for light theme
+    } else {
+        progressColor = QColor(255, 180, 50);  // Warm orange for dark themes
+    }
+
+    qDebug() << "Using theme colors - Background:" << backgroundColor.name()
+             << "Border:" << borderColor.name() << "Text:" << textColor.name();
+
+    // Fill background
+    painter.fillPath(backgroundPath, backgroundColor);
+
+    // Draw border
+    QPen borderPen(borderColor, 1);
     painter.setPen(borderPen);
     painter.drawPath(backgroundPath);
 
-    // Draw title
-    painter.setFont(titleFont);
-    painter.setPen(Qt::white);
-    QRect titleRect(x + padding, y + padding, overlayWidth - padding * 2, titleFM.height());
-
-    QString title = "🔍 OCR Results";
-    if (hasTranslation) {
-        title = "🔍 OCR & Translation";
-    } else if (!m_currentResult.success && !m_progressText.isEmpty()) {
-        title = "⏳ Processing...";
-    }
-
-    painter.drawText(titleRect, Qt::AlignLeft | Qt::AlignVCenter, title);
-
-    // Draw content
+    // Draw content (no title)
     painter.setFont(textFont);
-    QRect contentRect(x + padding, y + padding + titleFM.height() + padding/2,
-                     overlayWidth - padding * 2, boundingRect.height());
+    QRect contentRect(x + padding, y + padding, overlayWidth - padding * 2, boundingRect.height());
 
     // Color based on status
     if (m_currentResult.success) {
-        painter.setPen(QColor(220, 220, 220));
+        painter.setPen(textColor);
     } else {
-        painter.setPen(QColor(255, 200, 100)); // Orange for progress
+        painter.setPen(progressColor);
     }
 
     painter.drawText(contentRect, Qt::TextWordWrap, content);
 
-    // Add copy hint at bottom if results are ready
+    // Add copy hint at screen edge if results are ready
     if (m_currentResult.success) {
         QFont hintFont = textFont;
         hintFont.setPointSize(10);
         painter.setFont(hintFont);
-        painter.setPen(QColor(150, 150, 150));
+
+        // Use theme-aware hint color
+        QColor hintColor = textColor;
+        hintColor.setAlpha(150); // Make it more transparent so it's less intrusive
+        painter.setPen(hintColor);
 
         QFontMetrics hintFM(hintFont);
         QString hint = "Press Ctrl+C to copy • Press Esc to close";
-        QRect hintRect(x + padding, y + overlayHeight - padding - hintFM.height(),
-                      overlayWidth - padding * 2, hintFM.height());
-        painter.drawText(hintRect, Qt::AlignCenter, hint);
+        int hintWidth = hintFM.horizontalAdvance(hint) + 20; // Add some padding
+        int hintHeight = hintFM.height() + 10;
+
+        // Smart hint positioning: avoid blocking selection and overlay
+        QRect hintRect;
+        const int edgeMargin = 10;
+
+        // Check distance from selection to screen edges to choose best position
+        int distToTop = selection.top();
+        int distToBottom = screenGeometry.height() - selection.bottom();
+        int distToLeft = selection.left();
+        int distToRight = screenGeometry.width() - selection.right();
+
+        // Don't show hint if selection or overlay is too close to all edges
+        bool tooCloseToTop = distToTop < 60;
+        bool tooCloseToBottom = distToBottom < 60;
+        bool tooCloseToLeft = distToLeft < hintWidth + 20;
+        bool tooCloseToRight = distToRight < hintWidth + 20;
+
+        // Check if overlay would conflict with hint positions
+        QRect overlayRect(x, y, overlayWidth, overlayHeight);
+
+        if (!tooCloseToTop && (distToTop > distToBottom || tooCloseToBottom)) {
+            // Place hint at top of screen
+            hintRect = QRect((screenGeometry.width() - hintWidth) / 2, edgeMargin,
+                           hintWidth, hintHeight);
+            // Hide if overlay extends to top
+            if (overlayRect.top() < 80) {
+                hintRect = QRect(); // Empty rect = don't draw
+            }
+        } else if (!tooCloseToBottom && distToBottom > 60) {
+            // Place hint at bottom of screen
+            hintRect = QRect((screenGeometry.width() - hintWidth) / 2,
+                           screenGeometry.height() - hintHeight - edgeMargin,
+                           hintWidth, hintHeight);
+            // Hide if overlay extends to bottom
+            if (overlayRect.bottom() > screenGeometry.height() - 80) {
+                hintRect = QRect(); // Empty rect = don't draw
+            }
+        } else {
+            // Too close to edges or conflicts - don't show hint
+            hintRect = QRect(); // Empty rect = don't draw
+        }
+
+        // Draw hint only if we have a valid position
+        if (!hintRect.isEmpty()) {
+            // Draw subtle background for better readability
+            QColor bgColor = backgroundColor;
+            bgColor.setAlpha(120);
+            painter.fillRect(hintRect, bgColor);
+
+            // Draw border
+            QPen borderPen(borderColor, 1);
+            painter.setPen(borderPen);
+            painter.drawRect(hintRect);
+
+            // Draw text
+            painter.setPen(hintColor);
+            painter.drawText(hintRect, Qt::AlignCenter, hint);
+        }
     }
 }
 
@@ -710,6 +789,10 @@ void ScreenshotWidget::handleOCR()
             m_textOverlay->setAttribute(Qt::WA_DeleteOnClose, false);
             m_textOverlay->setDebugBoxes(true); // start with debug boxes; can toggle via setting later
         }
+        if (!m_learningOverlay) {
+            m_learningOverlay = new LanguageLearningOverlay(nullptr);
+            m_learningOverlay->setAttribute(Qt::WA_DeleteOnClose, false);
+        }
         if (!m_lastOCRImage.isNull()) {
             m_textOverlay->setSourceImageSize(m_lastOCRImage.size());
         }
@@ -756,15 +839,56 @@ void ScreenshotWidget::onOCRFinished(const OCRResult &result)
 
     m_ocrInProgress = false;
 
-    // Speak the OCR result if TTS input is enabled
-    if (result.success && !result.text.isEmpty()) {
-        TTSManager::instance().speakInputText(result.text, result.language);
+    // === DEBUG: TTS in OCR workflow ===
+    qDebug() << "=== OCR TTS DEBUG ===";
+    qDebug() << "Result success:" << result.success;
+    qDebug() << "Text:" << result.text.left(50);
+    qDebug() << "Language:" << result.language;
+    qDebug() << "Has translation:" << result.hasTranslation;
+    qDebug() << "Translated text:" << result.translatedText.left(50);
+    qDebug() << "Target language:" << result.targetLanguage;
+
+    // Use the same TTS engine and approach as Settings window test
+    TTSEngine* ttsEngine = TTSManager::instance().ttsEngine();
+    if (ttsEngine && result.success) {
+        qDebug() << "✓ Using same TTS engine as Settings window";
+        qDebug() << "✓ TTS Engine provider:" << ttsEngine->providerId();
+        qDebug() << "✓ TTS Input enabled:" << ttsEngine->isTTSInputEnabled();
+        qDebug() << "✓ TTS Output enabled:" << ttsEngine->isTTSOutputEnabled();
+
+        // Configure TTS engine exactly like Settings test does
+        ttsEngine->configureFromCurrentSettings();
+
+        // Set volume to maximum like Settings test does
+        ttsEngine->setVolume(1.0);
+        qDebug() << "✓ TTS configured - Provider:" << ttsEngine->providerId() << "Volume:" << ttsEngine->volume();
+
+        // Speak the OCR result if TTS input is enabled and we have text
+        if (ttsEngine->isTTSInputEnabled() && !result.text.isEmpty()) {
+            qDebug() << "✓ Speaking OCR text:" << result.text.left(50) << "Language:" << result.language;
+            QLocale locale = result.language.isEmpty() ? QLocale() : LanguageManager::instance().localeFromLanguageCode(result.language);
+            qDebug() << "✓ Using locale:" << locale.name() << "Volume:" << ttsEngine->volume();
+            ttsEngine->speak(result.text, true, locale);  // true = isInputText
+        } else {
+            qDebug() << "✗ OCR TTS skipped - Input enabled:" << ttsEngine->isTTSInputEnabled() << "Text empty:" << result.text.isEmpty();
+        }
+
+        // Speak the translation result if TTS output is enabled and we have translation
+        if (ttsEngine->isTTSOutputEnabled() && result.hasTranslation && !result.translatedText.isEmpty()) {
+            qDebug() << "✓ Speaking translation:" << result.translatedText.left(50) << "Target language:" << result.targetLanguage;
+            QLocale locale = result.targetLanguage.isEmpty() ? QLocale() : LanguageManager::instance().localeFromLanguageCode(result.targetLanguage);
+            qDebug() << "✓ Using locale:" << locale.name() << "Volume:" << ttsEngine->volume();
+            ttsEngine->speak(result.translatedText, false, locale);  // false = isOutputText
+        } else {
+            qDebug() << "✗ Translation TTS skipped - Output enabled:" << ttsEngine->isTTSOutputEnabled()
+                     << "Has translation:" << result.hasTranslation << "Translation empty:" << result.translatedText.isEmpty();
+        }
+    } else {
+        qDebug() << "✗ TTS engine not available or OCR failed - Engine:" << (ttsEngine != nullptr) << "Success:" << result.success;
     }
 
-    // Speak the translation result if TTS output is enabled and translation is available
-    if (result.success && result.hasTranslation && !result.translatedText.isEmpty()) {
-        TTSManager::instance().speakOutputText(result.translatedText, result.targetLanguage);
-    }
+    qDebug() << "=== END OCR TTS DEBUG ===";
+    qDebug();
 
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     bool autoOcr = settings.value("translation/autoOcr", true).toBool();
@@ -773,11 +897,37 @@ void ScreenshotWidget::onOCRFinished(const OCRResult &result)
         // Update overlay with results
         m_currentResult = result;
         m_progressText.clear();
-        if (m_textOverlay && result.success) {
-            m_textOverlay->setSourceImageSize(m_lastOCRImage.size());
-            QString translated = result.hasTranslation ? result.translatedText : QString();
-            m_textOverlay->setTokens(result.tokens, result.text, translated);
-            m_textOverlay->setMode(translated.isEmpty() ? TextReplacementOverlay::ShowOriginal : TextReplacementOverlay::ShowTranslated);
+
+        // Show overlay based on user's overlay mode setting
+        if (result.success && !result.text.isEmpty()) {
+            QString overlayMode = settings.value("translation/overlayMode", "Deep Learning Mode").toString();
+
+            // Calculate selection rect for positioning
+            QRect selRect(QPoint(qMin(startPoint.x(), endPoint.x()), qMin(startPoint.y(), endPoint.y())),
+                          QPoint(qMax(startPoint.x(), endPoint.x()), qMax(startPoint.y(), endPoint.y())));
+            QRect globalSelRect(mapToGlobal(selRect.topLeft()), selRect.size());
+
+            if (overlayMode == "Deep Learning Mode") {
+                // Use enhanced learning overlay
+                if (m_learningOverlay) {
+                    m_learningOverlay->showLearningContent(result);
+                    m_learningOverlay->positionNearSelection(globalSelRect);
+                }
+                // Hide simple overlay
+                if (m_textOverlay) {
+                    m_textOverlay->hide();
+                }
+            } else {
+                // Quick Translation mode: use the blue overlay (drawResultsOverlay) in paintEvent
+                // Hide both widget overlays and let paintEvent show the blue overlay
+                if (m_textOverlay) {
+                    m_textOverlay->hide();
+                }
+                if (m_learningOverlay) {
+                    m_learningOverlay->hide();
+                }
+                // The blue overlay will be shown by paintEvent -> drawResultsOverlay
+            }
         }
         update(); // Redraw to show results
     } else if (ocrResultWindow) {

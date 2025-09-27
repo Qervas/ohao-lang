@@ -11,6 +11,7 @@
 #include "OCREngine.h"
 #include "ScreenCapture.h"
 #include "TextReplacementOverlay.h"
+#include "LanguageLearningOverlay.h"
 
 class OCRResultWindow;
 
@@ -83,6 +84,7 @@ private:
     QString m_progressText;
     QRect m_resultAreaRect;
     TextReplacementOverlay *m_textOverlay = nullptr;
+    LanguageLearningOverlay *m_learningOverlay = nullptr;
 
     // Guard to debounce OCR when already running
     bool m_ocrInProgress = false;

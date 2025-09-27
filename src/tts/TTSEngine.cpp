@@ -231,7 +231,7 @@ bool TTSEngine::isSpeaking() const
 
 void TTSEngine::loadSettings()
 {
-    m_ttsInputEnabled = m_settings->value("general/ttsInput", false).toBool();
+    m_ttsInputEnabled = m_settings->value("general/ttsInput", true).toBool();
     m_ttsOutputEnabled = m_settings->value("general/ttsOutput", true).toBool();
 
     m_settings->beginGroup("TTS");
@@ -313,4 +313,60 @@ void TTSEngine::applyProviderConfig(const QString& voiceOverride)
         config.languageCode = m_googleLanguageCode;
     }
     provider()->applyConfig(config);
+}
+
+void TTSEngine::configureFromCurrentSettings()
+{
+    qDebug() << "TTSEngine: Configuring from current settings";
+
+    // Reload settings to get the latest values
+    loadSettings();
+
+    // Get the current provider and voices from settings
+    m_settings->beginGroup("TTS");
+    QString providerId = m_settings->value("provider", QStringLiteral("google-web")).toString();
+    QString inputVoice = m_settings->value("inputVoice").toString();
+    QString outputVoice = m_settings->value("outputVoice").toString();
+    QString primaryVoice = outputVoice.isEmpty() ? inputVoice : outputVoice;
+    m_settings->endGroup();
+
+    qDebug() << "TTSEngine: Using provider:" << providerId << "primary voice:" << primaryVoice
+             << "input voice:" << inputVoice << "output voice:" << outputVoice;
+
+    // Set the provider
+    setProviderId(providerId);
+
+    // Configure voices
+    if (!inputVoice.isEmpty()) {
+        setInputVoice(inputVoice);
+    }
+    if (!outputVoice.isEmpty()) {
+        setOutputVoice(outputVoice);
+        setPrimaryVoice(outputVoice);
+    }
+
+    // Configure provider-specific settings based on current provider
+    if (providerId == QStringLiteral("google-web")) {
+        // For Google Web TTS, extract language code from voice name
+        QString voice = primaryVoice;
+        if (!voice.isEmpty()) {
+            // Extract language code from voice (e.g., "en-US-Wavenet-D" -> "en-US")
+            QString langCode = voice.split('-').mid(0, 2).join('-');
+            if (langCode.isEmpty()) {
+                langCode = "en-US"; // Default fallback
+            }
+            qDebug() << "TTSEngine: Configuring Google TTS with voice:" << voice << "language:" << langCode;
+            configureGoogle(QString(), voice, langCode);
+        }
+    } else if (providerId == QStringLiteral("edge-free") || providerId == QStringLiteral("edge-tts")) {
+        // For Edge TTS
+        QString edgeExe = m_settings->value("TTS/edgeExecutable", "edge-tts").toString();
+        setEdgeExecutable(edgeExe);
+        if (!primaryVoice.isEmpty()) {
+            setEdgeVoice(primaryVoice);
+        }
+        qDebug() << "TTSEngine: Configured Edge TTS with executable:" << edgeExe << "voice:" << primaryVoice;
+    }
+
+    qDebug() << "TTSEngine: Configuration complete";
 }
