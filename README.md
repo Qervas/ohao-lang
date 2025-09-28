@@ -3,7 +3,7 @@
 [![Windows](https://img.shields.io/badge/Windows-10%2F11-blue?logo=windows)](https://github.com/Qervas/ohao-lang)
 [![Qt](https://img.shields.io/badge/Qt-6.9.2-green?logo=qt)](https://qt.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v1.0.0-red)](https://github.com/Qervas/ohao-lang/releases)
+[![Release](https://img.shields.io/badge/Release-v1.0.1-red)](https://github.com/Qervas/ohao-lang/releases)
 
 A powerful, portable OCR and translation tool with integrated Text-to-Speech functionality. Perfect for language learners, professionals, and anyone working with multilingual content.
 
@@ -41,11 +41,29 @@ A powerful, portable OCR and translation tool with integrated Text-to-Speech fun
 - **Portable executable** - no installation required
 - Settings persistence across sessions
 
-## 🚀 Quick Start
+## � Changelog
+
+### v1.0.1 (2025-09-28)
+- **TTS Enhancement**: Implement dynamic voice discovery and caching for TTS providers
+- **UI Improvements**: Add OverlayManager and QuickTranslationOverlay for enhanced OCR functionality
+- **Architecture**: Refactor ThemeManager to singleton pattern and update theme application across UI components
+- **System Integration**: Implement single instance support with local server and shared memory
+- **Language Learning**: Add Language Learning Overlay and integrate with ScreenshotWidget
+- **TTS Refinement**: Implement LanguageManager for language support and enhance TTS functionality with locale handling
+- **New Components**: Add SettingsWindow, TextReplacementOverlay, and ThemeManager classes
+- **TTS Architecture**: Refactor TTS Engine and Provider Architecture
+- **Cross-platform**: Linux compatibility fixes
+
+### v1.0.0 (2025-09-24)
+- Initial release with OCR, translation, and TTS functionality
+- Support for Swedish language learning
+- Portable executable with Qt6 framework
+
+## �🚀 Quick Start
 
 ### Option 1: Download Portable Release (Recommended)
 
-1. **Download** the latest release: [`ohao-lang-portable-v1.0.0.zip`](https://github.com/Qervas/ohao-lang/releases)
+1. **Download** the latest release: [`ohao-lang-portable-v1.0.1.zip`](https://github.com/Qervas/ohao-lang/releases)
 2. **Extract** to any folder (USB drive, Desktop, etc.)
 3. **Install OCR dependencies** (see below)
 4. **Run** `ohao-lang.exe` or `Start-OhaoLang.bat`
@@ -278,7 +296,7 @@ cmake -DENABLE_CONSOLE=ON --build build --config Release
 ### File Structure
 
 ```
-ohao-lang-portable-v1.0.0/
+ohao-lang-portable-v1.0.1/
 ├── ohao-lang.exe           # Main executable (480KB)
 ├── Start-OhaoLang.bat      # Convenience launcher
 ├── README.txt              # User instructions
