@@ -117,6 +117,9 @@ private:
     // Helper to stop any running process safely
     void stopRunningProcess();
 
+    // Language-specific character correction
+    QString correctLanguageSpecificCharacters(const QString &text, const QString &language);
+
     Engine m_engine = Tesseract;
     QString m_language = "English";
     int m_qualityLevel = 3;

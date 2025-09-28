@@ -138,7 +138,13 @@ void SettingsWindow::setupGeneralTab()
                                "Japanese", "Korean", "Spanish", "French", "German", "Russian",
                                "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
     ocrLanguageCombo->setToolTip("Language for text recognition from screenshots");
-    connect(ocrLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString&){ updateVoicesForLanguage(); });
+    connect(ocrLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString& language){
+        updateVoicesForLanguage();
+        // Auto-sync translation source language with OCR input language (unless auto-detect is enabled)
+        if (sourceLanguageCombo && autoDetectSourceCheck && !autoDetectSourceCheck->isChecked()) {
+            sourceLanguageCombo->setCurrentText(language);
+        }
+    });
 
     inputLangLayout->addWidget(ocrLanguageCombo, 1);
 
@@ -324,11 +330,48 @@ void SettingsWindow::setupTranslationTab()
     connect(translationEngineCombo, &QComboBox::currentTextChanged, this, &SettingsWindow::onTranslationEngineChanged);
     engineLayout->addRow("Engine:", translationEngineCombo);
 
+    QWidget *sourceLanguageWidget = new QWidget();
+    QVBoxLayout *sourceLangLayout = new QVBoxLayout(sourceLanguageWidget);
+    sourceLangLayout->setContentsMargins(0, 0, 0, 0);
+    sourceLangLayout->setSpacing(5);
+
     sourceLanguageCombo = new QComboBox();
-    sourceLanguageCombo->addItems({"Auto-Detect", "English", "Chinese (Simplified)", "Chinese (Traditional)",
+    sourceLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
                                   "Japanese", "Korean", "Spanish", "French", "German", "Russian",
                                   "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
-    engineLayout->addRow("Source Language:", sourceLanguageCombo);
+
+    // Auto-detect checkbox with warning
+    autoDetectSourceCheck = new QCheckBox("Enable Auto-Detect (Not Recommended)");
+    autoDetectSourceCheck->setToolTip("⚠️ Auto-detect may skip translation when text appears to be in target language.\n"
+                               "For best results, use specific source language matching your OCR input language.");
+    autoDetectSourceCheck->setStyleSheet("QCheckBox { color: #ff6b35; font-weight: bold; }");
+    connect(autoDetectSourceCheck, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (enabled) {
+            sourceLanguageCombo->clear();
+            sourceLanguageCombo->addItems({"Auto-Detect", "English", "Chinese (Simplified)", "Chinese (Traditional)",
+                                          "Japanese", "Korean", "Spanish", "French", "German", "Russian",
+                                          "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
+            sourceLanguageCombo->setCurrentText("Auto-Detect");
+        } else {
+            QString currentLang = sourceLanguageCombo->currentText();
+            sourceLanguageCombo->clear();
+            sourceLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
+                                          "Japanese", "Korean", "Spanish", "French", "German", "Russian",
+                                          "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
+            if (currentLang != "Auto-Detect") {
+                sourceLanguageCombo->setCurrentText(currentLang);
+            } else {
+                // Sync with OCR input language when disabling auto-detect
+                if (ocrLanguageCombo) {
+                    sourceLanguageCombo->setCurrentText(ocrLanguageCombo->currentText());
+                }
+            }
+        }
+    });
+
+    sourceLangLayout->addWidget(sourceLanguageCombo);
+    sourceLangLayout->addWidget(autoDetectSourceCheck);
+    engineLayout->addRow("Source Language:", sourceLanguageWidget);
 
     // Target Language setting moved to General tab
     QLabel *targetNote = new QLabel("<i>Target Language setting moved to General tab</i>");
@@ -456,7 +499,24 @@ void SettingsWindow::loadSettings()
     autoTranslateCheck->setChecked(settings->value("translation/autoTranslate", true).toBool());
     overlayModeCombo->setCurrentText(settings->value("translation/overlayMode", "Deep Learning Mode").toString());
     translationEngineCombo->setCurrentText(settings->value("translation/engine", "Google Translate (Free)").toString());
-    sourceLanguageCombo->setCurrentText(settings->value("translation/sourceLanguage", "Auto-Detect").toString());
+
+    // Load auto-detect setting and configure accordingly
+    bool autoDetectEnabled = settings->value("translation/autoDetectSource", false).toBool();
+    autoDetectSourceCheck->setChecked(autoDetectEnabled);
+
+    if (autoDetectEnabled) {
+        // Add Auto-Detect option and set it
+        sourceLanguageCombo->clear();
+        sourceLanguageCombo->addItems({"Auto-Detect", "English", "Chinese (Simplified)", "Chinese (Traditional)",
+                                      "Japanese", "Korean", "Spanish", "French", "German", "Russian",
+                                      "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
+        sourceLanguageCombo->setCurrentText(settings->value("translation/sourceLanguage", "Auto-Detect").toString());
+    } else {
+        // Default to OCR input language for better translation results
+        QString defaultSourceLang = settings->value("general/ocrLanguage", "English").toString();
+        sourceLanguageCombo->setCurrentText(settings->value("translation/sourceLanguage", defaultSourceLang).toString());
+    }
+
     targetLanguageCombo->setCurrentText(settings->value("translation/targetLanguage", "English").toString());
     apiUrlEdit->setText(settings->value("translation/apiUrl", "").toString());
 
@@ -580,6 +640,7 @@ void SettingsWindow::saveSettings()
     if (autoTranslateCheck) settings->setValue("translation/autoTranslate", autoTranslateCheck->isChecked());
     if (overlayModeCombo) settings->setValue("translation/overlayMode", overlayModeCombo->currentText());
     if (translationEngineCombo) settings->setValue("translation/engine", translationEngineCombo->currentText());
+    if (autoDetectSourceCheck) settings->setValue("translation/autoDetectSource", autoDetectSourceCheck->isChecked());
     if (sourceLanguageCombo) settings->setValue("translation/sourceLanguage", sourceLanguageCombo->currentText());
     if (targetLanguageCombo) settings->setValue("translation/targetLanguage", targetLanguageCombo->currentText());
     if (apiUrlEdit) settings->setValue("translation/apiUrl", apiUrlEdit->text().trimmed());
@@ -667,7 +728,12 @@ void SettingsWindow::resetToDefaults()
     // Reset Translation settings
     autoTranslateCheck->setChecked(true);
     translationEngineCombo->setCurrentText("Google Translate (Free)");
-    sourceLanguageCombo->setCurrentText("Auto-Detect");
+    autoDetectSourceCheck->setChecked(false);  // Default to manual source language
+    sourceLanguageCombo->clear();
+    sourceLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
+                                  "Japanese", "Korean", "Spanish", "French", "German", "Russian",
+                                  "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
+    sourceLanguageCombo->setCurrentText("English");
     targetLanguageCombo->setCurrentText("English");
     apiUrlEdit->clear();
     apiKeyEdit->clear();

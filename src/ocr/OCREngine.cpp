@@ -429,6 +429,14 @@ QString OCREngine::getTesseractLanguageCode(const QString &language)
         {"German", "deu"},
         {"Russian", "rus"},
         {"Portuguese", "por"},
+        {"Italian", "ita"},
+        {"Dutch", "nld"},
+        {"Polish", "pol"},
+        {"Swedish", "swe"},      // THIS WAS MISSING!
+        {"Arabic", "ara"},
+        {"Hindi", "hin"},
+        {"Thai", "tha"},
+        {"Vietnamese", "vie"},
         {"Auto-Detect", ""}
     };
 
@@ -648,6 +656,10 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
         
         // Apply intelligent paragraph merging
         result.text = mergeParagraphLines(lines, result.tokens);
+
+        // Apply language-specific character corrections
+        result.text = correctLanguageSpecificCharacters(result.text, m_language);
+
         result.success = !result.text.isEmpty();
         result.confidence = "N/A";
         result.language = m_language;
@@ -672,6 +684,10 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
                     } else {
                         result.text = txt;
                     }
+
+                    // Apply language-specific character corrections
+                    result.text = correctLanguageSpecificCharacters(result.text, m_language);
+
                     result.success = true;
                 }
             }
@@ -733,6 +749,10 @@ void OCREngine::onPythonOCRFinished(int exitCode, QProcess::ExitStatus exitStatu
             QJsonObject obj = doc.object();
             result.success = obj["success"].toBool();
             result.text = obj["text"].toString();
+
+            // Apply language-specific character corrections
+            result.text = correctLanguageSpecificCharacters(result.text, m_language);
+
             result.confidence = obj["confidence"].toString();
             result.language = m_language;
             result.errorMessage = obj["error"].toString();
@@ -808,6 +828,10 @@ void OCREngine::onNetworkReplyFinished()
             if (!parsedResults.isEmpty()) {
                 QJsonObject firstResult = parsedResults[0].toObject();
                 result.text = firstResult["ParsedText"].toString();
+
+                // Apply language-specific character corrections
+                result.text = correctLanguageSpecificCharacters(result.text, m_language);
+
                 result.success = !result.text.isEmpty();
                 result.confidence = "N/A";
                 result.language = m_language;
@@ -1168,13 +1192,27 @@ QString OCREngine::mergeParagraphLines(const QStringList &lines, const QVector<O
             if (!currentParagraph.isEmpty()) {
                 paragraphs.append(currentParagraph.trimmed());
             }
-            currentParagraph = current.text;
+            currentParagraph = current.text.trimmed();
         } else {
-            // Continue current paragraph - join with space
-            if (!currentParagraph.isEmpty()) {
-                currentParagraph += " ";
+            // Continue current paragraph - smart space handling for TTS
+            QString trimmedCurrentText = current.text.trimmed();
+            if (!currentParagraph.isEmpty() && !trimmedCurrentText.isEmpty()) {
+                // Only add space if neither the current paragraph ends with space
+                // nor the new text starts with space/punctuation
+                QString trimmedParagraph = currentParagraph.trimmed();
+                bool needsSpace = !trimmedParagraph.isEmpty() &&
+                                !trimmedParagraph.endsWith(' ') &&
+                                !trimmedCurrentText.startsWith(' ') &&
+                                !trimmedCurrentText.at(0).isPunct();
+
+                if (needsSpace) {
+                    currentParagraph = trimmedParagraph + " " + trimmedCurrentText;
+                } else {
+                    currentParagraph = trimmedParagraph + trimmedCurrentText;
+                }
+            } else if (!trimmedCurrentText.isEmpty()) {
+                currentParagraph += trimmedCurrentText;
             }
-            currentParagraph += current.text.trimmed();
         }
     }
     
@@ -1183,6 +1221,102 @@ QString OCREngine::mergeParagraphLines(const QStringList &lines, const QVector<O
         paragraphs.append(currentParagraph.trimmed());
     }
     
-    // Join paragraphs with double line breaks to preserve paragraph structure
-    return paragraphs.join("\n\n");
+    // Join paragraphs optimized for TTS - use single space instead of line breaks
+    // to avoid TTS pauses while maintaining natural flow
+    QString result = paragraphs.join(" ");
+
+    // Clean up any multiple spaces that might cause TTS hiccups
+    QRegularExpression multipleSpaces("\\s+");
+    result = result.replace(multipleSpaces, " ").trimmed();
+
+    return result;
+}
+
+QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const QString &language)
+{
+    QString correctedText = text;
+
+    if (language == "Swedish") {
+        qDebug() << "Applying Swedish character corrections";
+
+        // Common Swedish character misrecognitions and their corrections
+        // These are based on visual similarity that confuses OCR engines
+        QMap<QString, QString> swedishCorrections = {
+            // ä misrecognized as various characters
+            {"à", "ä"},     // French à -> Swedish ä
+            {"á", "ä"},     // Spanish á -> Swedish ä
+            {"â", "ä"},     // French â -> Swedish ä
+            {"ã", "ä"},     // Portuguese ã -> Swedish ä
+            {"ā", "ä"},     // Macron a -> Swedish ä
+            {"ă", "ä"},     // Breve a -> Swedish ä
+
+            // ö misrecognized as various characters
+            {"ò", "ö"},     // Italian ò -> Swedish ö
+            {"ó", "ö"},     // Spanish ó -> Swedish ö
+            {"ô", "ö"},     // French ô -> Swedish ö
+            {"õ", "ö"},     // Portuguese õ -> Swedish ö
+            {"ō", "ö"},     // Macron o -> Swedish ö
+            {"ø", "ö"},     // Norwegian/Danish ø -> Swedish ö (similar but different)
+
+            // å misrecognized as various characters
+            {"ã", "å"},     // Portuguese ã -> Swedish å (when over 'a')
+            {"à", "å"},     // French à -> Swedish å
+            {"á", "å"},     // Spanish á -> Swedish å
+            {"â", "å"},     // French â -> Swedish å
+            {"ā", "å"},     // Macron a -> Swedish å
+            {"ă", "å"},     // Breve a -> Swedish å
+
+            // Common punctuation/diacritic confusion
+            {"ö", "ö"},     // Ensure consistency - sometimes OCR adds extra dots
+            {"ä", "ä"},     // Ensure consistency - sometimes OCR adds extra dots
+            {"å", "å"},     // Ensure consistency - sometimes OCR confuses the ring
+
+            // Capital versions
+            {"À", "Ä"},     {"Á", "Ä"},     {"Â", "Ä"},     {"Ã", "Ä"},     {"Ā", "Ä"},
+            {"Ò", "Ö"},     {"Ó", "Ö"},     {"Ô", "Ö"},     {"Õ", "Ö"},     {"Ō", "Ö"},     {"Ø", "Ö"},
+            {"À", "Å"},     {"Á", "Å"},     {"Â", "Å"},     {"Ã", "Å"},     {"Ā", "Å"}
+        };
+
+        // Apply character corrections
+        for (auto it = swedishCorrections.begin(); it != swedishCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+
+        // Additional context-based corrections for Swedish
+        // Fix common word-level misrecognitions
+        QMap<QString, QString> swedishWordCorrections = {
+            {"för", "för"},         // Ensure proper ö in common word "för" (for)
+            {"kött", "kött"},       // Ensure proper ö in "kött" (meat)
+            {"höger", "höger"},     // Ensure proper ö in "höger" (right)
+            {"väl", "väl"},         // Ensure proper ä in "väl" (well)
+            {"här", "här"},         // Ensure proper ä in "här" (here)
+            {"år", "år"},           // Ensure proper å in "år" (year)
+            {"på", "på"},           // Ensure proper å in "på" (on)
+            {"då", "då"},           // Ensure proper å in "då" (then)
+        };
+
+        // Apply word-level corrections (case insensitive)
+        for (auto it = swedishWordCorrections.begin(); it != swedishWordCorrections.end(); ++it) {
+            QString pattern = QString("\\b%1\\b").arg(QRegularExpression::escape(it.key()));
+            QRegularExpression regex(pattern, QRegularExpression::CaseInsensitiveOption);
+            correctedText.replace(regex, it.value());
+        }
+
+        qDebug() << "Swedish corrections applied. Original length:" << text.length()
+                 << "Corrected length:" << correctedText.length();
+    }
+
+    // Add corrections for other languages as needed
+    else if (language == "German") {
+        // German umlaut corrections
+        QMap<QString, QString> germanCorrections = {
+            {"ä", "ä"}, {"ö", "ö"}, {"ü", "ü"}, {"ß", "ß"},
+            {"Ä", "Ä"}, {"Ö", "Ö"}, {"Ü", "Ü"}
+        };
+        for (auto it = germanCorrections.begin(); it != germanCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+
+    return correctedText;
 }

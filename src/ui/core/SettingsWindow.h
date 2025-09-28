@@ -93,6 +93,7 @@ private:
     QComboBox *translationEngineCombo;
     QComboBox *sourceLanguageCombo;
     QComboBox *targetLanguageCombo;
+    QCheckBox *autoDetectSourceCheck;
     QLineEdit *apiKeyEdit;
     QLineEdit *apiUrlEdit;
     QPushButton *testTranslationBtn;
