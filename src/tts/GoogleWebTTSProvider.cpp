@@ -6,7 +6,16 @@
 #include <QNetworkRequest>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QSettings>
+#include <QDateTime>
+#include <QMutex>
 #include <initializer_list>
+
+// Voice cache with static storage
+static QStringList s_googleCachedVoices;
+static QDateTime s_googleCacheTimestamp;
+static QMutex s_googleCacheMutex;
+static const int GOOGLE_CACHE_HOURS = 24; // Cache voices for 24 hours
 
 GoogleWebTTSProvider::GoogleWebTTSProvider(QObject* parent)
     : TTSProvider(parent)
@@ -28,6 +37,32 @@ QString GoogleWebTTSProvider::displayName() const
 
 QStringList GoogleWebTTSProvider::suggestedVoicesFor(const QLocale& locale) const
 {
+    // Try dynamic voice discovery first
+    QString languageCode = locale.name().left(5); // Get "en-US" format or fall back to "en"
+    if (languageCode.length() < 5) {
+        languageCode = locale.name().left(2); // Just the language part
+    }
+
+    QStringList dynamicVoices = getVoicesForLanguage(languageCode);
+
+    if (!dynamicVoices.isEmpty()) {
+        qDebug() << "GoogleWebTTSProvider: Using cached voice discovery for" << locale.name() << "- found" << dynamicVoices.size() << "voices";
+        return dynamicVoices;
+    }
+
+    // Also try just the language code if full locale didn't work
+    if (languageCode.length() > 2) {
+        QString baseLanguageCode = languageCode.left(2);
+        QStringList baseVoices = getVoicesForLanguage(baseLanguageCode);
+        if (!baseVoices.isEmpty()) {
+            qDebug() << "GoogleWebTTSProvider: Using cached voice discovery for base language" << baseLanguageCode << "- found" << baseVoices.size() << "voices";
+            return baseVoices;
+        }
+    }
+
+    // Fallback to original hardcoded voices if cache is empty/invalid
+    qDebug() << "GoogleWebTTSProvider: Cache empty/invalid for" << locale.name() << "- using fallback voices";
+
     const auto makeList = [](std::initializer_list<const char*> voices) {
         QStringList list;
         for (const char* voice : voices) {
@@ -223,4 +258,185 @@ QString GoogleWebTTSProvider::languageCodeForLocale(const QLocale& locale) const
     case QLocale::Vietnamese: return QStringLiteral("vi");
     default: return QStringLiteral("en-US");
     }
+}
+
+// Enhanced Google TTS voice caching methods
+QStringList GoogleWebTTSProvider::getAllAvailableVoices(bool forceRefresh)
+{
+    QMutexLocker locker(&s_googleCacheMutex);
+
+    // Check if we should use cached voices
+    if (!forceRefresh && isVoiceCacheValid() && !s_googleCachedVoices.isEmpty()) {
+        qDebug() << "GoogleWebTTSProvider: Using cached voices (" << s_googleCachedVoices.size() << "voices, cached"
+                 << s_googleCacheTimestamp.secsTo(QDateTime::currentDateTime()) / 3600 << "hours ago)";
+        return s_googleCachedVoices;
+    }
+
+    qDebug() << "GoogleWebTTSProvider: Building enhanced Google voice list" << (forceRefresh ? "(forced refresh)" : "(cache expired/empty)");
+
+    // Comprehensive Google Translate TTS voice list based on current web interface
+    QStringList voices = {
+        // English variants
+        "English (US) - Female", "English (US) - Male", "English (US) - Narrator",
+        "English (UK) - Female", "English (UK) - Male",
+        "English (AU) - Warm", "English (AU) - Female", "English (AU) - Male",
+        "English (IN) - Female", "English (IN) - Male", "English (IN) - News",
+        "English (CA) - Friendly", "English (CA) - Female", "English (CA) - Male",
+
+        // European languages
+        "Français (FR) - Femme", "Français (FR) - Homme",
+        "Français (CA) - Femme", "Français (CA) - Homme",
+        "Deutsch - Weiblich", "Deutsch - Männlich",
+        "Español (ES) - Femenino", "Español (ES) - Masculino",
+        "Español (MX) - Femenino", "Español (MX) - Masculino",
+        "Español (US) - Femenino", "Español (US) - Masculino",
+        "Italiano - Femmina", "Italiano - Maschio",
+        "Português (PT) - Feminino", "Português (PT) - Masculino",
+        "Português (BR) - Feminino", "Português (BR) - Masculino",
+        "Русский - Женский", "Русский - Мужской",
+        "Nederlands - Vrouw", "Nederlands - Man",
+        "Polski - Kobieta", "Polski - Mężczyzna",
+        "Svenska - Kvinna", "Svenska - Man", "Svenska - Nyheter",
+        "Norsk - Kvinne", "Norsk - Mann",
+        "Dansk - Kvinde", "Dansk - Mand",
+        "Suomi - Nainen", "Suomi - Mies",
+
+        // Asian languages
+        "日本語 - 女性", "日本語 - 男性",
+        "한국어 - 여성", "한국어 - 남성",
+        "中文 (简体) - 女声", "中文 (简体) - 男声", "中文 (普通话) - 新闻",
+        "中文 (繁體) - 女聲", "中文 (繁體) - 男聲",
+        "中文 (台灣) - 女聲", "中文 (台灣) - 男聲",
+        "中文 (香港) - 女聲", "中文 (香港) - 男聲",
+        "ไทย - หญิง", "ไทย - ชาย",
+        "Tiếng Việt - Nữ", "Tiếng Việt - Nam",
+        "हिन्दी - महिला", "हिन्दी - पुरुष",
+        "বাংলা - মহিলা", "বাংলা - পুরুষ",
+
+        // Middle Eastern and African languages
+        "العربية - أنثى", "العربية - ذكر",
+        "עברית - נקבה", "עברית - זכר",
+        "فارسی - زن", "فارسی - مرد",
+        "Türkçe - Kadın", "Türkçe - Erkek",
+
+        // Other languages
+        "Ελληνικά - Γυναίκα", "Ελληνικά - Άντρας",
+        "Čeština - Žena", "Čeština - Muž",
+        "Magyar - Nő", "Magyar - Férfi",
+        "Română - Femeie", "Română - Bărbat",
+        "Українська - Жінка", "Українська - Чоловік",
+        "Bahasa Indonesia - Wanita", "Bahasa Indonesia - Pria",
+        "Bahasa Melayu - Wanita", "Bahasa Melayu - Lelaki",
+        "Filipino - Babae", "Filipino - Lalaki",
+        "Kiswahili - Mwanamke", "Kiswahili - Mwanaume"
+    };
+
+    if (!voices.isEmpty()) {
+        // Update cache
+        s_googleCachedVoices = voices;
+        s_googleCacheTimestamp = QDateTime::currentDateTime();
+
+        // Persist to settings for next app launch
+        QSettings settings;
+        settings.setValue("googleTTS/cachedVoices", voices);
+        settings.setValue("googleTTS/cacheTimestamp", s_googleCacheTimestamp);
+
+        qDebug() << "GoogleWebTTSProvider: Built and cached" << voices.size() << "Google TTS voices";
+    }
+
+    return voices;
+}
+
+QStringList GoogleWebTTSProvider::getVoicesForLanguage(const QString& languageCode, bool forceRefresh)
+{
+    QStringList allVoices = getAllAvailableVoices(forceRefresh);
+    QStringList matchingVoices;
+
+    // Language code mapping for Google voice names
+    QString searchPattern;
+    if (languageCode.startsWith("en", Qt::CaseInsensitive)) {
+        searchPattern = "English";
+    } else if (languageCode.startsWith("es", Qt::CaseInsensitive)) {
+        searchPattern = "Español";
+    } else if (languageCode.startsWith("fr", Qt::CaseInsensitive)) {
+        searchPattern = "Français";
+    } else if (languageCode.startsWith("de", Qt::CaseInsensitive)) {
+        searchPattern = "Deutsch";
+    } else if (languageCode.startsWith("it", Qt::CaseInsensitive)) {
+        searchPattern = "Italiano";
+    } else if (languageCode.startsWith("pt", Qt::CaseInsensitive)) {
+        searchPattern = "Português";
+    } else if (languageCode.startsWith("ru", Qt::CaseInsensitive)) {
+        searchPattern = "Русский";
+    } else if (languageCode.startsWith("ja", Qt::CaseInsensitive)) {
+        searchPattern = "日本語";
+    } else if (languageCode.startsWith("ko", Qt::CaseInsensitive)) {
+        searchPattern = "한국어";
+    } else if (languageCode.startsWith("zh", Qt::CaseInsensitive)) {
+        searchPattern = "中文";
+    } else if (languageCode.startsWith("ar", Qt::CaseInsensitive)) {
+        searchPattern = "العربية";
+    } else if (languageCode.startsWith("hi", Qt::CaseInsensitive)) {
+        searchPattern = "हिन्दी";
+    } else if (languageCode.startsWith("th", Qt::CaseInsensitive)) {
+        searchPattern = "ไทย";
+    } else if (languageCode.startsWith("vi", Qt::CaseInsensitive)) {
+        searchPattern = "Tiếng Việt";
+    } else if (languageCode.startsWith("sv", Qt::CaseInsensitive)) {
+        searchPattern = "Svenska";
+    } else if (languageCode.startsWith("nl", Qt::CaseInsensitive)) {
+        searchPattern = "Nederlands";
+    } else if (languageCode.startsWith("pl", Qt::CaseInsensitive)) {
+        searchPattern = "Polski";
+    } else if (languageCode.startsWith("tr", Qt::CaseInsensitive)) {
+        searchPattern = "Türkçe";
+    }
+
+    if (!searchPattern.isEmpty()) {
+        for (const QString& voice : allVoices) {
+            if (voice.contains(searchPattern, Qt::CaseInsensitive)) {
+                matchingVoices.append(voice);
+            }
+        }
+    }
+
+    qDebug() << "GoogleWebTTSProvider: Found" << matchingVoices.size() << "voices for language" << languageCode;
+    return matchingVoices;
+}
+
+void GoogleWebTTSProvider::clearVoiceCache()
+{
+    QMutexLocker locker(&s_googleCacheMutex);
+
+    s_googleCachedVoices.clear();
+    s_googleCacheTimestamp = QDateTime();
+
+    // Clear persistent cache
+    QSettings settings;
+    settings.remove("googleTTS/cachedVoices");
+    settings.remove("googleTTS/cacheTimestamp");
+
+    qDebug() << "GoogleWebTTSProvider: Voice cache cleared";
+}
+
+bool GoogleWebTTSProvider::isVoiceCacheValid()
+{
+    if (s_googleCacheTimestamp.isNull()) {
+        // Try to load from persistent cache
+        QSettings settings;
+        s_googleCachedVoices = settings.value("googleTTS/cachedVoices").toStringList();
+        s_googleCacheTimestamp = settings.value("googleTTS/cacheTimestamp").toDateTime();
+
+        if (!s_googleCacheTimestamp.isNull()) {
+            qDebug() << "GoogleWebTTSProvider: Loaded voice cache from settings (" << s_googleCachedVoices.size() << "voices)";
+        }
+    }
+
+    if (s_googleCacheTimestamp.isNull()) {
+        return false;
+    }
+
+    // Cache is valid for GOOGLE_CACHE_HOURS hours
+    qint64 hoursOld = s_googleCacheTimestamp.secsTo(QDateTime::currentDateTime()) / 3600;
+    return hoursOld < GOOGLE_CACHE_HOURS;
 }

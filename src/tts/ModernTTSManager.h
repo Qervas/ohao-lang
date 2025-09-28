@@ -128,6 +128,11 @@ private:
     bool switchToVoice(const VoiceInfo& voice);
     void speakWithVoice(const QString& text, const VoiceInfo& voice, const TTSOptions& options);
 
+    // Dynamic voice discovery helpers
+    QString generateVoiceName(const QString& voiceId, const QLocale& locale) const;
+    VoiceQuality determineVoiceQuality(const QString& voiceId) const;
+    void addEmergencyFallbackVoices();
+
     // Provider management
     std::unique_ptr<::TTSProvider> createProvider(TTSProvider type) const;
     bool isProviderAvailable(TTSProvider type) const;

@@ -4,8 +4,19 @@
 #include <QDir>
 #include <QFile>
 #include <QTemporaryFile>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QSettings>
+#include <QDateTime>
+#include <QMutex>
 #include <QtGlobal>
 #include <initializer_list>
+
+// Voice cache with static storage
+static QStringList s_cachedVoices;
+static QDateTime s_cacheTimestamp;
+static QMutex s_cacheMutex;
+static const int CACHE_HOURS = 24; // Cache voices for 24 hours
 
 EdgeTTSProvider::EdgeTTSProvider(QObject* parent)
     : TTSProvider(parent)
@@ -32,6 +43,32 @@ QString EdgeTTSProvider::displayName() const
 
 QStringList EdgeTTSProvider::suggestedVoicesFor(const QLocale& locale) const
 {
+    // Try dynamic voice discovery first
+    QString languageCode = locale.name().left(5); // Get "en-US" format or fall back to "en"
+    if (languageCode.length() < 5) {
+        languageCode = locale.name().left(2); // Just the language part
+    }
+
+    QStringList dynamicVoices = getVoicesForLanguage(languageCode);
+
+    if (!dynamicVoices.isEmpty()) {
+        qDebug() << "EdgeTTSProvider: Using dynamic voice discovery for" << locale.name() << "- found" << dynamicVoices.size() << "voices";
+        return dynamicVoices;
+    }
+
+    // Also try just the language code if full locale didn't work
+    if (languageCode.length() > 2) {
+        QString baseLanguageCode = languageCode.left(2);
+        QStringList baseVoices = getVoicesForLanguage(baseLanguageCode);
+        if (!baseVoices.isEmpty()) {
+            qDebug() << "EdgeTTSProvider: Using dynamic voice discovery for base language" << baseLanguageCode << "- found" << baseVoices.size() << "voices";
+            return baseVoices;
+        }
+    }
+
+    // Fallback to hardcoded voices if dynamic discovery fails
+    qDebug() << "EdgeTTSProvider: Dynamic discovery failed for" << locale.name() << "- using fallback voices";
+
     const auto makeList = [](std::initializer_list<const char*> voices) {
         QStringList list;
         for (const char* voice : voices) {
@@ -304,4 +341,128 @@ void EdgeTTSProvider::handleProcessFinished(int exitCode, QProcess::ExitStatus s
             emit finished();
         }
     });
+}
+
+// Dynamic voice discovery methods with smart caching
+QStringList EdgeTTSProvider::getAllAvailableVoices(bool forceRefresh)
+{
+    QMutexLocker locker(&s_cacheMutex);
+
+    // Check if we should use cached voices
+    if (!forceRefresh && isVoiceCacheValid() && !s_cachedVoices.isEmpty()) {
+        qDebug() << "EdgeTTSProvider: Using cached voices (" << s_cachedVoices.size() << "voices, cached"
+                 << s_cacheTimestamp.secsTo(QDateTime::currentDateTime()) / 3600 << "hours ago)";
+        return s_cachedVoices;
+    }
+
+    qDebug() << "EdgeTTSProvider: Discovering voices from edge-tts" << (forceRefresh ? "(forced refresh)" : "(cache expired/empty)");
+
+    QStringList voices;
+    QProcess process;
+    process.start("edge-tts", QStringList() << "--list-voices");
+
+    if (!process.waitForFinished(10000)) { // 10 second timeout
+        qDebug() << "EdgeTTSProvider: Failed to get voice list from edge-tts";
+        // Return cached voices if available, even if expired
+        if (!s_cachedVoices.isEmpty()) {
+            qDebug() << "EdgeTTSProvider: Returning stale cached voices as fallback";
+            return s_cachedVoices;
+        }
+        return voices;
+    }
+
+    if (process.exitCode() != 0) {
+        qDebug() << "EdgeTTSProvider: edge-tts --list-voices failed:" << process.readAllStandardError();
+        // Return cached voices if available
+        if (!s_cachedVoices.isEmpty()) {
+            qDebug() << "EdgeTTSProvider: Returning cached voices due to edge-tts error";
+            return s_cachedVoices;
+        }
+        return voices;
+    }
+
+    QString output = process.readAllStandardOutput();
+    QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+
+    // Skip header line and parse voice names
+    for (int i = 1; i < lines.size(); ++i) {
+        QString line = lines[i].trimmed();
+        if (line.isEmpty()) continue;
+
+        // Voice name is the first column
+        QStringList columns = line.split(QRegularExpression("\\s+"));
+        if (!columns.isEmpty()) {
+            QString voiceName = columns[0];
+            if (!voiceName.isEmpty() && voiceName != "Name") {
+                voices.append(voiceName);
+            }
+        }
+    }
+
+    if (!voices.isEmpty()) {
+        // Update cache
+        s_cachedVoices = voices;
+        s_cacheTimestamp = QDateTime::currentDateTime();
+
+        // Persist to settings for next app launch
+        QSettings settings;
+        settings.setValue("edgeTTS/cachedVoices", voices);
+        settings.setValue("edgeTTS/cacheTimestamp", s_cacheTimestamp);
+
+        qDebug() << "EdgeTTSProvider: Discovered and cached" << voices.size() << "voices from edge-tts";
+    }
+
+    return voices;
+}
+
+QStringList EdgeTTSProvider::getVoicesForLanguage(const QString& languageCode, bool forceRefresh)
+{
+    QStringList allVoices = getAllAvailableVoices(forceRefresh);
+    QStringList matchingVoices;
+
+    for (const QString& voice : allVoices) {
+        if (voice.startsWith(languageCode + "-", Qt::CaseInsensitive)) {
+            matchingVoices.append(voice);
+        }
+    }
+
+    qDebug() << "EdgeTTSProvider: Found" << matchingVoices.size() << "voices for language" << languageCode;
+    return matchingVoices;
+}
+
+void EdgeTTSProvider::clearVoiceCache()
+{
+    QMutexLocker locker(&s_cacheMutex);
+
+    s_cachedVoices.clear();
+    s_cacheTimestamp = QDateTime();
+
+    // Clear persistent cache
+    QSettings settings;
+    settings.remove("edgeTTS/cachedVoices");
+    settings.remove("edgeTTS/cacheTimestamp");
+
+    qDebug() << "EdgeTTSProvider: Voice cache cleared";
+}
+
+bool EdgeTTSProvider::isVoiceCacheValid()
+{
+    if (s_cacheTimestamp.isNull()) {
+        // Try to load from persistent cache
+        QSettings settings;
+        s_cachedVoices = settings.value("edgeTTS/cachedVoices").toStringList();
+        s_cacheTimestamp = settings.value("edgeTTS/cacheTimestamp").toDateTime();
+
+        if (!s_cacheTimestamp.isNull()) {
+            qDebug() << "EdgeTTSProvider: Loaded voice cache from settings (" << s_cachedVoices.size() << "voices)";
+        }
+    }
+
+    if (s_cacheTimestamp.isNull()) {
+        return false;
+    }
+
+    // Cache is valid for CACHE_HOURS hours
+    qint64 hoursOld = s_cacheTimestamp.secsTo(QDateTime::currentDateTime()) / 3600;
+    return hoursOld < CACHE_HOURS;
 }

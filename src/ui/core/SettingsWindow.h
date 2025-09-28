@@ -75,8 +75,6 @@ private:
 
     // General Tab
     QWidget *generalTab;
-    QCheckBox *ttsInputCheckBox;
-    QCheckBox *ttsOutputCheckBox;
 
     // OCR Tab
     QWidget *ocrTab;

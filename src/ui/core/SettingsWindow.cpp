@@ -3,6 +3,8 @@
 #include "TTSEngine.h"
 #include "TTSManager.h"
 #include "../tts/ModernTTSManager.h"
+#include "../tts/EdgeTTSProvider.h"
+#include "../tts/GoogleWebTTSProvider.h"
 #include "../core/LanguageManager.h"
 #include <QApplication>
 #include <QScreen>
@@ -138,16 +140,7 @@ void SettingsWindow::setupGeneralTab()
     ocrLanguageCombo->setToolTip("Language for text recognition from screenshots");
     connect(ocrLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString&){ updateVoicesForLanguage(); });
 
-    // TTS toggle button for input
-    ttsInputCheckBox = new QCheckBox();
-    ttsInputCheckBox->setText("🔊");
-    ttsInputCheckBox->setToolTip("Enable TTS for Input Text (Read recognized OCR text aloud)");
-    ttsInputCheckBox->setChecked(true);
-    ttsInputCheckBox->setMaximumWidth(50);
-    ttsInputCheckBox->setStyleSheet("QCheckBox { font-size: 18px; }");
-
     inputLangLayout->addWidget(ocrLanguageCombo, 1);
-    inputLangLayout->addWidget(ttsInputCheckBox);
 
     langLayout->addRow(inputLabel, inputLangWidget);
     
@@ -167,33 +160,17 @@ void SettingsWindow::setupGeneralTab()
     targetLanguageCombo->setToolTip("Target language for translation and TTS voice selection");
     connect(targetLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString&){ updateVoicesForLanguage(); });
 
-    // TTS toggle button for output
-    ttsOutputCheckBox = new QCheckBox();
-    ttsOutputCheckBox->setText("🔊");
-    ttsOutputCheckBox->setToolTip("Enable TTS for Output Text (Read translation results aloud)");
-    ttsOutputCheckBox->setChecked(true);
-    ttsOutputCheckBox->setMaximumWidth(50);
-    ttsOutputCheckBox->setStyleSheet("QCheckBox { font-size: 18px; }");
-
     outputLangLayout->addWidget(targetLanguageCombo, 1);
-    outputLangLayout->addWidget(ttsOutputCheckBox);
 
     langLayout->addRow(outputLabel, outputLangWidget);
     
     // Info text
     QLabel *infoLabel = new QLabel("ℹ️ <i>TTS voice language automatically matches the Output Language setting.<br>"
-                                  "This unified configuration ensures consistent language handling across all features.</i>");
+                                  "TTS will automatically speak OCR results after translation completes.</i>");
     infoLabel->setWordWrap(true);
     infoLabel->setStyleSheet("color: #666; font-size: 11px; margin-top: 10px;");
     langLayout->addRow(infoLabel);
 
-    // Connect TTS checkboxes to engine (if available)
-    connect(ttsInputCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-        if (ttsEngine) ttsEngine->setTTSInputEnabled(checked);
-    });
-    connect(ttsOutputCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-        if (ttsEngine) ttsEngine->setTTSOutputEnabled(checked);
-    });
 
     layout->addWidget(langGroup);
     
@@ -492,9 +469,7 @@ void SettingsWindow::loadSettings()
     animationsCheck->setChecked(settings->value("appearance/animations", true).toBool());
     soundsCheck->setChecked(settings->value("appearance/sounds", false).toBool());
 
-    // General TTS Options
-    ttsInputCheckBox->setChecked(settings->value("general/ttsInput", true).toBool());
-    ttsOutputCheckBox->setChecked(settings->value("general/ttsOutput", true).toBool());
+    // TTS is now always enabled - no checkbox controls
 
     // TTS Settings
     if (ttsEngine) {
@@ -616,9 +591,7 @@ void SettingsWindow::saveSettings()
     if (animationsCheck) settings->setValue("appearance/animations", animationsCheck->isChecked());
     if (soundsCheck) settings->setValue("appearance/sounds", soundsCheck->isChecked());
 
-    // General Options
-    if (ttsInputCheckBox) settings->setValue("general/ttsInput", ttsInputCheckBox->isChecked());
-    if (ttsOutputCheckBox) settings->setValue("general/ttsOutput", ttsOutputCheckBox->isChecked());
+    // TTS is now always enabled - no settings to save
 
     // TTS Settings
     QString providerId;
@@ -660,8 +633,9 @@ void SettingsWindow::saveSettings()
         ttsEngine->setPrimaryVoice(primaryVoice);
         ttsEngine->setInputVoice(inputVoice);
         ttsEngine->setOutputVoice(outputVoice);
-        ttsEngine->setTTSInputEnabled(ttsInputCheckBox ? ttsInputCheckBox->isChecked() : ttsEngine->isTTSInputEnabled());
-        ttsEngine->setTTSOutputEnabled(ttsOutputCheckBox ? ttsOutputCheckBox->isChecked() : ttsEngine->isTTSOutputEnabled());
+        // TTS is now always enabled
+        ttsEngine->setTTSInputEnabled(true);
+        ttsEngine->setTTSOutputEnabled(true);
 
         if (providerId == QStringLiteral("edge-free")) {
             ttsEngine->setEdgeExecutable(edgeExePath);
@@ -704,9 +678,7 @@ void SettingsWindow::resetToDefaults()
     animationsCheck->setChecked(true);
     soundsCheck->setChecked(false);
     
-    // Reset General TTS Options
-    ttsInputCheckBox->setChecked(true);
-    ttsOutputCheckBox->setChecked(true);
+    // TTS is now always enabled - no checkboxes to reset
     if (ttsProviderCombo) {
         const int idx = ttsProviderCombo->findData(QStringLiteral("google-web"));
         if (idx >= 0) {
@@ -1003,6 +975,12 @@ void SettingsWindow::setupTTSTab()
         // Get the language code for this voice
         QString langCode = getLanguageCodeFromVoice(voice);
 
+        // DEBUG: Print detailed information about voice and language detection
+        qDebug() << "=== INPUT VOICE TEST DEBUG ===";
+        qDebug() << "Selected voice:" << voice;
+        qDebug() << "Detected language code:" << langCode;
+        qDebug() << "Test text:" << testText;
+
         ttsEngine->setProviderId(providerId);
         ttsEngine->setPrimaryVoice(voice);
         ttsEngine->setVolume(1.0);
@@ -1029,8 +1007,13 @@ void SettingsWindow::setupTTSTab()
         // Convert language code to QLocale using LanguageManager
         QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
 
-        // Use ModernTTSManager for voice testing - much more reliable!
-        ModernTTSManager::instance().speak(testText, testLocale);
+        // DEBUG: Print locale conversion details
+        qDebug() << "LanguageManager converted" << langCode << "to locale:" << testLocale.name();
+        qDebug() << "Locale language:" << testLocale.language() << "Territory:" << testLocale.territory();
+
+        // Use the configured TTS engine directly with user-selected voice - no auto-selection!
+        qDebug() << "Using direct TTS engine with user-configured settings";
+        ttsEngine->speak(testText, true, testLocale);  // true = isInputText
     });
 
     connect(stopInputTTSBtn, &QPushButton::clicked, [this]() {
@@ -1131,9 +1114,15 @@ void SettingsWindow::setupTTSTab()
     layout->addStretch();
 
     connect(refreshVoicesButton, &QPushButton::clicked, this, [this]() {
+        // Clear voice caches for all providers to force fresh discovery
+        EdgeTTSProvider::clearVoiceCache();
+        GoogleWebTTSProvider::clearVoiceCache();
+
+        // Update voice suggestions using fresh discovery
         updateVoicesForLanguage();
+
         if (ttsStatusText) {
-            ttsStatusText->setPlainText(tr("Voice suggestions refreshed."));
+            ttsStatusText->setPlainText(tr("Voice caches cleared and suggestions refreshed."));
         }
     });
 
@@ -1263,8 +1252,9 @@ void SettingsWindow::onTestTTSClicked()
     // Convert language code to QLocale using LanguageManager
     QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
 
-    // Use ModernTTSManager for voice testing - much more reliable!
-    ModernTTSManager::instance().speak(testText, testLocale);
+    // Use the configured TTS engine directly with user-selected voice - no auto-selection!
+    qDebug() << "Using direct TTS engine with user-configured settings";
+    ttsEngine->speak(testText, false, testLocale);  // false = isOutputText
 }
 
 void SettingsWindow::updateProviderUI(const QString& providerId)
@@ -1545,7 +1535,7 @@ QString SettingsWindow::getLanguageCodeFromVoice(const QString& voice) const
     if (lower.contains("arab") || voice.contains("العربية")) return "ar";
     if (lower.contains("hindi") || voice.contains("हिन्दी")) return "hi";
     if (lower.contains("thai") || voice.contains("ไทย")) return "th";
-    if (lower.contains("swed") || voice.contains("svenska")) return "sv";
+    if (lower.contains("swed") || voice.contains("svenska") || lower.contains("sv-se")) return "sv";
     if (lower.contains("vietnam") || voice.contains("tiếng việt")) return "vi";
     if (lower.contains("dutch") || lower.contains("nederlands")) return "nl";
     if (lower.contains("polish") || lower.contains("polski")) return "pl";

@@ -29,6 +29,12 @@ public:
                double volume) override;
     void stop() override;
 
+    // Dynamic voice discovery with caching
+    static QStringList getAllAvailableVoices(bool forceRefresh = false);
+    static QStringList getVoicesForLanguage(const QString& languageCode, bool forceRefresh = false);
+    static void clearVoiceCache();
+    static bool isVoiceCacheValid();
+
 private:
     void launchEdgeTTS(const QString& text,
                        double rate,

@@ -26,6 +26,12 @@ public:
                double volume) override;
     void stop() override;
 
+    // Enhanced voice caching system (static methods for consistency with EdgeTTS)
+    static QStringList getAllAvailableVoices(bool forceRefresh = false);
+    static QStringList getVoicesForLanguage(const QString& languageCode, bool forceRefresh = false);
+    static void clearVoiceCache();
+    static bool isVoiceCacheValid();
+
 private:
     QString languageCodeForVoice(const QString& voice) const;
     QString languageCodeForLocale(const QLocale& locale) const;
