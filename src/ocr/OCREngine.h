@@ -121,16 +121,16 @@ private:
     QString correctLanguageSpecificCharacters(const QString &text, const QString &language);
 
     Engine m_engine = Tesseract;
-    QString m_language = "English";
+    QString m_language; // No hardcoded default - loaded from settings
     int m_qualityLevel = 3;
     bool m_preprocessing = true;
     bool m_autoDetectOrientation = true;
 
-    // Translation settings
+    // Translation settings - no hardcoded defaults, loaded from user settings
     bool m_autoTranslate = false;
-    QString m_translationEngine = "Google Translate (Free)";
-    QString m_translationSourceLanguage = "Auto-Detect";
-    QString m_translationTargetLanguage = "English";
+    QString m_translationEngine;
+    QString m_translationSourceLanguage;
+    QString m_translationTargetLanguage;
 
     OCRResult m_currentOCRResult;
     TranslationEngine *m_translationEngineInstance = nullptr;

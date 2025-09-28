@@ -1237,44 +1237,27 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
     QString correctedText = text;
 
     if (language == "Swedish") {
-        qDebug() << "Applying Swedish character corrections";
+        qDebug() << "Applying Swedish-specific character corrections";
 
-        // Common Swedish character misrecognitions and their corrections
-        // These are based on visual similarity that confuses OCR engines
+        // SWEDISH ONLY: Only correct characters that specifically should be Swedish
         QMap<QString, QString> swedishCorrections = {
-            // ä misrecognized as various characters
-            {"à", "ä"},     // French à -> Swedish ä
-            {"á", "ä"},     // Spanish á -> Swedish ä
-            {"â", "ä"},     // French â -> Swedish ä
-            {"ã", "ä"},     // Portuguese ã -> Swedish ä
-            {"ā", "ä"},     // Macron a -> Swedish ä
-            {"ă", "ä"},     // Breve a -> Swedish ä
+            // Only fix obvious OCR errors that should be Swedish characters
+            // ä - ONLY basic ASCII misrecognitions
+            {"a\"", "ä"},    // OCR sometimes sees ä as a with quotes
+            {"a'", "ä"},     // OCR sometimes sees ä as a with apostrophe
 
-            // ö misrecognized as various characters
-            {"ò", "ö"},     // Italian ò -> Swedish ö
-            {"ó", "ö"},     // Spanish ó -> Swedish ö
-            {"ô", "ö"},     // French ô -> Swedish ö
-            {"õ", "ö"},     // Portuguese õ -> Swedish ö
-            {"ō", "ö"},     // Macron o -> Swedish ö
-            {"ø", "ö"},     // Norwegian/Danish ø -> Swedish ö (similar but different)
+            // ö - ONLY basic ASCII misrecognitions
+            {"o\"", "ö"},    // OCR sometimes sees ö as o with quotes
+            {"o'", "ö"},     // OCR sometimes sees ö as o with apostrophe
 
-            // å misrecognized as various characters
-            {"ã", "å"},     // Portuguese ã -> Swedish å (when over 'a')
-            {"à", "å"},     // French à -> Swedish å
-            {"á", "å"},     // Spanish á -> Swedish å
-            {"â", "å"},     // French â -> Swedish å
-            {"ā", "å"},     // Macron a -> Swedish å
-            {"ă", "å"},     // Breve a -> Swedish å
-
-            // Common punctuation/diacritic confusion
-            {"ö", "ö"},     // Ensure consistency - sometimes OCR adds extra dots
-            {"ä", "ä"},     // Ensure consistency - sometimes OCR adds extra dots
-            {"å", "å"},     // Ensure consistency - sometimes OCR confuses the ring
+            // å - ONLY basic ASCII misrecognitions
+            {"a°", "å"},     // OCR sometimes sees å as a with degree symbol
+            {"ao", "å"},     // OCR sometimes sees å as a followed by o
 
             // Capital versions
-            {"À", "Ä"},     {"Á", "Ä"},     {"Â", "Ä"},     {"Ã", "Ä"},     {"Ā", "Ä"},
-            {"Ò", "Ö"},     {"Ó", "Ö"},     {"Ô", "Ö"},     {"Õ", "Ö"},     {"Ō", "Ö"},     {"Ø", "Ö"},
-            {"À", "Å"},     {"Á", "Å"},     {"Â", "Å"},     {"Ã", "Å"},     {"Ā", "Å"}
+            {"A\"", "Ä"},    {"A'", "Ä"},
+            {"O\"", "Ö"},    {"O'", "Ö"},
+            {"A°", "Å"},     {"AO", "Å"},   {"Ao", "Å"}
         };
 
         // Apply character corrections
@@ -1306,14 +1289,93 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
                  << "Corrected length:" << correctedText.length();
     }
 
-    // Add corrections for other languages as needed
+    // Language-specific character corrections - NO MIXING between languages
+    else if (language == "French") {
+        qDebug() << "Applying French-specific character corrections";
+        QMap<QString, QString> frenchCorrections = {
+            // French accents - ONLY correct OCR errors, not other language characters
+            {"a`", "à"}, {"a'", "á"}, {"a^", "â"}, {"a~", "ã"},
+            {"e`", "è"}, {"e'", "é"}, {"e^", "ê"}, {"e\"", "ë"},
+            {"i`", "ì"}, {"i'", "í"}, {"i^", "î"}, {"i\"", "ï"},
+            {"o`", "ò"}, {"o'", "ó"}, {"o^", "ô"}, {"o~", "õ"},
+            {"u`", "ù"}, {"u'", "ú"}, {"u^", "û"}, {"u\"", "ü"},
+            {"c,", "ç"}, {"n~", "ñ"},
+            // Capital versions
+            {"A`", "À"}, {"A'", "Á"}, {"A^", "Â"}, {"A~", "Ã"},
+            {"E`", "È"}, {"E'", "É"}, {"E^", "Ê"}, {"E\"", "Ë"},
+            {"I`", "Ì"}, {"I'", "Í"}, {"I^", "Î"}, {"I\"", "Ï"},
+            {"O`", "Ò"}, {"O'", "Ó"}, {"O^", "Ô"}, {"O~", "Õ"},
+            {"U`", "Ù"}, {"U'", "Ú"}, {"U^", "Û"}, {"U\"", "Ü"},
+            {"C,", "Ç"}, {"N~", "Ñ"}
+        };
+        for (auto it = frenchCorrections.begin(); it != frenchCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+    else if (language == "Spanish") {
+        qDebug() << "Applying Spanish-specific character corrections";
+        QMap<QString, QString> spanishCorrections = {
+            // Spanish accents - ONLY correct OCR errors, not other language characters
+            {"a'", "á"}, {"e'", "é"}, {"i'", "í"}, {"o'", "ó"}, {"u'", "ú"}, {"u\"", "ü"},
+            {"n~", "ñ"},
+            // Capital versions
+            {"A'", "Á"}, {"E'", "É"}, {"I'", "Í"}, {"O'", "Ó"}, {"U'", "Ú"}, {"U\"", "Ü"},
+            {"N~", "Ñ"}
+        };
+        for (auto it = spanishCorrections.begin(); it != spanishCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
     else if (language == "German") {
-        // German umlaut corrections
+        qDebug() << "Applying German-specific character corrections";
         QMap<QString, QString> germanCorrections = {
-            {"ä", "ä"}, {"ö", "ö"}, {"ü", "ü"}, {"ß", "ß"},
-            {"Ä", "Ä"}, {"Ö", "Ö"}, {"Ü", "Ü"}
+            // German umlauts - ONLY correct OCR errors
+            {"a\"", "ä"}, {"o\"", "ö"}, {"u\"", "ü"}, {"ss", "ß"},
+            {"A\"", "Ä"}, {"O\"", "Ö"}, {"U\"", "Ü"}
         };
         for (auto it = germanCorrections.begin(); it != germanCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+    else if (language == "Portuguese") {
+        qDebug() << "Applying Portuguese-specific character corrections";
+        QMap<QString, QString> portugueseCorrections = {
+            // Portuguese accents - ONLY correct OCR errors
+            {"a'", "á"}, {"a^", "â"}, {"a~", "ã"}, {"a`", "à"},
+            {"e'", "é"}, {"e^", "ê"},
+            {"i'", "í"},
+            {"o'", "ó"}, {"o^", "ô"}, {"o~", "õ"},
+            {"u'", "ú"}, {"u\"", "ü"},
+            {"c,", "ç"},
+            // Capital versions
+            {"A'", "Á"}, {"A^", "Â"}, {"A~", "Ã"}, {"A`", "À"},
+            {"E'", "É"}, {"E^", "Ê"},
+            {"I'", "Í"},
+            {"O'", "Ó"}, {"O^", "Ô"}, {"O~", "Õ"},
+            {"U'", "Ú"}, {"U\"", "Ü"},
+            {"C,", "Ç"}
+        };
+        for (auto it = portugueseCorrections.begin(); it != portugueseCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+    else if (language == "Italian") {
+        qDebug() << "Applying Italian-specific character corrections";
+        QMap<QString, QString> italianCorrections = {
+            // Italian accents - ONLY correct OCR errors
+            {"a'", "á"}, {"a`", "à"},
+            {"e'", "é"}, {"e`", "è"},
+            {"i'", "í"}, {"i`", "ì"},
+            {"o'", "ó"}, {"o`", "ò"},
+            {"u'", "ú"}, {"u`", "ù"},
+            // Capital versions
+            {"A'", "Á"}, {"A`", "À"},
+            {"E'", "É"}, {"E`", "È"},
+            {"I'", "Í"}, {"I`", "Ì"},
+            {"O'", "Ó"}, {"O`", "Ò"},
+            {"U'", "Ú"}, {"U`", "Ù"}
+        };
+        for (auto it = italianCorrections.begin(); it != italianCorrections.end(); ++it) {
             correctedText.replace(it.key(), it.value());
         }
     }

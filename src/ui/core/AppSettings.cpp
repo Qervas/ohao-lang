@@ -1,6 +1,39 @@
 #include "AppSettings.h"
 #include <QCoreApplication>
 #include <QDebug>
+#include <QLocale>
+
+QString AppSettings::getSystemDefaultLanguage()
+{
+    // Map system locale to supported language names
+    QLocale systemLocale = QLocale::system();
+    QString langCode = systemLocale.name().left(2).toLower();
+
+    // Map language codes to our supported language display names
+    static QMap<QString, QString> langMapping = {
+        {"en", "English"},
+        {"zh", "Chinese (Simplified)"},
+        {"ja", "Japanese"},
+        {"ko", "Korean"},
+        {"es", "Spanish"},
+        {"fr", "French"},
+        {"de", "German"},
+        {"ru", "Russian"},
+        {"pt", "Portuguese"},
+        {"it", "Italian"},
+        {"nl", "Dutch"},
+        {"pl", "Polish"},
+        {"sv", "Swedish"},
+        {"ar", "Arabic"},
+        {"hi", "Hindi"},
+        {"th", "Thai"},
+        {"vi", "Vietnamese"}
+    };
+
+    QString mappedLang = langMapping.value(langCode, "English");
+    qDebug() << "System locale:" << systemLocale.name() << "-> Mapped to:" << mappedLang;
+    return mappedLang;
+}
 
 AppSettings& AppSettings::instance()
 {
@@ -26,7 +59,8 @@ AppSettings::OCRConfig AppSettings::getOCRConfig() const
 {
     if (!m_ocrCacheValid) {
         m_cachedOCRConfig.engine = m_settings->value("ocr/engine", "Tesseract").toString();
-        m_cachedOCRConfig.language = m_settings->value("ocr/language", "English").toString();
+        // Use system default language instead of hardcoded "English"
+        m_cachedOCRConfig.language = m_settings->value("ocr/language", getSystemDefaultLanguage()).toString();
         m_cachedOCRConfig.qualityLevel = m_settings->value("ocr/quality", 3).toInt();
         m_cachedOCRConfig.preprocessing = m_settings->value("ocr/preprocessing", true).toBool();
         m_cachedOCRConfig.autoDetectOrientation = m_settings->value("ocr/autoDetect", true).toBool();
@@ -57,8 +91,18 @@ AppSettings::TranslationConfig AppSettings::getTranslationConfig() const
     if (!m_translationCacheValid) {
         m_cachedTranslationConfig.autoTranslate = m_settings->value("translation/autoTranslate", true).toBool();
         m_cachedTranslationConfig.engine = m_settings->value("translation/engine", "Google Translate (Free)").toString();
-        m_cachedTranslationConfig.sourceLanguage = m_settings->value("translation/sourceLanguage", "Auto-Detect").toString();
-        m_cachedTranslationConfig.targetLanguage = m_settings->value("translation/targetLanguage", "English").toString();
+
+        // Default source language to OCR language (intelligent default)
+        QString ocrLang = getOCRConfig().language;
+        m_cachedTranslationConfig.sourceLanguage = m_settings->value("translation/sourceLanguage", ocrLang).toString();
+
+        // Intelligent target language default: ensure source ≠ target for meaningful translation
+        // If OCR language matches system language, use English (most universal)
+        // Otherwise use system language as target (user likely wants to translate TO their native language)
+        QString systemLang = getSystemDefaultLanguage();
+        QString defaultTarget = (ocrLang == systemLang) ? "English" : systemLang;
+        m_cachedTranslationConfig.targetLanguage = m_settings->value("translation/targetLanguage", defaultTarget).toString();
+
         m_cachedTranslationConfig.overlayMode = m_settings->value("translation/overlayMode", "Deep Learning Mode").toString();
         m_translationCacheValid = true;
     }
@@ -117,8 +161,13 @@ AppSettings::TTSConfig AppSettings::getTTSConfig() const
         m_cachedTTSConfig.voice = m_settings->value("tts/voice", "Default").toString();
         m_cachedTTSConfig.speed = m_settings->value("tts/speed", 1.0f).toFloat();
         m_cachedTTSConfig.volume = m_settings->value("tts/volume", 1.0f).toFloat();
-        m_cachedTTSConfig.inputLanguage = m_settings->value("tts/inputLanguage", "Auto-Detect").toString();
-        m_cachedTTSConfig.outputLanguage = m_settings->value("tts/outputLanguage", "English").toString();
+        // Default TTS input language to OCR language
+        QString ocrLang = getOCRConfig().language;
+        m_cachedTTSConfig.inputLanguage = m_settings->value("tts/inputLanguage", ocrLang).toString();
+
+        // Default TTS output language to translation target language
+        QString targetLang = getTranslationConfig().targetLanguage;
+        m_cachedTTSConfig.outputLanguage = m_settings->value("tts/outputLanguage", targetLang).toString();
         m_ttsCacheValid = true;
     }
     return m_cachedTTSConfig;

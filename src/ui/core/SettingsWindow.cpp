@@ -164,7 +164,11 @@ void SettingsWindow::setupGeneralTab()
                                   "French", "German", "Russian", "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
     targetLanguageCombo->setCurrentText("English");
     targetLanguageCombo->setToolTip("Target language for translation and TTS voice selection");
-    connect(targetLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString&){ updateVoicesForLanguage(); });
+    connect(targetLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString& language){
+        updateVoicesForLanguage();
+        // Ensure translation target language stays in sync with general target language
+        qDebug() << "Target language changed to:" << language << "- this will be used for translation";
+    });
 
     outputLangLayout->addWidget(targetLanguageCombo, 1);
 
