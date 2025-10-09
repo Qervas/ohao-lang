@@ -37,103 +37,13 @@ find_package(Qt6 COMPONENTS TextToSpeech)
 
 qt_standard_project_setup()
 
-# Define submodule sources
-set(UI_SOURCES
-    src/ui/FloatingWidget.cpp
-    src/ui/SettingsWindow.cpp
-    src/ui/OCRResultWindow.cpp
-    src/ui/ScreenshotWidget.cpp
-    src/ui/SelectionToolbar.cpp
-    src/ui/TextReplacementOverlay.cpp
-    src/ui/ThemeManager.cpp
+# Recursively find all source and header files
+file(GLOB_RECURSE ALL_SOURCES
+    "src/*.cpp"
 )
 
-set(TTS_SOURCES
-    src/tts/TTSEngine.cpp
-    src/tts/TTSManager.cpp
-    src/tts/GoogleWebTTSProvider.cpp
-    src/tts/EdgeTTSProvider.cpp
-)
-
-set(OCR_SOURCES
-    src/ocr/OCREngine.cpp
-)
-
-set(TRANSLATION_SOURCES
-    src/translation/TranslationEngine.cpp
-)
-
-set(CAPTURE_SOURCES
-    src/capture/ScreenCapture.cpp
-)
-
-set(SYSTEM_SOURCES
-    src/system/GlobalShortcutManager.cpp
-    src/system/SystemTray.cpp
-)
-
-set(CORE_SOURCES
-    src/main.cpp
-    src/MainWindow.cpp
-)
-
-set(ALL_SOURCES
-    ${CORE_SOURCES}
-    ${UI_SOURCES}
-    ${TTS_SOURCES}
-    ${OCR_SOURCES}
-    ${TRANSLATION_SOURCES}
-    ${CAPTURE_SOURCES}
-    ${SYSTEM_SOURCES}
-)
-
-set(UI_HEADERS
-    src/ui/FloatingWidget.h
-    src/ui/SettingsWindow.h
-    src/ui/OCRResultWindow.h
-    src/ui/ScreenshotWidget.h
-    src/ui/SelectionToolbar.h
-    src/ui/TextReplacementOverlay.h
-    src/ui/ThemeManager.h
-)
-
-set(TTS_HEADERS
-    src/tts/TTSEngine.h
-    src/tts/TTSManager.h
-    src/tts/GoogleWebTTSProvider.h
-    src/tts/EdgeTTSProvider.h
-    src/tts/TTSProvider.h
-)
-
-set(OCR_HEADERS
-    src/ocr/OCREngine.h
-)
-
-set(TRANSLATION_HEADERS
-    src/translation/TranslationEngine.h
-)
-
-set(CAPTURE_HEADERS
-    src/capture/ScreenCapture.h
-)
-
-set(SYSTEM_HEADERS
-    src/system/GlobalShortcutManager.h
-    src/system/SystemTray.h
-)
-
-set(CORE_HEADERS
-    src/MainWindow.h
-)
-
-set(ALL_HEADERS
-    ${CORE_HEADERS}
-    ${UI_HEADERS}
-    ${TTS_HEADERS}
-    ${OCR_HEADERS}
-    ${TRANSLATION_HEADERS}
-    ${CAPTURE_HEADERS}
-    ${SYSTEM_HEADERS}
+file(GLOB_RECURSE ALL_HEADERS
+    "src/*.h"
 )
 
 # Create executable
@@ -144,15 +54,15 @@ else()
     qt_add_executable(ohao-lang ${ALL_SOURCES} ${ALL_HEADERS})
 endif()
 
-# Add include directories for each submodule
+# Add include directories - main src and key subdirectories
 target_include_directories(ohao-lang PRIVATE
     src/
-    src/ui/
-    src/tts/
     src/ocr/
     src/translation/
-    src/capture/
     src/system/
+    src/capture/
+    src/tts/
+    src/ui/overlays/
 )
 
 # Optional: Allow enabling console for release builds via CMake option

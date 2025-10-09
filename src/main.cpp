@@ -11,6 +11,7 @@
 #include "ui/core/FloatingWidget.h"
 #include "system/SystemTray.h"
 #include "ui/core/ThemeManager.h"
+#include "updater/UpdateChecker.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -93,6 +94,12 @@ int main(int argc, char *argv[])
     } else if (parser.isSet(toggleOption)) {
         QTimer::singleShot(100, widget, &FloatingWidget::toggleVisibility);
     }
+
+    // Initialize update checker
+    UpdateChecker *updateChecker = new UpdateChecker(&app);
+
+    // Check for updates 5 seconds after app starts (avoid blocking startup)
+    QTimer::singleShot(5000, updateChecker, &UpdateChecker::checkForUpdates);
 
     return app.exec();
 }

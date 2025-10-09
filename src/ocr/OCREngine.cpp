@@ -119,7 +119,10 @@ void OCREngine::performOCR(const QPixmap &image)
 void OCREngine::performTesseractOCR(const QPixmap &image)
 {
     if (!isTesseractAvailable()) {
-        emit ocrError("Tesseract OCR is not installed or not found in PATH");
+        QString bundledPath = QCoreApplication::applicationDirPath() + "/tesseract.exe";
+        QString errorMsg = QString("Tesseract OCR not found!\n\nSearched locations:\n- System PATH\n- Bundled: %1\n\nPlease reinstall the application.").arg(bundledPath);
+        qDebug() << "Tesseract not available. Bundled path:" << bundledPath << "Exists:" << QFile::exists(bundledPath);
+        emit ocrError(errorMsg);
         return;
     }
 
@@ -139,9 +142,12 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         candidateDirs << QCoreApplication::applicationDirPath() + "/tessdata";
 
         for (const QString &dirPath : candidateDirs) {
-            if (QDir(dirPath).exists(dirPath + "/eng.traineddata")) {
-                qputenv("TESSDATA_PREFIX", QFileInfo(dirPath).absolutePath().toUtf8());
-                emit ocrProgress(QString("Set TESSDATA_PREFIX to %1").arg(QFileInfo(dirPath).absolutePath()));
+            if (QDir(dirPath).exists() && QFile::exists(dirPath + "/eng.traineddata")) {
+                // Set TESSDATA_PREFIX to the parent directory containing tessdata
+                QString parentDir = QFileInfo(dirPath).absolutePath();
+                qputenv("TESSDATA_PREFIX", parentDir.toUtf8());
+                emit ocrProgress(QString("Set TESSDATA_PREFIX to %1 (tessdata found at %2)").arg(parentDir).arg(dirPath));
+                qDebug() << "Auto-detected tessdata at:" << dirPath << "Setting TESSDATA_PREFIX to:" << parentDir;
                 break;
             }
         }
@@ -237,6 +243,15 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
     m_process = new QProcess(this);
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &OCREngine::onTesseractFinished);
+
+    // Determine which Tesseract to use (bundled or system)
+    QString tesseractExe = "tesseract"; // Default to system PATH
+    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract.exe";
+    if (QFile::exists(bundledTesseract)) {
+        tesseractExe = bundledTesseract;
+        qDebug() << "Using bundled Tesseract:" << tesseractExe;
+    }
+
     // Propagate TESSDATA_PREFIX if set after our detection
     if (!qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -244,7 +259,7 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         m_process->setProcessEnvironment(env);
     }
 
-    m_process->start("tesseract", arguments);
+    m_process->start(tesseractExe, arguments);
     if (!m_process->waitForStarted(5000)) {
         emit ocrError("Failed to start Tesseract process");
         return;
@@ -854,6 +869,18 @@ void OCREngine::onNetworkReplyFinished()
 // Static availability checks
 bool OCREngine::isTesseractAvailable()
 {
+    // First, check for bundled Tesseract in application directory
+    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract.exe";
+    if (QFile::exists(bundledTesseract)) {
+        QProcess process;
+        process.start(bundledTesseract, QStringList() << "--version");
+        if (process.waitForFinished(3000) && process.exitCode() == 0) {
+            qDebug() << "Found bundled Tesseract:" << bundledTesseract;
+            return true;
+        }
+    }
+
+    // Fall back to system-installed Tesseract in PATH
     QProcess process;
     process.start("tesseract", QStringList() << "--version");
     return process.waitForFinished(3000) && process.exitCode() == 0;
