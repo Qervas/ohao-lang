@@ -1,7 +1,6 @@
 #include "OverlayManager.h"
 #include "../screenshot/ScreenshotWidget.h"
 #include "QuickTranslationOverlay.h"
-#include "LanguageLearningOverlay.h"
 #include "../tts/ModernTTSManager.h"
 #include "../tts/TTSManager.h"
 #include "../core/LanguageManager.h"
@@ -12,23 +11,12 @@ OverlayManager::OverlayManager(ScreenshotWidget* parent)
     : QObject(parent)
     , m_parent(parent)
     , m_quickOverlay(nullptr)
-    , m_deepOverlay(nullptr)
-    , m_currentMode(QuickTranslation)
     , m_ocrEngine(nullptr)
 {
     qDebug() << "OverlayManager created";
     initializeOverlays();
     initializeOCR();
-
-    // Load overlay mode from centralized settings
-    QString modeString = AppSettings::instance().getTranslationConfig().overlayMode;
-    if (modeString == "Deep Learning Mode") {
-        m_currentMode = DeepLearning;
-    } else {
-        m_currentMode = QuickTranslation;
-    }
-
-    qDebug() << "OverlayManager initialized with mode:" << (m_currentMode == DeepLearning ? "Deep Learning" : "Quick Translation");
+    qDebug() << "OverlayManager initialized";
 }
 
 OverlayManager::~OverlayManager()
@@ -38,7 +26,7 @@ OverlayManager::~OverlayManager()
 
 void OverlayManager::initializeOverlays()
 {
-    // Create both overlay types
+    // Create quick translation overlay
     m_quickOverlay = new QuickTranslationOverlay(nullptr);
     m_quickOverlay->setAttribute(Qt::WA_DeleteOnClose, false);
     connect(m_quickOverlay, &QuickTranslationOverlay::escapePressed,
@@ -47,21 +35,11 @@ void OverlayManager::initializeOverlays()
                 emit overlayEscapePressed();
             });
 
-    m_deepOverlay = new LanguageLearningOverlay(nullptr);
-    m_deepOverlay->setAttribute(Qt::WA_DeleteOnClose, false);
-    connect(m_deepOverlay, &LanguageLearningOverlay::escapePressed,
-            this, [this]() {
-                hideAllOverlays();
-                emit overlayEscapePressed();
-            });
-
     // Connect to theme changes for immediate theming updates
     connect(&AppSettings::instance(), &AppSettings::uiSettingsChanged,
             m_quickOverlay, &QuickTranslationOverlay::updateThemeColors);
-    connect(&AppSettings::instance(), &AppSettings::uiSettingsChanged,
-            m_deepOverlay, &LanguageLearningOverlay::applyTheme);
 
-    qDebug() << "Both overlay types initialized with escape and theme signal connections";
+    qDebug() << "Quick translation overlay initialized with escape and theme signal connections";
 }
 
 void OverlayManager::initializeOCR()
@@ -129,7 +107,7 @@ void OverlayManager::performOCR(const QPixmap& image, const QRect& selectionRect
 
 void OverlayManager::showOCRResults(const OCRResult& result, const QRect& selectionRect, const QPixmap& sourceImage)
 {
-    qDebug() << "OverlayManager showing OCR results, mode:" << (m_currentMode == DeepLearning ? "Deep Learning" : "Quick Translation");
+    qDebug() << "OverlayManager showing OCR results";
 
     m_lastResult = result;
 
@@ -144,39 +122,32 @@ void OverlayManager::showOCRResults(const OCRResult& result, const QRect& select
     // Position calculation - selectionRect is already in screen coordinates since parent is fullscreen
     QRect globalSelRect = selectionRect;
 
-    if (m_currentMode == DeepLearning) {
-        // Use deep learning overlay
-        m_deepOverlay->showLearningContent(result);
-        m_deepOverlay->positionNearSelection(globalSelRect);
-        qDebug() << "Deep learning overlay positioned and shown";
+    // Use quick translation overlay with new elegant design
+    qDebug() << "Setting up quick overlay - text:" << result.text.left(50) << "translation:" << result.translatedText.left(50);
+    qDebug() << "Translation empty?" << result.translatedText.isEmpty() << "Same as original?" << (result.translatedText == result.text);
+
+    // Set content and mode - always show both if we have translation text
+    m_quickOverlay->setContent(result.text, result.translatedText);
+
+    if (!result.translatedText.isEmpty() && result.translatedText != result.text) {
+        // We have a translation - show it
+        qDebug() << "Showing both original and translation";
+        m_quickOverlay->setMode(QuickTranslationOverlay::ShowBoth);
     } else {
-        // Use quick translation overlay with new elegant design
-        qDebug() << "Setting up quick overlay - text:" << result.text.left(50) << "translation:" << result.translatedText.left(50);
-        qDebug() << "Translation empty?" << result.translatedText.isEmpty() << "Same as original?" << (result.translatedText == result.text);
-
-        // Set content and mode - always show both if we have translation text
-        m_quickOverlay->setContent(result.text, result.translatedText);
-
-        if (!result.translatedText.isEmpty() && result.translatedText != result.text) {
-            // We have a translation - show it
-            qDebug() << "Showing both original and translation";
-            m_quickOverlay->setMode(QuickTranslationOverlay::ShowBoth);
-        } else {
-            // No translation - just show original
-            qDebug() << "Showing only original text - no translation available";
-            m_quickOverlay->setMode(QuickTranslationOverlay::ShowOriginal);
-        }
-
-        // Position the overlay elegantly near the selection
-        QSize screenSize = m_parent->size(); // Screenshot widget covers the full screen
-        m_quickOverlay->setPositionNearRect(globalSelRect, screenSize);
-
-        // Show the overlay
-        m_quickOverlay->show();
-        m_quickOverlay->raise();
-        m_quickOverlay->activateWindow();
-        qDebug() << "Elegant translation overlay positioned and shown near" << globalSelRect;
+        // No translation - just show original
+        qDebug() << "Showing only original text - no translation available";
+        m_quickOverlay->setMode(QuickTranslationOverlay::ShowOriginal);
     }
+
+    // Position the overlay elegantly near the selection
+    QSize screenSize = m_parent->size(); // Screenshot widget covers the full screen
+    m_quickOverlay->setPositionNearRect(globalSelRect, screenSize);
+
+    // Show the overlay
+    m_quickOverlay->show();
+    m_quickOverlay->raise();
+    m_quickOverlay->activateWindow();
+    qDebug() << "Elegant translation overlay positioned and shown near" << globalSelRect;
 
     // Call TTS for the OCR result
     callTTSForResult(result);
@@ -201,30 +172,12 @@ void OverlayManager::hideAllOverlays()
     if (m_quickOverlay) {
         m_quickOverlay->hide();
     }
-    if (m_deepOverlay) {
-        m_deepOverlay->hide();
-    }
     qDebug() << "All overlays hidden";
-}
-
-void OverlayManager::setOverlayMode(OverlayMode mode)
-{
-    if (m_currentMode != mode) {
-        hideAllOverlays();
-        m_currentMode = mode;
-        qDebug() << "Overlay mode changed to:" << (mode == DeepLearning ? "Deep Learning" : "Quick Translation");
-    }
-}
-
-OverlayManager::OverlayMode OverlayManager::getOverlayMode() const
-{
-    return m_currentMode;
 }
 
 bool OverlayManager::areOverlaysVisible() const
 {
-    return (m_quickOverlay && m_quickOverlay->isVisible()) ||
-           (m_deepOverlay && m_deepOverlay->isVisible());
+    return (m_quickOverlay && m_quickOverlay->isVisible());
 }
 
 void OverlayManager::callTTSForResult(const OCRResult& result)
@@ -309,10 +262,6 @@ void OverlayManager::onOCRError(const QString& error)
 
 void OverlayManager::showImmediatePreview(const QRect& selectionRect)
 {
-    if (m_currentMode != QuickTranslation) {
-        return; // Only show immediate preview for quick translation mode
-    }
-
     // Show a preview overlay with processing message
     m_quickOverlay->setContent("🔍 Processing...", "⏳ Translating...");
     m_quickOverlay->setMode(QuickTranslationOverlay::ShowOriginal);

@@ -7,7 +7,6 @@
 
 class ScreenshotWidget;
 class QuickTranslationOverlay;
-class LanguageLearningOverlay;
 
 class OverlayManager : public QObject
 {
@@ -17,11 +16,6 @@ signals:
     void overlayEscapePressed();
 
 public:
-    enum OverlayMode {
-        QuickTranslation,
-        DeepLearning
-    };
-
     explicit OverlayManager(ScreenshotWidget* parent);
     ~OverlayManager();
 
@@ -31,10 +25,6 @@ public:
     void showProgress(const QString& message);
     void showError(const QString& error);
     void hideAllOverlays();
-
-    // Configuration
-    void setOverlayMode(OverlayMode mode);
-    OverlayMode getOverlayMode() const;
 
     // State queries
     bool areOverlaysVisible() const;
@@ -53,8 +43,6 @@ private:
 
     ScreenshotWidget* m_parent;
     QuickTranslationOverlay* m_quickOverlay;
-    LanguageLearningOverlay* m_deepOverlay;
-    OverlayMode m_currentMode;
     OCRResult m_lastResult;
 
     // OCR management
