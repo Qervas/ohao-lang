@@ -57,20 +57,31 @@ public:
     };
 
     struct TTSOptions {
-        QLocale locale = QLocale::system();
-        VoiceQuality preferredQuality = VoiceQuality::Neural;
-        TTSProvider preferredProvider = TTSProvider::EdgeTTS;
-        double volume = 1.0;
-        double rate = 1.0;
-        double pitch = 0.0;
-        bool enableFallback = true;
+        QLocale locale;
+        VoiceQuality preferredQuality;
+        TTSProvider preferredProvider;
+        double volume;
+        double rate;
+        double pitch;
+        bool enableFallback;
+        
+        TTSOptions()
+            : locale(QLocale::system())
+            , preferredQuality(VoiceQuality::Neural)
+            , preferredProvider(TTSProvider::EdgeTTS)
+            , volume(1.0)
+            , rate(1.0)
+            , pitch(0.0)
+            , enableFallback(true)
+        {}
     };
 
 public:
     static ModernTTSManager& instance();
 
     // Main TTS API - simple and unified
-    void speak(const QString& text, const TTSOptions& options = TTSOptions());
+    void speak(const QString& text, const TTSOptions& options);
+    void speak(const QString& text);
     void speak(const QString& text, const QString& languageCode);
     void speak(const QString& text, const QLocale& locale);
 

@@ -54,11 +54,9 @@ LanguageLearningOverlay::LanguageLearningOverlay(QWidget* parent)
     // Start hidden
     setVisible(false);
 
-    // Install event filter for global key handling
+    // Install event filter for global key handling and palette changes
     installEventFilter(this);
-
-    // Connect to application palette changes to respond to theme changes
-    connect(qApp, &QApplication::paletteChanged, this, &LanguageLearningOverlay::onThemeChanged);
+    qApp->installEventFilter(this);
 }
 
 void LanguageLearningOverlay::setupUI()
@@ -708,6 +706,11 @@ bool LanguageLearningOverlay::eventFilter(QObject* object, QEvent* event)
         if (mouseEvent->buttons() & Qt::LeftButton) {
             move(mouseEvent->globalPosition().toPoint() - m_dragPosition);
         }
+    }
+    
+    // Handle application palette changes
+    if (event->type() == QEvent::ApplicationPaletteChange) {
+        onThemeChanged();
     }
 
     return QWidget::eventFilter(object, event);

@@ -101,6 +101,11 @@ void ModernTTSManager::speak(const QString& text, const QLocale& locale)
     speak(text, options);
 }
 
+void ModernTTSManager::speak(const QString& text)
+{
+    speak(text, m_defaultOptions);
+}
+
 void ModernTTSManager::speakWithVoice(const QString& text, const ModernTTSManager::VoiceInfo& voice, const TTSOptions& options)
 {
     qDebug() << "=== speakWithVoice() ENTRY ===";
@@ -682,9 +687,9 @@ QString ModernTTSManager::generateVoiceName(const QString& voiceId, const QLocal
             language = QLocale::languageToString(locale.language());
         }
 
-        QString region = locale.nativeCountryName();
+        QString region = locale.nativeTerritoryName();
         if (region.isEmpty()) {
-            region = QLocale::countryToString(locale.country());
+            region = QLocale::territoryToString(locale.territory());
         }
 
         QString voiceName = parts.last().replace("Neural", "").replace("Standard", "");
