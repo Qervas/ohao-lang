@@ -6,6 +6,7 @@
 #include "../tts/EdgeTTSProvider.h"
 #include "../tts/GoogleWebTTSProvider.h"
 #include "../core/LanguageManager.h"
+#include "../core/AppSettings.h"
 #include <QApplication>
 #include <QScreen>
 #include <QDebug>
@@ -569,7 +570,12 @@ void SettingsWindow::saveSettings()
     if (overlayModeCombo) settings->setValue("translation/overlayMode", overlayModeCombo->currentText());
     if (translationEngineCombo) settings->setValue("translation/engine", translationEngineCombo->currentText());
     if (autoDetectSourceCheck) settings->setValue("translation/autoDetectSource", autoDetectSourceCheck->isChecked());
-    if (sourceLanguageCombo) settings->setValue("translation/sourceLanguage", sourceLanguageCombo->currentText());
+    
+    // Source language always matches OCR language (simplified design)
+    if (ocrLanguageCombo) {
+        settings->setValue("translation/sourceLanguage", ocrLanguageCombo->currentText());
+    }
+    
     if (targetLanguageCombo) settings->setValue("translation/targetLanguage", targetLanguageCombo->currentText());
     if (apiUrlEdit) settings->setValue("translation/apiUrl", apiUrlEdit->text().trimmed());
     if (apiKeyEdit) settings->setValue("translation/apiKey", apiKeyEdit->text());
@@ -739,6 +745,10 @@ void SettingsWindow::onTranslationEngineChanged()
 void SettingsWindow::onApplyClicked()
 {
     saveSettings();
+    
+    // Reload AppSettings to invalidate cache and pick up new values
+    AppSettings::instance().reload();
+    
     QMessageBox::information(this, "Settings Applied",
                            "Settings have been saved successfully!\n\nSome changes may require restarting the application.");
     accept();
