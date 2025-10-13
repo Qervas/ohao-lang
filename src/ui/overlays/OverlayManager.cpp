@@ -166,8 +166,32 @@ void OverlayManager::showProgress(const QString& message)
 void OverlayManager::showError(const QString& error)
 {
     qDebug() << "OverlayManager showing error:" << error;
-    hideAllOverlays();
-    // Error display could be enhanced with a specific error overlay
+    
+    // Show error message in the overlay
+    if (m_quickOverlay && !error.isEmpty()) {
+        m_quickOverlay->setContent("⚠️ No Text Found", error);
+        m_quickOverlay->setMode(QuickTranslationOverlay::ShowBoth);
+        
+        // Position near the selection if we have it, otherwise center
+        QSize screenSize = m_parent->size();
+        if (!m_currentSelectionRect.isEmpty()) {
+            // Position near selection like normal results
+            m_quickOverlay->setPositionNearRect(m_currentSelectionRect, screenSize, m_existingSelections);
+        } else {
+            // Fallback to center
+            int x = (screenSize.width() - 300) / 2;
+            int y = (screenSize.height() - 150) / 2;
+            m_quickOverlay->setGeometry(x, y, 300, 150);
+        }
+        
+        m_quickOverlay->show();
+        m_quickOverlay->raise();
+        m_quickOverlay->activateWindow();
+        
+        qDebug() << "Error overlay shown near selection";
+    } else {
+        hideAllOverlays();
+    }
 }
 
 void OverlayManager::hideAllOverlays()
@@ -246,8 +270,16 @@ void OverlayManager::onOCRFinished(const OCRResult& result)
         // Show results with current selection rect and stored source image
         showOCRResults(result, m_currentSelectionRect, m_currentSourceImage);
     } else {
-        // Show error
-        showError(result.errorMessage);
+        // Show error with appropriate message
+        QString errorMsg = result.errorMessage;
+        if (errorMsg.isEmpty()) {
+            if (result.success) {
+                errorMsg = "No text found in the selected area.\nTry selecting a larger area with visible text.";
+            } else {
+                errorMsg = "OCR processing failed.\nPlease try again.";
+            }
+        }
+        showError(errorMsg);
     }
 }
 
@@ -269,9 +301,9 @@ void OverlayManager::showImmediatePreview(const QRect& selectionRect)
     m_quickOverlay->setContent("🔍 Processing...", "⏳ Translating...");
     m_quickOverlay->setMode(QuickTranslationOverlay::ShowOriginal);
 
-    // Position the overlay
+    // Position the overlay (use existing selections to avoid overlaps)
     QSize screenSize = m_parent->size();
-    m_quickOverlay->setPositionNearRect(selectionRect, screenSize);
+    m_quickOverlay->setPositionNearRect(selectionRect, screenSize, m_existingSelections);
 
     // Show the preview
     m_quickOverlay->show();

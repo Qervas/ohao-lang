@@ -37,6 +37,10 @@ private:
     void drawPanel(QPainter &painter);
     void drawContent(QPainter &painter);
     bool rectsOverlap(const QRect &rect1, const QRect &rect2, int margin = 0) const;
+    
+    // Helper functions for AABB and arrow positioning
+    QPoint closestPointOnRect(const QRect &rect, const QPoint &point) const;
+    void calculateArrowPoints(const QRect &panelRect, const QRect &selectionRect);
 
     QString m_originalText;
     QString m_translatedText;
@@ -51,11 +55,12 @@ private:
     int m_cornerRadius = 12;
     int m_padding = 16;
     int m_spacing = 12;
+    int m_arrowMargin = 30;  // Extra space around panel for arrow (must fit arrow height)
     
-    // Arrow/tail properties for comic-style bubble
-    enum ArrowDirection { NoArrow, ArrowUp, ArrowDown, ArrowLeft, ArrowRight };
-    ArrowDirection m_arrowDirection = NoArrow;
-    QPoint m_arrowTipPosition;  // Where the arrow points to (on selection)
+    // Arrow/tail properties for comic-style bubble (dynamic positioning)
+    QPoint m_arrowBasePoint;     // Point on the bubble edge where arrow starts
+    QPoint m_arrowTipPoint;      // Point on/near selection where arrow points to
+    bool m_hasArrow = false;     // Whether to draw arrow
 
     // Typography
     QFont m_titleFont;

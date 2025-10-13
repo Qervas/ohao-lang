@@ -4,12 +4,14 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QFontMetrics>
+#include <QLineF>
 #include <QtMath>
 #include <QApplication>
 #include <QMouseEvent>
 #include <QKeyEvent>
 #include <QGraphicsDropShadowEffect>
 #include <QPropertyAnimation>
+#include <QDebug>
 
 QuickTranslationOverlay::QuickTranslationOverlay(QWidget *parent)
     : QWidget(parent)
@@ -52,7 +54,12 @@ void QuickTranslationOverlay::setMode(Mode mode)
 void QuickTranslationOverlay::setPositionNearRect(const QRect &selectionRect, const QSize &screenSize, const QList<QRect> &avoidRects)
 {
     calculateOptimalPosition(selectionRect, screenSize, avoidRects);
-    setGeometry(m_panelPosition.x(), m_panelPosition.y(), m_panelSize.width(), m_panelSize.height());
+    
+    // Ensure the overlay stays within screen bounds
+    int x = qBound(0, m_panelPosition.x(), screenSize.width() - m_panelSize.width());
+    int y = qBound(0, m_panelPosition.y(), screenSize.height() - m_panelSize.height());
+    
+    setGeometry(x, y, m_panelSize.width(), m_panelSize.height());
 }
 
 void QuickTranslationOverlay::setFontScaling(float factor)
@@ -115,7 +122,12 @@ void QuickTranslationOverlay::calculatePanelSize()
         }
     }
 
-    m_panelSize = QSize(qMax(200, optimalWidth), qMax(80, totalHeight));
+    // Add arrow margin space on all sides so arrow can extend outside the panel content
+    // The widget will be larger than the panel to accommodate the arrow
+    int widgetWidth = qMax(200, optimalWidth) + (m_arrowMargin * 2);
+    int widgetHeight = qMax(80, totalHeight) + (m_arrowMargin * 2);
+    
+    m_panelSize = QSize(widgetWidth, widgetHeight);
 }
 
 void QuickTranslationOverlay::calculateOptimalPosition(const QRect &selectionRect, const QSize &screenSize, const QList<QRect> &avoidRects)
@@ -123,135 +135,174 @@ void QuickTranslationOverlay::calculateOptimalPosition(const QRect &selectionRec
     // Store selection rect for drawing arrow
     m_selectionRect = selectionRect;
     
-    const int margin = 10; // Distance from selection (closer for natural comic bubble feel)
+    const int offset = 30; // Fixed offset distance from selection
+    const int screenMargin = 10; // Margin from screen edges
+    
+    // Calculate the actual panel size (excluding arrow margins)
+    int panelWidth = m_panelSize.width() - (m_arrowMargin * 2);
+    int panelHeight = m_panelSize.height() - (m_arrowMargin * 2);
 
-    // Calculate available space in each direction
-    int spaceAbove = selectionRect.top();
-    int spaceBelow = screenSize.height() - selectionRect.bottom();
-    int spaceLeft = selectionRect.left();
-    int spaceRight = screenSize.width() - selectionRect.right();
+    qDebug() << "=== Position Calculation ===";
+    qDebug() << "Selection:" << selectionRect;
+    qDebug() << "Panel size:" << panelWidth << "x" << panelHeight;
+    qDebug() << "Screen size:" << screenSize;
 
-    // Try positions in order of preference: below, above, right, left
-    QList<QRect> candidatePositions;
+    // Try 4 positions and verify no intersection with selection
+    QRect panelRect;
+    bool positionFound = false;
     
-    // Position below
-    if (spaceBelow >= m_panelSize.height() + margin) {
-        int x = qMax(margin, qMin(screenSize.width() - m_panelSize.width() - margin,
-                                  selectionRect.center().x() - m_panelSize.width() / 2));
-        int y = selectionRect.bottom() + margin;
-        candidatePositions.append(QRect(x, y, m_panelSize.width(), m_panelSize.height()));
-    }
-    
-    // Position above
-    if (spaceAbove >= m_panelSize.height() + margin) {
-        int x = qMax(margin, qMin(screenSize.width() - m_panelSize.width() - margin,
-                                  selectionRect.center().x() - m_panelSize.width() / 2));
-        int y = selectionRect.top() - m_panelSize.height() - margin;
-        candidatePositions.append(QRect(x, y, m_panelSize.width(), m_panelSize.height()));
-    }
-    
-    // Position to the right
-    if (spaceRight >= m_panelSize.width() + margin) {
-        int x = selectionRect.right() + margin;
-        int y = qMax(margin, qMin(screenSize.height() - m_panelSize.height() - margin,
-                                  selectionRect.center().y() - m_panelSize.height() / 2));
-        candidatePositions.append(QRect(x, y, m_panelSize.width(), m_panelSize.height()));
-    }
-    
-    // Position to the left
-    if (spaceLeft >= m_panelSize.width() + margin) {
-        int x = selectionRect.left() - m_panelSize.width() - margin;
-        int y = qMax(margin, qMin(screenSize.height() - m_panelSize.height() - margin,
-                                  selectionRect.center().y() - m_panelSize.height() / 2));
-        candidatePositions.append(QRect(x, y, m_panelSize.width(), m_panelSize.height()));
-    }
-
-    // Find the first position that doesn't overlap with any existing selections
-    QPoint position;
-    bool foundPosition = false;
-    int chosenIndex = -1;
-    
-    // Check if selection rect is in avoidRects to prevent blocking it
-    QList<QRect> allAvoidRects = avoidRects;
-    allAvoidRects.append(selectionRect);  // Always avoid the current selection
-    
-    for (int i = 0; i < candidatePositions.size(); ++i) {
-        const QRect &candidate = candidatePositions[i];
-        bool overlaps = false;
+    // Try below first (most natural)
+    {
+        int x = selectionRect.center().x() - panelWidth / 2;
+        int y = selectionRect.bottom() + offset;
+        QRect panelCandidate(x, y, panelWidth, panelHeight);
+        // Calculate widget rect to check actual boundaries
+        QRect widgetCandidate = panelCandidate.adjusted(-m_arrowMargin, -m_arrowMargin, m_arrowMargin, m_arrowMargin);
         
-        for (const QRect &avoid : allAvoidRects) {
-            if (rectsOverlap(candidate, avoid, margin)) {
-                overlaps = true;
-                break;
-            }
-        }
+        qDebug() << "Try BELOW:";
+        qDebug() << "  Panel:" << panelCandidate;
+        qDebug() << "  Widget:" << widgetCandidate;
         
-        if (!overlaps) {
-            position = candidate.topLeft();
-            foundPosition = true;
-            chosenIndex = i;
-            break;
-        }
-    }
-    
-    // If all positions overlap, try with reduced margin
-    if (!foundPosition) {
-        for (int i = 0; i < candidatePositions.size(); ++i) {
-            const QRect &candidate = candidatePositions[i];
-            bool overlaps = false;
-            
-            for (const QRect &avoid : allAvoidRects) {
-                if (rectsOverlap(candidate, avoid, 10)) {  // Reduced margin
-                    overlaps = true;
-                    break;
-                }
-            }
-            
-            if (!overlaps) {
-                position = candidate.topLeft();
-                foundPosition = true;
-                chosenIndex = i;
-                break;
-            }
-        }
-    }
-    
-    // If still overlapping, use the first candidate or fallback to center
-    if (!foundPosition) {
-        if (!candidatePositions.isEmpty()) {
-            position = candidatePositions.first().topLeft();
-            chosenIndex = 0;
+        // Check if WIDGET fits on screen and doesn't intersect selection
+        if (widgetCandidate.left() >= screenMargin && 
+            widgetCandidate.right() <= screenSize.width() - screenMargin &&
+            widgetCandidate.top() >= screenMargin &&
+            widgetCandidate.bottom() <= screenSize.height() - screenMargin && 
+            !widgetCandidate.intersects(selectionRect)) {
+            panelRect = panelCandidate;
+            positionFound = true;
+            qDebug() << "  ✓ BELOW works!";
         } else {
-            // Fallback: center on screen
-            position.setX((screenSize.width() - m_panelSize.width()) / 2);
-            position.setY((screenSize.height() - m_panelSize.height()) / 2);
-            m_arrowDirection = NoArrow;
-            m_panelPosition = position;
-            return;
+            qDebug() << "  ✗ BELOW failed - widget intersects:" << widgetCandidate.intersects(selectionRect);
         }
     }
-
-    m_panelPosition = position;
     
-    // Determine arrow direction based on which position was chosen
-    // The order is: below (0), above (1), right (2), left (3)
-    if (chosenIndex == 0 || (chosenIndex == -1 && spaceBelow >= spaceAbove)) {
-        // Positioned below selection - arrow points up
-        m_arrowDirection = ArrowUp;
-        m_arrowTipPosition = QPoint(selectionRect.center().x(), selectionRect.bottom());
-    } else if (chosenIndex == 1 || (chosenIndex == -1 && spaceAbove > spaceBelow)) {
-        // Positioned above selection - arrow points down
-        m_arrowDirection = ArrowDown;
-        m_arrowTipPosition = QPoint(selectionRect.center().x(), selectionRect.top());
-    } else if (chosenIndex == 2 || (chosenIndex == -1 && spaceRight >= spaceLeft)) {
-        // Positioned to the right - arrow points left
-        m_arrowDirection = ArrowLeft;
-        m_arrowTipPosition = QPoint(selectionRect.right(), selectionRect.center().y());
-    } else {
-        // Positioned to the left - arrow points right
-        m_arrowDirection = ArrowRight;
-        m_arrowTipPosition = QPoint(selectionRect.left(), selectionRect.center().y());
+    // Try above
+    if (!positionFound) {
+        int x = selectionRect.center().x() - panelWidth / 2;
+        int y = selectionRect.top() - panelHeight - offset;
+        QRect panelCandidate(x, y, panelWidth, panelHeight);
+        QRect widgetCandidate = panelCandidate.adjusted(-m_arrowMargin, -m_arrowMargin, m_arrowMargin, m_arrowMargin);
+        
+        qDebug() << "Try ABOVE:";
+        qDebug() << "  Panel:" << panelCandidate;
+        qDebug() << "  Widget:" << widgetCandidate;
+        
+        if (widgetCandidate.left() >= screenMargin && 
+            widgetCandidate.right() <= screenSize.width() - screenMargin &&
+            widgetCandidate.top() >= screenMargin &&
+            widgetCandidate.bottom() <= screenSize.height() - screenMargin && 
+            !widgetCandidate.intersects(selectionRect)) {
+            panelRect = panelCandidate;
+            positionFound = true;
+            qDebug() << "  ✓ ABOVE works!";
+        } else {
+            qDebug() << "  ✗ ABOVE failed - widget intersects:" << widgetCandidate.intersects(selectionRect);
+        }
     }
+    
+    // Try right
+    if (!positionFound) {
+        int x = selectionRect.right() + offset;
+        int y = selectionRect.center().y() - panelHeight / 2;
+        QRect panelCandidate(x, y, panelWidth, panelHeight);
+        QRect widgetCandidate = panelCandidate.adjusted(-m_arrowMargin, -m_arrowMargin, m_arrowMargin, m_arrowMargin);
+        
+        qDebug() << "Try RIGHT:";
+        qDebug() << "  Panel:" << panelCandidate;
+        qDebug() << "  Widget:" << widgetCandidate;
+        
+        if (widgetCandidate.left() >= screenMargin &&
+            widgetCandidate.right() <= screenSize.width() - screenMargin &&
+            widgetCandidate.top() >= screenMargin &&
+            widgetCandidate.bottom() <= screenSize.height() - screenMargin && 
+            !widgetCandidate.intersects(selectionRect)) {
+            panelRect = panelCandidate;
+            positionFound = true;
+            qDebug() << "  ✓ RIGHT works!";
+        } else {
+            qDebug() << "  ✗ RIGHT failed - widget intersects:" << widgetCandidate.intersects(selectionRect);
+        }
+    }
+    
+    // Try left
+    if (!positionFound) {
+        int x = selectionRect.left() - panelWidth - offset;
+        int y = selectionRect.center().y() - panelHeight / 2;
+        QRect panelCandidate(x, y, panelWidth, panelHeight);
+        QRect widgetCandidate = panelCandidate.adjusted(-m_arrowMargin, -m_arrowMargin, m_arrowMargin, m_arrowMargin);
+        
+        qDebug() << "Try LEFT:";
+        qDebug() << "  Panel:" << panelCandidate;
+        qDebug() << "  Widget:" << widgetCandidate;
+        
+        if (widgetCandidate.left() >= screenMargin &&
+            widgetCandidate.right() <= screenSize.width() - screenMargin &&
+            widgetCandidate.top() >= screenMargin &&
+            widgetCandidate.bottom() <= screenSize.height() - screenMargin && 
+            !widgetCandidate.intersects(selectionRect)) {
+            panelRect = panelCandidate;
+            positionFound = true;
+            qDebug() << "  ✓ LEFT works!";
+        } else {
+            qDebug() << "  ✗ LEFT failed - widget intersects:" << widgetCandidate.intersects(selectionRect);
+        }
+    }
+    
+    // Fallback: Smart positioning when all else fails
+    if (!positionFound) {
+        qDebug() << "⚠️ FALLBACK positioning";
+        
+        // Place in the corner with most space
+        int x, y;
+        
+        // Check which quadrant has most space
+        int spaceBelow = screenSize.height() - selectionRect.bottom();
+        int spaceAbove = selectionRect.top();
+        int spaceRight = screenSize.width() - selectionRect.right();
+        int spaceLeft = selectionRect.left();
+        
+        if (spaceBelow >= spaceAbove && spaceBelow >= spaceRight && spaceBelow >= spaceLeft) {
+            // Most space below
+            x = qBound(screenMargin, selectionRect.center().x() - panelWidth / 2, 
+                      screenSize.width() - panelWidth - screenMargin);
+            y = qBound(selectionRect.bottom() + offset, selectionRect.bottom() + offset, 
+                      screenSize.height() - panelHeight - screenMargin);
+        } else if (spaceAbove > spaceRight && spaceAbove > spaceLeft) {
+            // Most space above
+            x = qBound(screenMargin, selectionRect.center().x() - panelWidth / 2, 
+                      screenSize.width() - panelWidth - screenMargin);
+            y = qBound(screenMargin, selectionRect.top() - panelHeight - offset, 
+                      selectionRect.top() - panelHeight - offset);
+        } else if (spaceRight > spaceLeft) {
+            // Most space right
+            x = qBound(selectionRect.right() + offset, selectionRect.right() + offset, 
+                      screenSize.width() - panelWidth - screenMargin);
+            y = qBound(screenMargin, selectionRect.center().y() - panelHeight / 2, 
+                      screenSize.height() - panelHeight - screenMargin);
+        } else {
+            // Most space left
+            x = qBound(screenMargin, selectionRect.left() - panelWidth - offset, 
+                      selectionRect.left() - panelWidth - offset);
+            y = qBound(screenMargin, selectionRect.center().y() - panelHeight / 2, 
+                      screenSize.height() - panelHeight - screenMargin);
+        }
+        
+        panelRect = QRect(x, y, panelWidth, panelHeight);
+        qDebug() << "  Fallback position:" << panelRect;
+    }
+    
+    // Convert panel rect to widget rect (add arrow margin space on all sides)
+    QRect widgetRect = panelRect.adjusted(-m_arrowMargin, -m_arrowMargin, m_arrowMargin, m_arrowMargin);
+    m_panelPosition = widgetRect.topLeft();
+    
+    qDebug() << "Final panel rect:" << panelRect;
+    qDebug() << "Final widget rect:" << widgetRect;
+    qDebug() << "Intersects selection?" << panelRect.intersects(selectionRect);
+    qDebug() << "=== End Position Calculation ===\n";
+    
+    // Calculate dynamic arrow points (nearest point on panel to nearest point on selection)
+    calculateArrowPoints(panelRect, selectionRect);
 }
 
 bool QuickTranslationOverlay::rectsOverlap(const QRect &rect1, const QRect &rect2, int margin) const
@@ -259,6 +310,47 @@ bool QuickTranslationOverlay::rectsOverlap(const QRect &rect1, const QRect &rect
     // Expand rect2 by margin to create a buffer zone
     QRect expandedRect = rect2.adjusted(-margin, -margin, margin, margin);
     return rect1.intersects(expandedRect);
+}
+
+QPoint QuickTranslationOverlay::closestPointOnRect(const QRect &rect, const QPoint &point) const
+{
+    // Find the closest point on the rectangle's perimeter to the given point
+    int x = qBound(rect.left(), point.x(), rect.right());
+    int y = qBound(rect.top(), point.y(), rect.bottom());
+    
+    // If the point is inside the rect, find the closest edge
+    if (rect.contains(point)) {
+        int distToLeft = point.x() - rect.left();
+        int distToRight = rect.right() - point.x();
+        int distToTop = point.y() - rect.top();
+        int distToBottom = rect.bottom() - point.y();
+        
+        int minDist = qMin(qMin(distToLeft, distToRight), qMin(distToTop, distToBottom));
+        
+        if (minDist == distToLeft) return QPoint(rect.left(), point.y());
+        if (minDist == distToRight) return QPoint(rect.right(), point.y());
+        if (minDist == distToTop) return QPoint(point.x(), rect.top());
+        return QPoint(point.x(), rect.bottom());
+    }
+    
+    return QPoint(x, y);
+}
+
+void QuickTranslationOverlay::calculateArrowPoints(const QRect &panelRect, const QRect &selectionRect)
+{
+    // Find the center points of both rects
+    QPoint panelCenter = panelRect.center();
+    QPoint selectionCenter = selectionRect.center();
+    
+    // Find the closest point on the selection to the panel center
+    m_arrowTipPoint = closestPointOnRect(selectionRect, panelCenter);
+    
+    // Find the closest point on the panel to the selection center
+    m_arrowBasePoint = closestPointOnRect(panelRect, selectionCenter);
+    
+    // Only show arrow if the distance is reasonable
+    int distance = QLineF(m_arrowBasePoint, m_arrowTipPoint).length();
+    m_hasArrow = (distance > 5); // Don't show arrow if too close
 }
 
 QRect QuickTranslationOverlay::getTextRect(const QString &text, const QFont &font, int maxWidth) const
@@ -283,67 +375,33 @@ void QuickTranslationOverlay::paintEvent(QPaintEvent *event)
 
 void QuickTranslationOverlay::drawPanel(QPainter &painter)
 {
-    QRect panelRect = rect().adjusted(0, 0, -3, -3);
+    // Inset the panel rect by arrow margin on all sides, leaving room for arrow
+    QRect panelRect = rect().adjusted(m_arrowMargin, m_arrowMargin, -m_arrowMargin - 3, -m_arrowMargin - 3);
     
-    // Create path for panel with arrow (comic bubble style)
+    // Create path for rounded rectangle panel
     QPainterPath bubblePath;
     bubblePath.addRoundedRect(panelRect, m_cornerRadius, m_cornerRadius);
     
-    // Create arrow polygon (will be drawn separately for reliability)
+    // Create dynamic arrow polygon pointing from panel to selection
     QPolygonF arrow;
-    
-    // Add comic-style arrow/tail pointing to selection
-    if (m_arrowDirection != NoArrow) {
-        const int arrowWidth = 30;   // Width of arrow base (even wider)
-        const int arrowHeight = 25;  // How far arrow extends (longer)
+    if (m_hasArrow) {
+        const int arrowWidth = 25;  // Width of arrow base
         
-        QPoint bubbleEdgeCenter;
+        // Convert arrow points from screen coordinates to widget coordinates
+        QPoint baseInWidget = m_arrowBasePoint - rect().topLeft();
+        QPoint tipInWidget = m_arrowTipPoint - rect().topLeft();
         
-        switch (m_arrowDirection) {
-        case ArrowUp: {
-            // Arrow pointing up (bubble is below selection)
-            bubbleEdgeCenter = QPoint(panelRect.center().x(), panelRect.top());
-            // Clamp to panel width
-            int centerX = qBound(panelRect.left() + m_cornerRadius + 20, bubbleEdgeCenter.x(), 
-                                panelRect.right() - m_cornerRadius - 20);
-            arrow << QPointF(centerX - arrowWidth/2, panelRect.top())
-                  << QPointF(centerX, panelRect.top() - arrowHeight)
-                  << QPointF(centerX + arrowWidth/2, panelRect.top());
-            break;
-        }
-        case ArrowDown: {
-            // Arrow pointing down (bubble is above selection)
-            bubbleEdgeCenter = QPoint(panelRect.center().x(), panelRect.bottom());
-            int centerX = qBound(panelRect.left() + m_cornerRadius + 20, bubbleEdgeCenter.x(), 
-                                panelRect.right() - m_cornerRadius - 20);
-            arrow << QPointF(centerX - arrowWidth/2, panelRect.bottom())
-                  << QPointF(centerX, panelRect.bottom() + arrowHeight)
-                  << QPointF(centerX + arrowWidth/2, panelRect.bottom());
-            break;
-        }
-        case ArrowLeft: {
-            // Arrow pointing left (bubble is to the right of selection)
-            bubbleEdgeCenter = QPoint(panelRect.left(), panelRect.center().y());
-            int centerY = qBound(panelRect.top() + m_cornerRadius + 20, bubbleEdgeCenter.y(), 
-                                panelRect.bottom() - m_cornerRadius - 20);
-            arrow << QPointF(panelRect.left(), centerY - arrowWidth/2)
-                  << QPointF(panelRect.left() - arrowHeight, centerY)
-                  << QPointF(panelRect.left(), centerY + arrowWidth/2);
-            break;
-        }
-        case ArrowRight: {
-            // Arrow pointing right (bubble is to the left of selection)
-            bubbleEdgeCenter = QPoint(panelRect.right(), panelRect.center().y());
-            int centerY = qBound(panelRect.top() + m_cornerRadius + 20, bubbleEdgeCenter.y(), 
-                                panelRect.bottom() - m_cornerRadius - 20);
-            arrow << QPointF(panelRect.right(), centerY - arrowWidth/2)
-                  << QPointF(panelRect.right() + arrowHeight, centerY)
-                  << QPointF(panelRect.right(), centerY + arrowWidth/2);
-            break;
-        }
-        default:
-            break;
-        }
+        // Calculate perpendicular vector for arrow width
+        QLineF arrowLine(baseInWidget, tipInWidget);
+        QLineF perpendicular = arrowLine.normalVector();
+        perpendicular.setLength(arrowWidth / 2.0);
+        
+        // Create arrow triangle
+        QPointF p1 = baseInWidget + QPointF(perpendicular.dx(), perpendicular.dy());
+        QPointF p2 = tipInWidget;
+        QPointF p3 = baseInWidget - QPointF(perpendicular.dx(), perpendicular.dy());
+        
+        arrow << p1 << p2 << p3;
     }
     
     // Draw shadow for panel
@@ -364,7 +422,7 @@ void QuickTranslationOverlay::drawPanel(QPainter &painter)
     painter.setPen(QPen(m_borderColor, 2));
     painter.drawPath(bubblePath);
     
-    // Draw arrow separately (more reliable than path union)
+    // Draw arrow separately with same style as panel
     if (!arrow.isEmpty()) {
         painter.setBrush(m_backgroundColor);
         painter.setPen(QPen(m_borderColor, 2));
@@ -374,7 +432,9 @@ void QuickTranslationOverlay::drawPanel(QPainter &painter)
 
 void QuickTranslationOverlay::drawContent(QPainter &painter)
 {
-    const QRect contentRect = rect().adjusted(m_padding, m_padding, -m_padding - 3, -m_padding - 3);
+    // Adjust content rect to account for arrow margin (panel is inset within widget)
+    const QRect contentRect = rect().adjusted(m_arrowMargin + m_padding, m_arrowMargin + m_padding, 
+                                             -m_arrowMargin - m_padding - 3, -m_arrowMargin - m_padding - 3);
     int currentY = contentRect.top();
 
     painter.setPen(m_textColor);

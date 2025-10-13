@@ -21,10 +21,15 @@
 
 ScreenshotWidget::ScreenshotWidget(QWidget *parent)
     : QWidget(parent), selecting(false), hasSelection(false), showingToolbar(false)
-    , showingResults(false)
+    , showingResults(false), m_isFirstSelection(true)
 {
     // Make fullscreen and frameless
+    // On macOS, add BypassWindowManagerHint to cover the menu bar completely
+    #ifdef Q_OS_MACOS
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool | Qt::BypassWindowManagerHint);
+    #else
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+    #endif
     setAttribute(Qt::WA_TranslucentBackground);
 
     // Ensure this widget uses the application's theme palette
@@ -48,10 +53,15 @@ ScreenshotWidget::ScreenshotWidget(QWidget *parent)
 
 ScreenshotWidget::ScreenshotWidget(const QPixmap &screenshot, QWidget *parent)
     : QWidget(parent), selecting(false), hasSelection(false), showingToolbar(false)
-    , showingResults(false)
+    , showingResults(false), m_isFirstSelection(true)
 {
     // Make fullscreen and frameless
+    // On macOS, add BypassWindowManagerHint to cover the menu bar completely
+    #ifdef Q_OS_MACOS
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool | Qt::BypassWindowManagerHint);
+    #else
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+    #endif
     setAttribute(Qt::WA_TranslucentBackground);
 
     // Ensure this widget uses the application's theme palette
@@ -542,12 +552,65 @@ void ScreenshotWidget::handleSave()
 void ScreenshotWidget::handleOCR()
 {
     QRect selection = QRect(startPoint, endPoint).normalized();
-    QPixmap selectedArea = screenshot.copy(QRect(
-        QPoint(static_cast<int>(selection.x() * screenshot.devicePixelRatio()),
-               static_cast<int>(selection.y() * screenshot.devicePixelRatio())),
-        QSize(static_cast<int>(selection.width() * screenshot.devicePixelRatio()),
-              static_cast<int>(selection.height() * screenshot.devicePixelRatio()))
-    ));
+    
+    #ifdef Q_OS_MACOS
+    // Workaround for macOS menu bar offset on first selection
+    // Process first selection but automatically retry with same coordinates
+    if (m_isFirstSelection) {
+        m_isFirstSelection = false;
+        m_firstSelectionRect = selection;
+        
+        qDebug() << "⚠️ First selection detected (macOS menu bar offset workaround)";
+        qDebug() << "First selection rect:" << selection;
+        qDebug() << "Will automatically retry after brief delay...";
+        
+        // Reset selection state
+        hasSelection = false;
+        selecting = false;
+        showingToolbar = false;
+        startPoint = QPoint();
+        endPoint = QPoint();
+        
+        update();
+        
+        // Automatically trigger second OCR with same coordinates after 200ms delay
+        QTimer::singleShot(200, this, [this]() {
+            qDebug() << "🔄 Automatic retry with corrected coordinates";
+            
+            // Restore selection coordinates
+            startPoint = m_firstSelectionRect.topLeft();
+            endPoint = m_firstSelectionRect.bottomRight();
+            hasSelection = true;
+            
+            // Call handleOCR again - this time m_isFirstSelection is false
+            handleOCR();
+        });
+        
+        return;
+    }
+    #endif
+    
+    qDebug() << "=== handleOCR Debug ===";
+    qDebug() << "Selection (logical):" << selection;
+    qDebug() << "Screenshot size:" << screenshot.size();
+    qDebug() << "Screenshot DPR:" << screenshot.devicePixelRatio();
+    
+    // Calculate physical coordinates
+    QRect physicalRect(
+        static_cast<int>(selection.x() * screenshot.devicePixelRatio()),
+        static_cast<int>(selection.y() * screenshot.devicePixelRatio()),
+        static_cast<int>(selection.width() * screenshot.devicePixelRatio()),
+        static_cast<int>(selection.height() * screenshot.devicePixelRatio())
+    );
+    
+    qDebug() << "Physical rect for copy:" << physicalRect;
+    
+    QPixmap selectedArea = screenshot.copy(physicalRect);
+    
+    qDebug() << "Copied pixmap size:" << selectedArea.size();
+    qDebug() << "Copied pixmap isNull:" << selectedArea.isNull();
+    qDebug() << "Copied pixmap DPR:" << selectedArea.devicePixelRatio();
+    qDebug() << "=== End handleOCR Debug ===";
 
     qDebug() << "OCR requested for selection:" << selection;
 

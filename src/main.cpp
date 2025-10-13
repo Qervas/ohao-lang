@@ -46,19 +46,56 @@ int main(int argc, char *argv[])
     // Single instance check using shared memory
     const QString uniqueKey = "ohao-lang-single-instance";
     QSharedMemory sharedMemory(uniqueKey);
-
-    if (!sharedMemory.create(1)) {
-        // Another instance is already running
+    
+    // Try to attach first - if it succeeds, another instance might be running
+    if (sharedMemory.attach()) {
+        qDebug() << "Found existing shared memory, checking if instance is actually running...";
+        sharedMemory.detach();
+        
         // Try to communicate with existing instance via local socket
         QLocalSocket socket;
         socket.connectToServer("ohao-lang-server");
-        if (socket.waitForConnected(1000)) {
-            // Send activation signal to existing instance
+        if (socket.waitForConnected(500)) {
+            // Existing instance is alive
+            qDebug() << "Existing instance is running, activating it...";
             socket.write("activate");
             socket.waitForBytesWritten(1000);
             socket.disconnectFromServer();
+            return 0; // Exit silently
         }
-        return 0; // Exit silently
+        qDebug() << "No running instance found, cleaning up stale shared memory...";
+    }
+    
+    // Create shared memory (will succeed even if old segment exists but no process owns it)
+    if (!sharedMemory.create(1)) {
+        // If create fails after cleanup attempt, force detach and retry
+        qDebug() << "Failed to create shared memory, attempting to fix...";
+        if (sharedMemory.error() == QSharedMemory::AlreadyExists) {
+            // Attach to the existing segment and detach immediately to clean it up
+            if (sharedMemory.attach()) {
+                qDebug() << "Attached to stale shared memory, detaching...";
+                sharedMemory.detach();
+            }
+            // Try creating again
+            if (!sharedMemory.create(1)) {
+                qDebug() << "Still failed to create shared memory after cleanup:" << sharedMemory.errorString();
+                // Last resort: maybe there really is another instance?
+                QLocalSocket socket;
+                socket.connectToServer("ohao-lang-server");
+                if (socket.waitForConnected(500)) {
+                    socket.write("activate");
+                    socket.waitForBytesWritten(1000);
+                    socket.disconnectFromServer();
+                    return 0;
+                }
+                // No instance running, proceed anyway
+                qDebug() << "No instance detected via socket, proceeding without shared memory lock";
+            }
+        } else {
+            qDebug() << "Unexpected shared memory error:" << sharedMemory.errorString();
+        }
+    } else {
+        qDebug() << "Successfully created shared memory lock";
     }
 
     // Parse command line arguments for Linux desktop shortcuts

@@ -80,5 +80,9 @@ private:
     
     // Dimming opacity (loaded from settings)
     int m_dimmingOpacity;
+    
+    // Track first selection after screenshot (workaround for macOS menu bar offset)
+    bool m_isFirstSelection;
+    QRect m_firstSelectionRect;  // Store first selection coordinates for auto-retry
 
 };
