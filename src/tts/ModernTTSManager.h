@@ -41,10 +41,10 @@ public:
     };
 
     enum class TTSProvider {
-        EdgeTTS,        // Microsoft Edge TTS (free, high quality)
-        GoogleWeb,      // Google Web TTS (free)
-        AzureCognitive, // Azure Cognitive Services (paid, premium)
-        SystemTTS       // OS built-in TTS (fallback)
+        SystemTTS,      // OS built-in TTS (default, uses downloaded voices)
+        GoogleWeb,      // Google Web TTS (free, web-based)
+        EdgeTTS,        // Microsoft Edge TTS (requires installation)
+        AzureCognitive  // Azure Cognitive Services (paid, premium)
     };
 
     struct VoiceInfo {
@@ -68,7 +68,7 @@ public:
         TTSOptions()
             : locale(QLocale::system())
             , preferredQuality(VoiceQuality::Neural)
-            , preferredProvider(TTSProvider::EdgeTTS)
+            , preferredProvider(TTSProvider::SystemTTS)
             , volume(1.0)
             , rate(1.0)
             , pitch(0.0)
@@ -168,7 +168,7 @@ private:
     VoiceInfo m_currentVoice;
     QTextToSpeech::State m_state = QTextToSpeech::Ready;
     TTSOptions m_defaultOptions;
-    TTSProvider m_currentProviderType = TTSProvider::EdgeTTS;
+    TTSProvider m_currentProviderType = TTSProvider::SystemTTS;
 
     // Voice database
     QList<VoiceInfo> m_availableVoices;

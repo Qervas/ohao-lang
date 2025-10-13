@@ -1,5 +1,7 @@
 #include "OCREngine.h"
+#include "AppleVisionOCR.h"
 #include "TranslationEngine.h"
+#include "../common/Platform.h"
 #include <QDebug>
 #include <QBuffer>
 #include <QImageWriter>
@@ -17,6 +19,20 @@ OCREngine::OCREngine(QObject *parent)
 {
     m_tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/ohao-lang-ocr";
     QDir().mkpath(m_tempDir);
+    
+    // Set default engine based on platform
+#ifdef Q_OS_MACOS
+    if (isAppleVisionAvailable()) {
+        m_engine = AppleVision;
+        qDebug() << "OCREngine: Defaulting to Apple Vision (native macOS OCR)";
+    } else {
+        m_engine = OnlineOCR;
+        qDebug() << "OCREngine: Apple Vision not available, using Online OCR";
+    }
+#else
+    m_engine = Tesseract;  // Default to Tesseract on other platforms
+    qDebug() << "OCREngine: Defaulting to Tesseract on" << PLATFORM_NAME;
+#endif
 }
 
 OCREngine::~OCREngine()
@@ -98,6 +114,9 @@ void OCREngine::performOCR(const QPixmap &image)
     emit ocrProgress("Starting OCR processing...");
 
     switch (m_engine) {
+    case AppleVision:
+        performAppleVisionOCR(image);
+        break;
     case Tesseract:
         performTesseractOCR(image);
         break;
@@ -114,6 +133,53 @@ void OCREngine::performOCR(const QPixmap &image)
         performOnlineOCR(image);
         break;
     }
+}
+
+void OCREngine::performAppleVisionOCR(const QPixmap &image)
+{
+#ifdef Q_OS_MACOS
+    if (!AppleVisionOCR::isAvailable()) {
+        emit ocrError("Apple Vision OCR is not available on this system");
+        return;
+    }
+
+    emit ocrProgress("Running Apple Vision OCR...");
+
+    // Determine recognition level based on quality setting
+    AppleVisionOCR::RecognitionLevel level = (m_qualityLevel >= 4) 
+        ? AppleVisionOCR::Accurate 
+        : AppleVisionOCR::Fast;
+
+    // Map language to Apple Vision format
+    QString visionLanguage = m_language;
+    if (m_language == "Auto-Detect") {
+        visionLanguage = QString(); // Empty string means auto-detect
+    }
+
+    // Perform OCR using Apple Vision
+    OCRResult result = AppleVisionOCR::performOCR(image, visionLanguage, level);
+
+    // Apply language-specific character corrections if OCR succeeded
+    if (result.success && !result.text.isEmpty()) {
+        result.text = correctLanguageSpecificCharacters(result.text, m_language);
+    }
+
+    // Store the OCR result and start translation if auto-translate is enabled
+    m_currentOCRResult = result;
+
+    // Ensure tokens exist before emitting or starting translation
+    if (result.success) {
+        ensureTokensExist(m_currentOCRResult, image.size());
+    }
+
+    if (result.success && m_autoTranslate && !result.text.isEmpty()) {
+        startTranslation(result.text);
+    } else {
+        emit ocrFinished(m_currentOCRResult);
+    }
+#else
+    emit ocrError("Apple Vision OCR is only available on macOS");
+#endif
 }
 
 void OCREngine::performTesseractOCR(const QPixmap &image)
@@ -867,6 +933,15 @@ void OCREngine::onNetworkReplyFinished()
 }
 
 // Static availability checks
+bool OCREngine::isAppleVisionAvailable()
+{
+#ifdef Q_OS_MACOS
+    return AppleVisionOCR::isAvailable();
+#else
+    return false;
+#endif
+}
+
 bool OCREngine::isTesseractAvailable()
 {
     // First, check for bundled Tesseract in application directory

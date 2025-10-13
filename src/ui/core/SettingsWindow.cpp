@@ -17,6 +17,7 @@
 #include <QIcon>
 #include <QSignalBlocker>
 #include <QtMath>
+#include <QPainter>
 #include "ThemeManager.h"
 
 SettingsWindow::SettingsWindow(QWidget *parent)
@@ -184,6 +185,62 @@ void SettingsWindow::setupGeneralTab()
 
     layout->addWidget(langGroup);
     
+    // Screenshot Settings Group
+    QGroupBox *screenshotGroup = new QGroupBox("📸 Screenshot Settings");
+    screenshotGroup->setStyleSheet("QGroupBox { font-weight: bold; font-size: 14px; padding-top: 10px; }");
+    QVBoxLayout *screenshotLayout = new QVBoxLayout(screenshotGroup);
+    screenshotLayout->setSpacing(15);
+    
+    // Dimming opacity slider
+    QLabel *dimmingLabel = new QLabel("🌑 Screen Dimming Opacity:");
+    dimmingLabel->setToolTip("Controls how dark the screen overlay appears during screenshot selection");
+    screenshotLayout->addWidget(dimmingLabel);
+    
+    QHBoxLayout *sliderLayout = new QHBoxLayout();
+    
+    QLabel *lightLabel = new QLabel("Light");
+    lightLabel->setStyleSheet("font-size: 10px; color: #888;");
+    sliderLayout->addWidget(lightLabel);
+    
+    screenshotDimmingSlider = new QSlider(Qt::Horizontal);
+    screenshotDimmingSlider->setRange(30, 220);  // 30 (very light) to 220 (very dark)
+    screenshotDimmingSlider->setValue(120);      // Default: medium darkness
+    screenshotDimmingSlider->setTickPosition(QSlider::TicksBelow);
+    screenshotDimmingSlider->setTickInterval(30);
+    sliderLayout->addWidget(screenshotDimmingSlider, 1);
+    
+    QLabel *darkLabel = new QLabel("Dark");
+    darkLabel->setStyleSheet("font-size: 10px; color: #888;");
+    sliderLayout->addWidget(darkLabel);
+    
+    screenshotDimmingValue = new QLabel("47%");
+    screenshotDimmingValue->setStyleSheet("font-weight: bold; min-width: 40px;");
+    screenshotDimmingValue->setAlignment(Qt::AlignCenter);
+    sliderLayout->addWidget(screenshotDimmingValue);
+    
+    screenshotLayout->addLayout(sliderLayout);
+    
+    // Preview widget (fixed background, not affected by theme)
+    screenshotPreview = new QLabel();
+    screenshotPreview->setMinimumHeight(80);
+    screenshotPreview->setMaximumHeight(80);
+    screenshotPreview->setScaledContents(true);
+    screenshotPreview->setStyleSheet("QLabel { background-color: #f0f0f0; border: 2px solid #555; border-radius: 4px; }");
+    screenshotLayout->addWidget(screenshotPreview);
+    
+    QLabel *previewLabel = new QLabel("Preview: Selected area will stay clear, background will be dimmed");
+    previewLabel->setStyleSheet("font-size: 10px; color: #888; font-style: italic;");
+    screenshotLayout->addWidget(previewLabel);
+    
+    layout->addWidget(screenshotGroup);
+    
+    // Connect slider to update preview
+    connect(screenshotDimmingSlider, &QSlider::valueChanged, this, [this](int value) {
+        int percentage = (value * 100) / 255;
+        screenshotDimmingValue->setText(QString("%1%").arg(percentage));
+        updateScreenshotPreview();
+    });
+    
     // Remove the TTS Options Group as we'll integrate TTS controls with language selectors
     // The checkboxes are created with the language combos now
     layout->addStretch();
@@ -220,9 +277,24 @@ void SettingsWindow::setupOcrTab()
     engineLayout->setSpacing(12);
 
     ocrEngineCombo = new QComboBox();
-    ocrEngineCombo->addItems({"Tesseract", "EasyOCR", "PaddleOCR", "Windows OCR"});
+    
+    // Platform-specific OCR engines - clean and simple
+#ifdef Q_OS_MACOS
+    ocrEngineCombo->addItems({"Apple Vision (Recommended)", "Tesseract"});
+#elif defined(Q_OS_WIN)
+    ocrEngineCombo->addItems({"Windows OCR (Recommended)", "Tesseract"});
+#else
+    ocrEngineCombo->addItems({"Tesseract"});
+#endif
+    
     connect(ocrEngineCombo, &QComboBox::currentTextChanged, this, &SettingsWindow::onOcrEngineChanged);
     engineLayout->addRow("Engine:", ocrEngineCombo);
+
+    // Status label to show availability
+    ocrEngineStatusLabel = new QLabel();
+    ocrEngineStatusLabel->setWordWrap(true);
+    ocrEngineStatusLabel->setStyleSheet("QLabel { color: #666; font-size: 11px; }");
+    engineLayout->addRow("", ocrEngineStatusLabel);
 
     // Language setting moved to General tab
     QLabel *langNote = new QLabel("<i>Language setting moved to General tab</i>");
@@ -492,12 +564,38 @@ void SettingsWindow::applyModernStyling()
 
 void SettingsWindow::loadSettings()
 {
-    // OCR Settings
-    ocrEngineCombo->setCurrentText(settings->value("ocr/engine", "Tesseract").toString());
+    // OCR Settings - map old settings to new display names
+    QString savedEngine = settings->value("ocr/engine", "").toString();
+    QString displayEngine;
+    
+    // Map internal engine names to display names
+    if (savedEngine == "AppleVision" || savedEngine == "Apple Vision") {
+        displayEngine = "Apple Vision (Recommended)";
+    } else if (savedEngine == "WindowsOCR" || savedEngine == "Windows OCR") {
+        displayEngine = "Windows OCR (Recommended)";
+    } else if (savedEngine == "Tesseract") {
+        displayEngine = "Tesseract";
+    } else {
+        // Default based on platform if no saved setting
+#ifdef Q_OS_MACOS
+        displayEngine = "Apple Vision (Recommended)";
+#elif defined(Q_OS_WIN)
+        displayEngine = "Windows OCR (Recommended)";
+#else
+        displayEngine = "Tesseract";
+#endif
+    }
+    
+    ocrEngineCombo->setCurrentText(displayEngine);
     ocrLanguageCombo->setCurrentText(settings->value("ocr/language", "English").toString());
     ocrQualitySlider->setValue(settings->value("ocr/quality", 3).toInt());
     ocrPreprocessingCheck->setChecked(settings->value("ocr/preprocessing", true).toBool());
     ocrAutoDetectCheck->setChecked(settings->value("ocr/autoDetect", true).toBool());
+    
+    // Screenshot Settings
+    int dimmingOpacity = settings->value("screenshot/dimmingOpacity", 120).toInt();
+    screenshotDimmingSlider->setValue(dimmingOpacity);
+    updateScreenshotPreview();  // Update preview with loaded value
 
     // Translation Settings
     autoTranslateCheck->setChecked(settings->value("translation/autoTranslate", true).toBool());
@@ -633,12 +731,31 @@ void SettingsWindow::saveSettings()
         return;
     }
 
-    // OCR Settings
-    if (ocrEngineCombo) settings->setValue("ocr/engine", ocrEngineCombo->currentText());
+    // OCR Settings - map display names to internal engine names
+    if (ocrEngineCombo) {
+        QString displayEngine = ocrEngineCombo->currentText();
+        QString internalEngine;
+        
+        // Map display names to internal names for OCREngine
+        if (displayEngine.contains("Apple Vision")) {
+            internalEngine = "AppleVision";
+        } else if (displayEngine.contains("Windows OCR")) {
+            internalEngine = "WindowsOCR";
+        } else if (displayEngine == "Tesseract") {
+            internalEngine = "Tesseract";
+        } else {
+            internalEngine = displayEngine; // fallback
+        }
+        
+        settings->setValue("ocr/engine", internalEngine);
+    }
     if (ocrLanguageCombo) settings->setValue("ocr/language", ocrLanguageCombo->currentText());
     if (ocrQualitySlider) settings->setValue("ocr/quality", ocrQualitySlider->value());
     if (ocrPreprocessingCheck) settings->setValue("ocr/preprocessing", ocrPreprocessingCheck->isChecked());
     if (ocrAutoDetectCheck) settings->setValue("ocr/autoDetect", ocrAutoDetectCheck->isChecked());
+    
+    // Screenshot Settings
+    if (screenshotDimmingSlider) settings->setValue("screenshot/dimmingOpacity", screenshotDimmingSlider->value());
 
     // Translation Settings
     if (autoTranslateCheck) settings->setValue("translation/autoTranslate", autoTranslateCheck->isChecked());
@@ -750,7 +867,7 @@ void SettingsWindow::resetToDefaults()
     
     // TTS is now always enabled - no checkboxes to reset
     if (ttsProviderCombo) {
-        const int idx = ttsProviderCombo->findData(QStringLiteral("google-web"));
+        const int idx = ttsProviderCombo->findData(QStringLiteral("system"));
         if (idx >= 0) {
             QSignalBlocker blocker(*ttsProviderCombo);
             ttsProviderCombo->setCurrentIndex(idx);
@@ -804,7 +921,45 @@ void SettingsWindow::animateHide()
 void SettingsWindow::onOcrEngineChanged()
 {
     QString engine = ocrEngineCombo->currentText();
-    ocrStatusText->setPlainText(QString("OCR engine changed to: %1\nConfiguration updated.").arg(engine));
+    bool engineAvailable = false;
+    QString statusMessage;
+    QString detailMessage;
+
+    // Map display names to internal engine types
+    if (engine.contains("Apple Vision")) {
+        engineAvailable = OCREngine::isAppleVisionAvailable();
+        statusMessage = engineAvailable ? "✓ Ready" : "⚠️ Not Available";
+        detailMessage = engineAvailable 
+            ? "Native macOS OCR using Apple Vision framework. Supports 50+ languages, hardware accelerated, no installation required."
+            : "Apple Vision framework not found on this system.";
+    } else if (engine == "Tesseract") {
+        engineAvailable = OCREngine::isTesseractAvailable();
+        statusMessage = engineAvailable ? "✓ Ready" : "⚠️ Requires Installation";
+        detailMessage = engineAvailable 
+            ? "Tesseract OCR engine found and ready to use."
+            : "Tesseract not found. Install via: brew install tesseract (macOS) or apt install tesseract-ocr (Linux)";
+    } else if (engine.contains("Windows OCR")) {
+        engineAvailable = OCREngine::isWindowsOCRAvailable();
+        statusMessage = engineAvailable ? "✓ Ready" : "⚠️ Not Available";
+        detailMessage = engineAvailable 
+            ? "Native Windows OCR API available. No installation required."
+            : "Windows OCR only available on Windows 10+";
+    }
+
+    // Update inline status label
+    if (ocrEngineStatusLabel) {
+        QString color = engineAvailable ? "#4CAF50" : "#FF9800";
+        ocrEngineStatusLabel->setText(QString("<span style='color: %1; font-weight: bold;'>%2</span> - %3")
+                                      .arg(color, statusMessage, detailMessage));
+    }
+
+    // Update main status text
+    if (ocrStatusText) {
+        QString color = engineAvailable ? "#4CAF50" : "#FF9800";
+        QString icon = engineAvailable ? "✓" : "⚠️";
+        ocrStatusText->setHtml(QString("<div style='color: %1; font-weight: bold;'>%2 %3</div><div style='color: #666; margin-top: 5px;'>%4</div>")
+                               .arg(color, icon, statusMessage, detailMessage));
+    }
 }
 
 void SettingsWindow::onTranslationEngineChanged()
@@ -977,13 +1132,14 @@ void SettingsWindow::setupTTSTab()
     QGroupBox *providerGroup = new QGroupBox(tr("Step 1 — Choose a voice service"));
     QVBoxLayout *providerLayout = new QVBoxLayout(providerGroup);
     ttsProviderCombo = new QComboBox();
-    ttsProviderCombo->addItem(tr("Google Translate (Free)"), QStringLiteral("google-web"));
-    ttsProviderCombo->addItem(tr("Microsoft Edge (Free)"), QStringLiteral("edge-free"));
+    ttsProviderCombo->addItem(tr("System Voices (Recommended)"), QStringLiteral("system"));
+    ttsProviderCombo->addItem(tr("Google Web TTS"), QStringLiteral("google-web"));
+    ttsProviderCombo->addItem(tr("Microsoft Edge TTS"), QStringLiteral("edge-free"));
     providerLayout->addWidget(ttsProviderCombo);
 
-    providerInfoLabel = new QLabel(tr("Google Translate works instantly with many languages. Edge voices need the edge-tts tool installed (pip install edge-tts)."));
+    providerInfoLabel = new QLabel(tr("System Voices: Uses your macOS downloaded voices from System Settings. Works offline, high quality."));
     providerInfoLabel->setWordWrap(true);
-    providerInfoLabel->setStyleSheet("color: #666; font-size: 11px;");
+    providerInfoLabel->setStyleSheet("color: #666; font-size: 12px; padding: 8px; background: #f5f5f5; border-radius: 6px;");
     providerLayout->addWidget(providerInfoLabel);
     layout->addWidget(providerGroup);
 
@@ -1329,32 +1485,39 @@ void SettingsWindow::onTestTTSClicked()
 
 void SettingsWindow::updateProviderUI(const QString& providerId)
 {
+    const bool isSystem = providerId == QStringLiteral("system");
     const bool isGoogle = providerId.isEmpty() || providerId == QStringLiteral("google-web");
+    const bool isEdge = providerId == QStringLiteral("edge-free");
 
     if (edgeExeLabel) {
-        edgeExeLabel->setVisible(!isGoogle);
+        edgeExeLabel->setVisible(isEdge);
     }
     if (edgeExeRow) {
-        edgeExeRow->setVisible(!isGoogle);
+        edgeExeRow->setVisible(isEdge);
     }
     if (edgeHintLabel) {
-        edgeHintLabel->setVisible(!isGoogle);
+        edgeHintLabel->setVisible(isEdge);
     }
 
     if (providerInfoLabel) {
-        if (isGoogle) {
-            providerInfoLabel->setText(tr("Instant playback via Google Translate. Works best for short phrases."));
+        if (isSystem) {
+            providerInfoLabel->setText(tr("✓ System Voices: Uses your macOS downloaded voices from System Settings → Accessibility → Spoken Content. Works offline, high quality, no installation required."));
+        } else if (isGoogle) {
+            providerInfoLabel->setText(tr("Google Web TTS: Instant playback via Google Translate. Works for short phrases. Requires internet connection."));
         } else {
-            providerInfoLabel->setText(tr("Microsoft Edge TTS provides natural-sounding voices in many languages."));
+            providerInfoLabel->setText(tr("⚠️ Microsoft Edge TTS: Requires installation (pip install edge-tts). Provides natural-sounding voices in many languages."));
         }
     }
 
     if (ttsEngine) {
         ttsEngine->setProviderId(providerId);
-        if (isGoogle) {
+        if (isSystem) {
+            // System TTS - uses QTextToSpeech
+            // No additional configuration needed
+        } else if (isGoogle) {
             QString langCode = getLanguageCodeFromVoice(ttsEngine->primaryVoice());
             ttsEngine->configureGoogle(QString(), ttsEngine->primaryVoice(), langCode);
-        } else {
+        } else if (isEdge) {
             // Auto-detect edge-tts when Edge provider is selected
             checkEdgeTTSAvailability();
         }
@@ -1612,4 +1775,67 @@ QString SettingsWindow::getLanguageCodeFromVoice(const QString& voice) const
 
     // Default to English
     return "en-US";
+}
+
+void SettingsWindow::updateScreenshotPreview()
+{
+    if (!screenshotPreview) return;
+    
+    // Get current dimming opacity from slider
+    int opacity = screenshotDimmingSlider->value();
+    
+    // Use fixed size for preview
+    int previewWidth = qMax(screenshotPreview->width(), 400);
+    int previewHeight = 80;
+    
+    // Create a pixmap to draw the preview
+    QPixmap previewPixmap(previewWidth, previewHeight);
+    previewPixmap.fill(Qt::white);
+    
+    QPainter painter(&previewPixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    
+    // Draw a sample "screenshot" background (gradient to simulate content)
+    QLinearGradient bgGradient(0, 0, previewPixmap.width(), previewPixmap.height());
+    bgGradient.setColorAt(0, QColor(100, 120, 200));
+    bgGradient.setColorAt(1, QColor(200, 150, 100));
+    painter.fillRect(previewPixmap.rect(), bgGradient);
+    
+    // Add some text to simulate content
+    painter.setPen(Qt::white);
+    painter.setFont(QFont("Arial", 10, QFont::Bold));
+    painter.drawText(previewPixmap.rect(), Qt::AlignCenter, "Sample Screenshot Content");
+    
+    // Draw the dimming overlay everywhere
+    painter.fillRect(previewPixmap.rect(), QColor(0, 0, 0, opacity));
+    
+    // Draw a "selection" area in the center that stays clear
+    QRect selectionRect(previewPixmap.width() * 0.3, previewPixmap.height() * 0.3,
+                       previewPixmap.width() * 0.4, previewPixmap.height() * 0.4);
+    
+    // Clear the dimming in the selection area by redrawing the background
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    QLinearGradient selGradient(selectionRect.left(), selectionRect.top(),
+                                selectionRect.right(), selectionRect.bottom());
+    selGradient.setColorAt(0, QColor(100, 120, 200));
+    selGradient.setColorAt(1, QColor(200, 150, 100));
+    painter.fillRect(selectionRect, selGradient);
+    
+    // Draw text in selection area
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.setPen(Qt::white);
+    painter.setFont(QFont("Arial", 10, QFont::Bold));
+    painter.drawText(selectionRect, Qt::AlignCenter, "Selected\nArea");
+    
+    // Draw selection border
+    QPalette themePalette = ThemeManager::instance().getCurrentPalette();
+    QColor accentColor = themePalette.color(QPalette::Highlight);
+    painter.setPen(QPen(accentColor, 3));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(selectionRect);
+    
+    painter.end();
+    
+    // Set the pixmap directly to the QLabel
+    screenshotPreview->setPixmap(previewPixmap);
 }

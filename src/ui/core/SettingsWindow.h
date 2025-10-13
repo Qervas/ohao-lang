@@ -67,6 +67,7 @@ private:
     void checkEdgeTTSAvailability();
     QString getTestTextForLanguage(const QString& voice, bool isInputVoice) const;
     QString getLanguageCodeFromVoice(const QString& voice) const;
+    void updateScreenshotPreview();
 
     // UI Components
     QTabWidget *tabWidget;
@@ -75,10 +76,14 @@ private:
 
     // General Tab
     QWidget *generalTab;
+    QSlider *screenshotDimmingSlider;
+    QLabel *screenshotDimmingValue;
+    QLabel *screenshotPreview;
 
     // OCR Tab
     QWidget *ocrTab;
     QComboBox *ocrEngineCombo;
+    QLabel *ocrEngineStatusLabel;
     QComboBox *ocrLanguageCombo;
     QSlider *ocrQualitySlider;
     QCheckBox *ocrPreprocessingCheck;

@@ -1,5 +1,6 @@
 #include "ModernTTSManager.h"
 #include "TTSProvider.h"
+#include "SystemTTSProvider.h"
 #include "EdgeTTSProvider.h"
 #include "GoogleWebTTSProvider.h"
 #include "../ui/core/AppSettings.h"
@@ -399,16 +400,19 @@ ModernTTSManager::TTSProvider ModernTTSManager::getCurrentProviderType() const
 std::unique_ptr<::TTSProvider> ModernTTSManager::createProvider(TTSProvider type) const
 {
     switch (type) {
-        case TTSProvider::EdgeTTS:
-            return std::make_unique<EdgeTTSProvider>();
+        case TTSProvider::SystemTTS:
+            qDebug() << "ModernTTSManager: Creating SystemTTS provider (native system voices)";
+            return std::make_unique<SystemTTSProvider>();
         case TTSProvider::GoogleWeb:
+            qDebug() << "ModernTTSManager: Creating GoogleWeb provider";
             return std::make_unique<GoogleWebTTSProvider>();
+        case TTSProvider::EdgeTTS:
+            qDebug() << "ModernTTSManager: Creating EdgeTTS provider (requires installation)";
+            return std::make_unique<EdgeTTSProvider>();
         case TTSProvider::AzureCognitive:
             // Not implemented yet
+            qDebug() << "ModernTTSManager: AzureCognitive not implemented";
             return nullptr;
-        case TTSProvider::SystemTTS:
-            // Use EdgeTTS as fallback for now
-            return std::make_unique<EdgeTTSProvider>();
         default:
             qDebug() << "ModernTTSManager: Unknown provider type:" << static_cast<int>(type);
             return nullptr;

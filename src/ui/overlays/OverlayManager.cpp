@@ -54,13 +54,14 @@ void OverlayManager::initializeOCR()
     qDebug() << "OCR engine initialized";
 }
 
-void OverlayManager::performOCR(const QPixmap& image, const QRect& selectionRect, const QPixmap& fullScreenshot)
+void OverlayManager::performOCR(const QPixmap& image, const QRect& selectionRect, const QPixmap& fullScreenshot, const QList<QRect>& existingSelections)
 {
     qDebug() << "OverlayManager starting OCR for selection:" << selectionRect;
 
     // Store selection rect and source image for later use
     m_currentSelectionRect = selectionRect;
     m_currentSourceImage = fullScreenshot;
+    m_existingSelections = existingSelections;
 
     // Configure OCR engine using centralized settings
     auto& settings = AppSettings::instance();
@@ -68,13 +69,15 @@ void OverlayManager::performOCR(const QPixmap& image, const QRect& selectionRect
     auto translationConfig = settings.getTranslationConfig();
 
     // Set OCR engine type
-    if (ocrConfig.engine == "Tesseract") {
+    if (ocrConfig.engine == "AppleVision") {
+        m_ocrEngine->setEngine(OCREngine::AppleVision);
+    } else if (ocrConfig.engine == "Tesseract") {
         m_ocrEngine->setEngine(OCREngine::Tesseract);
     } else if (ocrConfig.engine == "EasyOCR") {
         m_ocrEngine->setEngine(OCREngine::EasyOCR);
     } else if (ocrConfig.engine == "PaddleOCR") {
         m_ocrEngine->setEngine(OCREngine::PaddleOCR);
-    } else if (ocrConfig.engine == "Windows OCR") {
+    } else if (ocrConfig.engine == "WindowsOCR" || ocrConfig.engine == "Windows OCR") {
         m_ocrEngine->setEngine(OCREngine::WindowsOCR);
     }
 
@@ -139,9 +142,9 @@ void OverlayManager::showOCRResults(const OCRResult& result, const QRect& select
         m_quickOverlay->setMode(QuickTranslationOverlay::ShowOriginal);
     }
 
-    // Position the overlay elegantly near the selection
+    // Position the overlay elegantly near the selection, avoiding existing OCR areas
     QSize screenSize = m_parent->size(); // Screenshot widget covers the full screen
-    m_quickOverlay->setPositionNearRect(globalSelRect, screenSize);
+    m_quickOverlay->setPositionNearRect(globalSelRect, screenSize, m_existingSelections);
 
     // Show the overlay
     m_quickOverlay->show();

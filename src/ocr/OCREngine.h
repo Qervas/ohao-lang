@@ -47,11 +47,12 @@ class OCREngine : public QObject
 
 public:
     enum Engine {
+        AppleVision,  // macOS native Vision framework (default on macOS)
         Tesseract,
-        EasyOCR,
+        OnlineOCR,
+        EasyOCR,      // Python-based engines (rarely used)
         PaddleOCR,
-        WindowsOCR,
-        OnlineOCR
+        WindowsOCR
     };
 
     explicit OCREngine(QObject *parent = nullptr);
@@ -76,6 +77,7 @@ public:
     void setTranslationTargetLanguage(const QString &language);
 
     // Engine availability checks
+    static bool isAppleVisionAvailable();
     static bool isTesseractAvailable();
     static bool isEasyOCRAvailable();
     static bool isPaddleOCRAvailable();
@@ -99,6 +101,7 @@ private slots:
     void onTranslationError(const QString &error);
 
 private:
+    void performAppleVisionOCR(const QPixmap &image);
     void performTesseractOCR(const QPixmap &image);
     void performEasyOCR(const QPixmap &image);
     void performPaddleOCR(const QPixmap &image);

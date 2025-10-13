@@ -74,5 +74,11 @@ private:
     QString m_progressText;
     QRect m_resultAreaRect;
     OverlayManager *m_overlayManager;
+    
+    // Track all OCR selections to keep them visible
+    QList<QRect> m_ocrSelections;
+    
+    // Dimming opacity (loaded from settings)
+    int m_dimmingOpacity;
 
 };

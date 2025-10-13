@@ -46,6 +46,14 @@ file(GLOB_RECURSE ALL_HEADERS
     "src/*.h"
 )
 
+# On macOS, enable Objective-C++ and add .mm files
+if(APPLE)
+    enable_language(OBJCXX)
+    file(GLOB_RECURSE OBJCXX_SOURCES "src/*.mm")
+    list(APPEND ALL_SOURCES ${OBJCXX_SOURCES})
+    message(STATUS "Found ${CMAKE_MATCH_COUNT} Objective-C++ files for macOS")
+endif()
+
 # Create executable
 # WIN32 flag creates Windows subsystem app (no console window)
 if(WIN32)
@@ -80,6 +88,27 @@ if(Qt6TextToSpeech_FOUND)
     target_compile_definitions(ohao-lang PRIVATE QT_TEXTTOSPEECH_AVAILABLE)
 else()
     message(WARNING "Qt6 TextToSpeech not found. TTS features will be disabled.")
+endif()
+
+# Link Apple frameworks on macOS for native OCR support
+if(APPLE)
+    find_library(VISION_FRAMEWORK Vision)
+    find_library(APPKIT_FRAMEWORK AppKit)
+    find_library(COREIMAGE_FRAMEWORK CoreImage)
+    find_library(FOUNDATION_FRAMEWORK Foundation)
+
+    if(VISION_FRAMEWORK AND APPKIT_FRAMEWORK AND COREIMAGE_FRAMEWORK AND FOUNDATION_FRAMEWORK)
+        target_link_libraries(ohao-lang PRIVATE
+            ${VISION_FRAMEWORK}
+            ${APPKIT_FRAMEWORK}
+            ${COREIMAGE_FRAMEWORK}
+            ${FOUNDATION_FRAMEWORK}
+        )
+        target_compile_definitions(ohao-lang PRIVATE APPLE_VISION_AVAILABLE)
+        message(STATUS "Apple Vision framework found - native OCR support enabled")
+    else()
+        message(WARNING "Apple Vision framework not found - native OCR will be disabled")
+    endif()
 endif()
 
 # Deploy Qt runtime on Windows so the .exe can run standalone
