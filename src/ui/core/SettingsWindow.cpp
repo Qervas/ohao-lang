@@ -290,63 +290,7 @@ void SettingsWindow::setupOcrTab()
     connect(ocrEngineCombo, &QComboBox::currentTextChanged, this, &SettingsWindow::onOcrEngineChanged);
     engineLayout->addRow("Engine:", ocrEngineCombo);
 
-    // Status label to show availability
-    ocrEngineStatusLabel = new QLabel();
-    ocrEngineStatusLabel->setWordWrap(true);
-    ocrEngineStatusLabel->setStyleSheet("QLabel { color: #666; font-size: 11px; }");
-    engineLayout->addRow("", ocrEngineStatusLabel);
-
-    // Language setting moved to General tab
-    QLabel *langNote = new QLabel("<i>Language setting moved to General tab</i>");
-    langNote->setStyleSheet("color: #666; font-size: 11px;");
-    engineLayout->addRow("Language:", langNote);
-
     layout->addWidget(engineGroup);
-
-    // Quality Settings Group
-    QGroupBox *qualityGroup = new QGroupBox("Quality Settings", ocrTab);
-    QFormLayout *qualityLayout = new QFormLayout(qualityGroup);
-
-    ocrQualitySlider = new QSlider(Qt::Horizontal);
-    ocrQualitySlider->setRange(1, 5);
-    ocrQualitySlider->setValue(3);
-    ocrQualitySlider->setTickPosition(QSlider::TicksBelow);
-    ocrQualitySlider->setTickInterval(1);
-
-    QHBoxLayout *sliderLayout = new QHBoxLayout();
-    sliderLayout->addWidget(new QLabel("Fast"));
-    sliderLayout->addWidget(ocrQualitySlider);
-    sliderLayout->addWidget(new QLabel("Accurate"));
-    qualityLayout->addRow("Speed vs Accuracy:", sliderLayout);
-
-    ocrPreprocessingCheck = new QCheckBox("Enable image preprocessing");
-    ocrPreprocessingCheck->setChecked(true);
-    qualityLayout->addRow(ocrPreprocessingCheck);
-
-    ocrAutoDetectCheck = new QCheckBox("Auto-detect text orientation");
-    ocrAutoDetectCheck->setChecked(true);
-    qualityLayout->addRow(ocrAutoDetectCheck);
-
-    layout->addWidget(qualityGroup);
-
-    // Test Section
-    QGroupBox *testGroup = new QGroupBox("Test & Status", ocrTab);
-    QVBoxLayout *testLayout = new QVBoxLayout(testGroup);
-
-    testOcrBtn = new QPushButton("Test OCR Configuration");
-    testOcrBtn->setObjectName("testBtn");
-    connect(testOcrBtn, &QPushButton::clicked, this, &SettingsWindow::onTestOcrClicked);
-    testLayout->addWidget(testOcrBtn);
-
-    ocrStatusText = new QTextEdit();
-    ocrStatusText->setMinimumHeight(60);
-    ocrStatusText->setMaximumHeight(120); // Allow more space for status text
-    ocrStatusText->setReadOnly(true);
-    ocrStatusText->setPlainText("OCR engine ready. Click 'Test OCR Configuration' to verify setup.");
-    ocrStatusText->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    testLayout->addWidget(ocrStatusText);
-
-    layout->addWidget(testGroup);
     layout->addStretch();
 }
 
@@ -355,50 +299,26 @@ void SettingsWindow::setupTranslationTab()
     translationTab = new QWidget();
     tabWidget->addTab(translationTab, "🌐 Translation");
 
-    // Use scroll area to handle content that might not fit
-    QScrollArea *scrollArea = new QScrollArea(translationTab);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    QWidget *scrollContent = new QWidget();
-    scrollArea->setWidget(scrollContent);
-
-    QVBoxLayout *tabLayout = new QVBoxLayout(translationTab);
-    tabLayout->setContentsMargins(0, 0, 0, 0);
-    tabLayout->addWidget(scrollArea);
-
-    QVBoxLayout *layout = new QVBoxLayout(scrollContent);
+    QVBoxLayout *layout = new QVBoxLayout(translationTab);
     layout->setSpacing(20);
-    layout->setContentsMargins(15, 15, 15, 15);
+    layout->setContentsMargins(20, 20, 20, 20);
 
-    // Auto-Processing Group
-    QGroupBox *autoGroup = new QGroupBox("Automatic Processing", translationTab);
+    // Auto-Translate Toggle
+    QGroupBox *autoGroup = new QGroupBox("Automatic Processing");
     QVBoxLayout *autoLayout = new QVBoxLayout(autoGroup);
 
     autoTranslateCheck = new QCheckBox("Auto-Translate: Automatically translate after OCR");
     autoTranslateCheck->setChecked(true);
     autoLayout->addWidget(autoTranslateCheck);
 
-    // Overlay Mode Selection
-    QHBoxLayout *overlayModeLayout = new QHBoxLayout();
-    QLabel *overlayModeLabel = new QLabel("Overlay Mode:");
-    overlayModeCombo = new QComboBox();
-    overlayModeCombo->addItems({"Quick Translation", "Deep Learning Mode"});
-    overlayModeCombo->setToolTip("Quick Translation: Simple overlay with text replacement\nDeep Learning Mode: Interactive learning overlay with word analysis");
-
-    overlayModeLayout->addWidget(overlayModeLabel);
-    overlayModeLayout->addWidget(overlayModeCombo);
-    overlayModeLayout->addStretch();
-
-    autoLayout->addLayout(overlayModeLayout);
-
     layout->addWidget(autoGroup);
 
-    // Translation Engine Group
-    QGroupBox *engineGroup = new QGroupBox("Translation Engine", translationTab);
+    // Translation Engine
+    QGroupBox *engineGroup = new QGroupBox("Translation Engine");
     QFormLayout *engineLayout = new QFormLayout(engineGroup);
+    engineLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    engineLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    engineLayout->setSpacing(12);
 
     translationEngineCombo = new QComboBox();
     translationEngineCombo->addItems({"Google Translate (Free)", "LibreTranslate", "Ollama Local LLM",
@@ -406,89 +326,7 @@ void SettingsWindow::setupTranslationTab()
     connect(translationEngineCombo, &QComboBox::currentTextChanged, this, &SettingsWindow::onTranslationEngineChanged);
     engineLayout->addRow("Engine:", translationEngineCombo);
 
-    QWidget *sourceLanguageWidget = new QWidget();
-    QVBoxLayout *sourceLangLayout = new QVBoxLayout(sourceLanguageWidget);
-    sourceLangLayout->setContentsMargins(0, 0, 0, 0);
-    sourceLangLayout->setSpacing(5);
-
-    sourceLanguageCombo = new QComboBox();
-    sourceLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
-                                  "Japanese", "Korean", "Spanish", "French", "German", "Russian",
-                                  "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
-
-    // Auto-detect checkbox with warning
-    autoDetectSourceCheck = new QCheckBox("Enable Auto-Detect (Not Recommended)");
-    autoDetectSourceCheck->setToolTip("⚠️ Auto-detect may skip translation when text appears to be in target language.\n"
-                               "For best results, use specific source language matching your OCR input language.");
-    autoDetectSourceCheck->setStyleSheet("QCheckBox { color: #ff6b35; font-weight: bold; }");
-    connect(autoDetectSourceCheck, &QCheckBox::toggled, this, [this](bool enabled) {
-        if (enabled) {
-            sourceLanguageCombo->clear();
-            sourceLanguageCombo->addItems({"Auto-Detect", "English", "Chinese (Simplified)", "Chinese (Traditional)",
-                                          "Japanese", "Korean", "Spanish", "French", "German", "Russian",
-                                          "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
-            sourceLanguageCombo->setCurrentText("Auto-Detect");
-        } else {
-            QString currentLang = sourceLanguageCombo->currentText();
-            sourceLanguageCombo->clear();
-            sourceLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
-                                          "Japanese", "Korean", "Spanish", "French", "German", "Russian",
-                                          "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
-            if (currentLang != "Auto-Detect") {
-                sourceLanguageCombo->setCurrentText(currentLang);
-            } else {
-                // Sync with OCR input language when disabling auto-detect
-                if (ocrLanguageCombo) {
-                    sourceLanguageCombo->setCurrentText(ocrLanguageCombo->currentText());
-                }
-            }
-        }
-    });
-
-    sourceLangLayout->addWidget(sourceLanguageCombo);
-    sourceLangLayout->addWidget(autoDetectSourceCheck);
-    engineLayout->addRow("Source Language:", sourceLanguageWidget);
-
-    // Target Language setting moved to General tab
-    QLabel *targetNote = new QLabel("<i>Target Language setting moved to General tab</i>");
-    targetNote->setStyleSheet("color: #666; font-size: 11px;");
-    engineLayout->addRow("Target Language:", targetNote);
-
     layout->addWidget(engineGroup);
-
-    // API Configuration Group
-    QGroupBox *apiGroup = new QGroupBox("API Configuration", translationTab);
-    QFormLayout *apiLayout = new QFormLayout(apiGroup);
-
-    apiUrlEdit = new QLineEdit();
-    apiUrlEdit->setPlaceholderText("https://api.example.com/translate");
-    apiLayout->addRow("API URL:", apiUrlEdit);
-
-    apiKeyEdit = new QLineEdit();
-    apiKeyEdit->setEchoMode(QLineEdit::Password);
-    apiKeyEdit->setPlaceholderText("Enter API key (optional for free services)");
-    apiLayout->addRow("API Key:", apiKeyEdit);
-
-    layout->addWidget(apiGroup);
-
-    // Test Section
-    QGroupBox *testGroup = new QGroupBox("Test & Status", translationTab);
-    QVBoxLayout *testLayout = new QVBoxLayout(testGroup);
-
-    testTranslationBtn = new QPushButton("Test Translation Configuration");
-    testTranslationBtn->setObjectName("testBtn");
-    connect(testTranslationBtn, &QPushButton::clicked, this, &SettingsWindow::onTestTranslationClicked);
-    testLayout->addWidget(testTranslationBtn);
-
-    translationStatusText = new QTextEdit();
-    translationStatusText->setMinimumHeight(60);
-    translationStatusText->setMaximumHeight(120); // Allow more space for status text
-    translationStatusText->setReadOnly(true);
-    translationStatusText->setPlainText("Translation engine ready. Click 'Test Translation Configuration' to verify setup.");
-    translationStatusText->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    testLayout->addWidget(translationStatusText);
-
-    layout->addWidget(testGroup);
     layout->addStretch();
 }
 
@@ -497,27 +335,16 @@ void SettingsWindow::setupAppearanceTab()
     appearanceTab = new QWidget();
     tabWidget->addTab(appearanceTab, "🎨 Appearance");
 
-    // Use scroll area to handle content that might not fit
-    QScrollArea *scrollArea = new QScrollArea(appearanceTab);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    QWidget *scrollContent = new QWidget();
-    scrollArea->setWidget(scrollContent);
-
-    QVBoxLayout *tabLayout = new QVBoxLayout(appearanceTab);
-    tabLayout->setContentsMargins(0, 0, 0, 0);
-    tabLayout->addWidget(scrollArea);
-
-    QVBoxLayout *layout = new QVBoxLayout(scrollContent);
+    QVBoxLayout *layout = new QVBoxLayout(appearanceTab);
     layout->setSpacing(20);
-    layout->setContentsMargins(15, 15, 15, 15);
+    layout->setContentsMargins(20, 20, 20, 20);
 
     // Theme Group
-    QGroupBox *themeGroup = new QGroupBox("Theme", appearanceTab);
+    QGroupBox *themeGroup = new QGroupBox("Theme");
     QFormLayout *themeLayout = new QFormLayout(themeGroup);
+    themeLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    themeLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    themeLayout->setSpacing(12);
 
     themeCombo = new QComboBox();
     themeCombo->addItems({"Auto (System)", "Light", "Dark", "High Contrast", "Cyberpunk"});
@@ -529,31 +356,24 @@ void SettingsWindow::setupAppearanceTab()
 
     layout->addWidget(themeGroup);
 
-    // Visual Effects Group
-    QGroupBox *effectsGroup = new QGroupBox("Visual Effects", appearanceTab);
-    QFormLayout *effectsLayout = new QFormLayout(effectsGroup);
+    // Widget Size Group
+    QGroupBox *sizeGroup = new QGroupBox("Floating Widget");
+    QFormLayout *sizeLayout = new QFormLayout(sizeGroup);
+    sizeLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    sizeLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    sizeLayout->setSpacing(12);
 
-    opacitySlider = new QSlider(Qt::Horizontal);
-    opacitySlider->setRange(50, 100);
-    opacitySlider->setValue(90);
-    opacitySlider->setTickPosition(QSlider::TicksBelow);
-    opacitySlider->setTickInterval(10);
+    widgetSizeCombo = new QComboBox();
+    widgetSizeCombo->addItems({"Small", "Medium", "Large"});
+    widgetSizeCombo->setCurrentText("Medium");
+    sizeLayout->addRow("Widget Size:", widgetSizeCombo);
+    
+    // Deprecated widgets - set to null
+    opacitySlider = nullptr;
+    animationsCheck = nullptr;
+    soundsCheck = nullptr;
 
-    QHBoxLayout *opacityLayout = new QHBoxLayout();
-    opacityLayout->addWidget(new QLabel("50%"));
-    opacityLayout->addWidget(opacitySlider);
-    opacityLayout->addWidget(new QLabel("100%"));
-    effectsLayout->addRow("Widget Opacity:", opacityLayout);
-
-    animationsCheck = new QCheckBox("Enable smooth animations");
-    animationsCheck->setChecked(true);
-    effectsLayout->addRow(animationsCheck);
-
-    soundsCheck = new QCheckBox("Enable sound effects");
-    soundsCheck->setChecked(false);
-    effectsLayout->addRow(soundsCheck);
-
-    layout->addWidget(effectsGroup);
+    layout->addWidget(sizeGroup);
     layout->addStretch();
 }
 
@@ -588,9 +408,6 @@ void SettingsWindow::loadSettings()
     
     ocrEngineCombo->setCurrentText(displayEngine);
     ocrLanguageCombo->setCurrentText(settings->value("ocr/language", "English").toString());
-    ocrQualitySlider->setValue(settings->value("ocr/quality", 3).toInt());
-    ocrPreprocessingCheck->setChecked(settings->value("ocr/preprocessing", true).toBool());
-    ocrAutoDetectCheck->setChecked(settings->value("ocr/autoDetect", true).toBool());
     
     // Screenshot Settings
     int dimmingOpacity = settings->value("screenshot/dimmingOpacity", 120).toInt();
@@ -599,37 +416,30 @@ void SettingsWindow::loadSettings()
 
     // Translation Settings
     autoTranslateCheck->setChecked(settings->value("translation/autoTranslate", true).toBool());
-    overlayModeCombo->setCurrentText(settings->value("translation/overlayMode", "Deep Learning Mode").toString());
+    if (overlayModeCombo) overlayModeCombo->setCurrentText(settings->value("translation/overlayMode", "Deep Learning Mode").toString());
     translationEngineCombo->setCurrentText(settings->value("translation/engine", "Google Translate (Free)").toString());
 
-    // Load auto-detect setting and configure accordingly
-    bool autoDetectEnabled = settings->value("translation/autoDetectSource", false).toBool();
-    autoDetectSourceCheck->setChecked(autoDetectEnabled);
-
-    if (autoDetectEnabled) {
-        // Add Auto-Detect option and set it
-        sourceLanguageCombo->clear();
-        sourceLanguageCombo->addItems({"Auto-Detect", "English", "Chinese (Simplified)", "Chinese (Traditional)",
-                                      "Japanese", "Korean", "Spanish", "French", "German", "Russian",
-                                      "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
-        sourceLanguageCombo->setCurrentText(settings->value("translation/sourceLanguage", "Auto-Detect").toString());
-    } else {
-        // Default to OCR input language for better translation results
+    // Load legacy settings if needed
+    if (autoDetectSourceCheck) {
+        bool autoDetectEnabled = settings->value("translation/autoDetectSource", false).toBool();
+        autoDetectSourceCheck->setChecked(autoDetectEnabled);
+    }
+    
+    if (sourceLanguageCombo) {
         QString defaultSourceLang = settings->value("general/ocrLanguage", "English").toString();
         sourceLanguageCombo->setCurrentText(settings->value("translation/sourceLanguage", defaultSourceLang).toString());
     }
 
-    targetLanguageCombo->setCurrentText(settings->value("translation/targetLanguage", "English").toString());
-    apiUrlEdit->setText(settings->value("translation/apiUrl", "").toString());
-
-    // API Key handling (basic encryption could be added here)
-    apiKeyEdit->setText(settings->value("translation/apiKey", "").toString());
+    if (targetLanguageCombo) targetLanguageCombo->setCurrentText(settings->value("translation/targetLanguage", "English").toString());
+    if (apiUrlEdit) apiUrlEdit->setText(settings->value("translation/apiUrl", "").toString());
+    if (apiKeyEdit) apiKeyEdit->setText(settings->value("translation/apiKey", "").toString());
 
     // Appearance Settings
     themeCombo->setCurrentText(settings->value("appearance/theme", "Auto (System)").toString());
-    opacitySlider->setValue(settings->value("appearance/opacity", 90).toInt());
-    animationsCheck->setChecked(settings->value("appearance/animations", true).toBool());
-    soundsCheck->setChecked(settings->value("appearance/sounds", false).toBool());
+    if (widgetSizeCombo) widgetSizeCombo->setCurrentText(settings->value("appearance/widgetSize", "Medium").toString());
+    if (opacitySlider) opacitySlider->setValue(settings->value("appearance/opacity", 90).toInt());
+    if (animationsCheck) animationsCheck->setChecked(settings->value("appearance/animations", true).toBool());
+    if (soundsCheck) soundsCheck->setChecked(settings->value("appearance/sounds", false).toBool());
 
     // TTS is now always enabled - no checkbox controls
 
@@ -750,9 +560,6 @@ void SettingsWindow::saveSettings()
         settings->setValue("ocr/engine", internalEngine);
     }
     if (ocrLanguageCombo) settings->setValue("ocr/language", ocrLanguageCombo->currentText());
-    if (ocrQualitySlider) settings->setValue("ocr/quality", ocrQualitySlider->value());
-    if (ocrPreprocessingCheck) settings->setValue("ocr/preprocessing", ocrPreprocessingCheck->isChecked());
-    if (ocrAutoDetectCheck) settings->setValue("ocr/autoDetect", ocrAutoDetectCheck->isChecked());
     
     // Screenshot Settings
     if (screenshotDimmingSlider) settings->setValue("screenshot/dimmingOpacity", screenshotDimmingSlider->value());
@@ -769,6 +576,7 @@ void SettingsWindow::saveSettings()
 
     // Appearance Settings
     if (themeCombo) settings->setValue("appearance/theme", themeCombo->currentText());
+    if (widgetSizeCombo) settings->setValue("appearance/widgetSize", widgetSizeCombo->currentText());
     if (opacitySlider) settings->setValue("appearance/opacity", opacitySlider->value());
     if (animationsCheck) settings->setValue("appearance/animations", animationsCheck->isChecked());
     if (soundsCheck) settings->setValue("appearance/sounds", soundsCheck->isChecked());
@@ -842,28 +650,28 @@ void SettingsWindow::resetToDefaults()
     // Reset OCR settings
     ocrEngineCombo->setCurrentText("Tesseract");
     ocrLanguageCombo->setCurrentText("English");
-    ocrQualitySlider->setValue(3);
-    ocrPreprocessingCheck->setChecked(true);
-    ocrAutoDetectCheck->setChecked(true);
 
     // Reset Translation settings
     autoTranslateCheck->setChecked(true);
     translationEngineCombo->setCurrentText("Google Translate (Free)");
-    autoDetectSourceCheck->setChecked(false);  // Default to manual source language
-    sourceLanguageCombo->clear();
-    sourceLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
-                                  "Japanese", "Korean", "Spanish", "French", "German", "Russian",
-                                  "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
-    sourceLanguageCombo->setCurrentText("English");
-    targetLanguageCombo->setCurrentText("English");
-    apiUrlEdit->clear();
-    apiKeyEdit->clear();
+    if (autoDetectSourceCheck) autoDetectSourceCheck->setChecked(false);
+    if (sourceLanguageCombo) {
+        sourceLanguageCombo->clear();
+        sourceLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
+                                      "Japanese", "Korean", "Spanish", "French", "German", "Russian",
+                                      "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
+        sourceLanguageCombo->setCurrentText("English");
+    }
+    if (targetLanguageCombo) targetLanguageCombo->setCurrentText("English");
+    if (apiUrlEdit) apiUrlEdit->clear();
+    if (apiKeyEdit) apiKeyEdit->clear();
 
     // Reset Appearance settings
     themeCombo->setCurrentText("Auto (System)");
-    opacitySlider->setValue(90);
-    animationsCheck->setChecked(true);
-    soundsCheck->setChecked(false);
+    if (widgetSizeCombo) widgetSizeCombo->setCurrentText("Medium");
+    if (opacitySlider) opacitySlider->setValue(90);
+    if (animationsCheck) animationsCheck->setChecked(true);
+    if (soundsCheck) soundsCheck->setChecked(false);
     
     // TTS is now always enabled - no checkboxes to reset
     if (ttsProviderCombo) {
@@ -920,72 +728,12 @@ void SettingsWindow::animateHide()
 // Slots
 void SettingsWindow::onOcrEngineChanged()
 {
-    QString engine = ocrEngineCombo->currentText();
-    bool engineAvailable = false;
-    QString statusMessage;
-    QString detailMessage;
-
-    // Map display names to internal engine types
-    if (engine.contains("Apple Vision")) {
-        engineAvailable = OCREngine::isAppleVisionAvailable();
-        statusMessage = engineAvailable ? "✓ Ready" : "⚠️ Not Available";
-        detailMessage = engineAvailable 
-            ? "Native macOS OCR using Apple Vision framework. Supports 50+ languages, hardware accelerated, no installation required."
-            : "Apple Vision framework not found on this system.";
-    } else if (engine == "Tesseract") {
-        engineAvailable = OCREngine::isTesseractAvailable();
-        statusMessage = engineAvailable ? "✓ Ready" : "⚠️ Requires Installation";
-        detailMessage = engineAvailable 
-            ? "Tesseract OCR engine found and ready to use."
-            : "Tesseract not found. Install via: brew install tesseract (macOS) or apt install tesseract-ocr (Linux)";
-    } else if (engine.contains("Windows OCR")) {
-        engineAvailable = OCREngine::isWindowsOCRAvailable();
-        statusMessage = engineAvailable ? "✓ Ready" : "⚠️ Not Available";
-        detailMessage = engineAvailable 
-            ? "Native Windows OCR API available. No installation required."
-            : "Windows OCR only available on Windows 10+";
-    }
-
-    // Update inline status label
-    if (ocrEngineStatusLabel) {
-        QString color = engineAvailable ? "#4CAF50" : "#FF9800";
-        ocrEngineStatusLabel->setText(QString("<span style='color: %1; font-weight: bold;'>%2</span> - %3")
-                                      .arg(color, statusMessage, detailMessage));
-    }
-
-    // Update main status text
-    if (ocrStatusText) {
-        QString color = engineAvailable ? "#4CAF50" : "#FF9800";
-        QString icon = engineAvailable ? "✓" : "⚠️";
-        ocrStatusText->setHtml(QString("<div style='color: %1; font-weight: bold;'>%2 %3</div><div style='color: #666; margin-top: 5px;'>%4</div>")
-                               .arg(color, icon, statusMessage, detailMessage));
-    }
+    // OCR engine changed - no validation needed for simplified design
 }
 
 void SettingsWindow::onTranslationEngineChanged()
 {
-    QString engine = translationEngineCombo->currentText();
-
-    // Update API fields based on selected engine
-    if (engine.contains("Google")) {
-        apiUrlEdit->setText("https://translate.googleapis.com/translate_a/single");
-        apiUrlEdit->setEnabled(false);
-        apiKeyEdit->setPlaceholderText("API key optional for free tier");
-    } else if (engine.contains("LibreTranslate")) {
-        apiUrlEdit->setText("https://libretranslate.de/translate");
-        apiUrlEdit->setEnabled(true);
-        apiKeyEdit->setPlaceholderText("API key required");
-    } else if (engine.contains("Ollama")) {
-        apiUrlEdit->setText("http://localhost:11434/api/generate");
-        apiUrlEdit->setEnabled(true);
-        apiKeyEdit->setPlaceholderText("No API key needed for local Ollama");
-        apiKeyEdit->setEnabled(false);
-    } else {
-        apiUrlEdit->setEnabled(true);
-        apiKeyEdit->setEnabled(true);
-    }
-
-    translationStatusText->setPlainText(QString("Translation engine changed to: %1\nConfiguration updated.").arg(engine));
+    // Translation engine changed - simplified design, no API config needed
 }
 
 void SettingsWindow::onApplyClicked()
@@ -1014,420 +762,132 @@ void SettingsWindow::onResetClicked()
     }
 }
 
-void SettingsWindow::onTestOcrClicked()
-{
-    ocrStatusText->setPlainText("Testing OCR configuration...\n");
-    QApplication::processEvents();
 
-    QString engine = ocrEngineCombo->currentText();
-    QString language = ocrLanguageCombo->currentText();
-    QString result;
 
-    // Test actual OCR engine availability
-    bool engineAvailable = false;
-    QString statusMessage;
 
-    if (engine == "Tesseract") {
-        engineAvailable = OCREngine::isTesseractAvailable();
-        statusMessage = engineAvailable ? "Tesseract found and ready" : "Tesseract not installed or not in PATH";
-    } else if (engine == "EasyOCR") {
-        engineAvailable = OCREngine::isEasyOCRAvailable();
-        statusMessage = engineAvailable ? "EasyOCR Python module found" : "EasyOCR not installed (pip install easyocr)";
-    } else if (engine == "PaddleOCR") {
-        engineAvailable = OCREngine::isPaddleOCRAvailable();
-        statusMessage = engineAvailable ? "PaddleOCR Python module found" : "PaddleOCR not installed (pip install paddlepaddle paddleocr)";
-    } else if (engine == "Windows OCR") {
-        engineAvailable = OCREngine::isWindowsOCRAvailable();
-        statusMessage = engineAvailable ? "Windows OCR API available" : "Windows OCR only available on Windows 10+";
-    }
-
-    QString status = engineAvailable ? "✅" : "❌";
-    result = QString("%1 OCR Test Results:\n"
-                    "Engine: %2\n"
-                    "Language: %3\n"
-                    "Quality Level: %4/5\n"
-                    "Availability: %5\n"
-                    "Status: %6")
-                    .arg(status)
-                    .arg(engine)
-                    .arg(language)
-                    .arg(ocrQualitySlider->value())
-                    .arg(statusMessage)
-                    .arg(engineAvailable ? "Ready for use" : "Installation required");
-
-    ocrStatusText->setPlainText(result);
-
-    // Update engine dropdown styling based on availability
-    // Use dynamic property for validation state instead of inline style
-    ocrEngineCombo->setProperty("valid", engineAvailable ? "true" : "false");
-    ocrEngineCombo->style()->unpolish(ocrEngineCombo);
-    ocrEngineCombo->style()->polish(ocrEngineCombo);
-        QTimer::singleShot(3000, [this]() {
-            ocrEngineCombo->setProperty("valid", QVariant());
-            ocrEngineCombo->style()->unpolish(ocrEngineCombo);
-            ocrEngineCombo->style()->polish(ocrEngineCombo);
-        });
-}
-
-void SettingsWindow::onTestTranslationClicked()
-{
-    translationStatusText->setPlainText("Testing translation configuration...\n");
-    QApplication::processEvents();
-
-    // Simulate translation test
-    QString engine = translationEngineCombo->currentText();
-    QString source = sourceLanguageCombo->currentText();
-    QString target = targetLanguageCombo->currentText();
-
-    // In a real implementation, this would test the actual translation API
-    QString result = QString("✅ Translation Test Results:\n"
-                           "Engine: %1\n"
-                           "Source: %2 → Target: %3\n"
-                           "API Connection: %4\n"
-                           "Status: Ready for use")
-                           .arg(engine)
-                           .arg(source, target)
-                           .arg(apiUrlEdit->text().isEmpty() ? "Local/Free" : "Connected");
-
-    translationStatusText->setPlainText(result);
-}
 
 void SettingsWindow::setupTTSTab()
 {
     ttsTab = new QWidget();
     tabWidget->addTab(ttsTab, "🔊 Text-to-Speech");
-
-    QScrollArea *scrollArea = new QScrollArea(ttsTab);
-    scrollArea->setWidgetResizable(true);
-    scrollArea->setFrameShape(QFrame::NoFrame);
-    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-
-    QWidget *scrollContent = new QWidget();
-    scrollArea->setWidget(scrollContent);
-
-    QVBoxLayout *tabLayout = new QVBoxLayout(ttsTab);
-    tabLayout->setContentsMargins(0, 0, 0, 0);
-    tabLayout->addWidget(scrollArea);
-
-    QVBoxLayout *layout = new QVBoxLayout(scrollContent);
+    
+    QVBoxLayout *layout = new QVBoxLayout(ttsTab);
     layout->setSpacing(20);
-
-    QGroupBox *enableGroup = new QGroupBox(tr("Text-to-Speech Quick Setup"));
-    QVBoxLayout *enableLayout = new QVBoxLayout(enableGroup);
-    ttsEnabledCheck = new QCheckBox(tr("Turn on voice playback"));
+    layout->setContentsMargins(20, 20, 20, 20);
+    
+    // Main TTS Group
+    QGroupBox *ttsGroup = new QGroupBox("Text-to-Speech");
+    QFormLayout *ttsLayout = new QFormLayout(ttsGroup);
+    ttsLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    ttsLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    ttsLayout->setSpacing(12);
+    
+    // Enable checkbox
+    ttsEnabledCheck = new QCheckBox("Enable voice playback");
     ttsEnabledCheck->setChecked(true);
-    enableLayout->addWidget(ttsEnabledCheck);
-
-    QLabel *enableInfo = new QLabel(tr("Pick a free voice provider, choose a voice, then tap test."));
-    enableInfo->setWordWrap(true);
-    enableInfo->setStyleSheet("color: #666; font-size: 11px;");
-    enableLayout->addWidget(enableInfo);
-
-    ttsProviderLabel = new QLabel;
-    ttsProviderLabel->setStyleSheet("color: #666; font-size: 11px;");
-    enableLayout->addWidget(ttsProviderLabel);
-    layout->addWidget(enableGroup);
-
-    QGroupBox *providerGroup = new QGroupBox(tr("Step 1 — Choose a voice service"));
-    QVBoxLayout *providerLayout = new QVBoxLayout(providerGroup);
+    ttsLayout->addRow("", ttsEnabledCheck);
+    
+    // Provider dropdown
     ttsProviderCombo = new QComboBox();
-    ttsProviderCombo->addItem(tr("System Voices (Recommended)"), QStringLiteral("system"));
-    ttsProviderCombo->addItem(tr("Google Web TTS"), QStringLiteral("google-web"));
-    ttsProviderCombo->addItem(tr("Microsoft Edge TTS"), QStringLiteral("edge-free"));
-    providerLayout->addWidget(ttsProviderCombo);
-
-    providerInfoLabel = new QLabel(tr("System Voices: Uses your macOS downloaded voices from System Settings. Works offline, high quality."));
+    ttsProviderCombo->addItem("System Voices (Recommended)", QStringLiteral("system"));
+    ttsProviderCombo->addItem("Google Web TTS", QStringLiteral("google-web"));
+    ttsProviderCombo->addItem("Microsoft Edge TTS", QStringLiteral("edge-free"));
+    ttsLayout->addRow("Voice Provider:", ttsProviderCombo);
+    
+    // Contextual hint label
+    providerInfoLabel = new QLabel();
     providerInfoLabel->setWordWrap(true);
-    providerInfoLabel->setStyleSheet("color: #666; font-size: 12px; padding: 8px; background: #f5f5f5; border-radius: 6px;");
-    providerLayout->addWidget(providerInfoLabel);
-    layout->addWidget(providerGroup);
-
-    connect(ttsProviderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        const QString providerId = ttsProviderCombo->itemData(index).toString();
-        updateProviderUI(providerId);
-    });
-
-    QGroupBox *voiceGroup = new QGroupBox(tr("Step 2 — Select voices"));
-    QFormLayout *voiceLayout = new QFormLayout(voiceGroup);
-
-    refreshVoicesButton = new QPushButton(tr("Refresh"));
-    refreshVoicesButton->setIcon(QIcon::fromTheme("view-refresh"));
-    refreshVoicesButton->setToolTip(tr("Reload voices based on the current provider and language."));
-
-    // We'll now show input and output voices directly instead of the old single voice combo
-    // Keep the old voiceCombo for compatibility (hidden)
-    voiceCombo = new QComboBox();
-    voiceCombo->setVisible(false);
-    connect(voiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsWindow::onVoiceChanged);
-
-    // Input voice combo with test buttons
+    providerInfoLabel->setStyleSheet("color: #666; font-size: 11px; font-style: italic;");
+    ttsLayout->addRow("", providerInfoLabel);
+    
+    // Input voice
+    QWidget *inputWidget = new QWidget();
+    QHBoxLayout *inputLayout = new QHBoxLayout(inputWidget);
+    inputLayout->setContentsMargins(0, 0, 0, 0);
+    inputLayout->setSpacing(8);
+    
     inputVoiceCombo = new QComboBox();
     inputVoiceCombo->setEditable(true);
-    inputVoiceCombo->setPlaceholderText(tr("Select input voice"));
-    inputVoiceCombo->setToolTip(tr("Voice used when reading OCR/input text"));
-
-    QPushButton *testInputTTSBtn = new QPushButton(tr("🔊 Test"));
-    testInputTTSBtn->setToolTip(tr("Test input voice"));
-    QPushButton *stopInputTTSBtn = new QPushButton(tr("⏹"));
-    stopInputTTSBtn->setToolTip(tr("Stop playback"));
-    stopInputTTSBtn->setEnabled(false);
-
-    // Connect input voice test button
-    connect(testInputTTSBtn, &QPushButton::clicked, this, [this, stopInputTTSBtn, testInputTTSBtn]() {
-        if (!ttsEngine) {
-            ttsStatusText->setPlainText("❌ TTS engine not available");
-            return;
-        }
-
-        if (!ttsEnabledCheck->isChecked()) {
-            ttsStatusText->setPlainText("⚠️ Enable Text-to-Speech to play audio.");
-            return;
-        }
-
-        const QString providerId = ttsProviderCombo ? ttsProviderCombo->currentData().toString() : ttsEngine->providerId();
-        QString voice = inputVoiceCombo ? inputVoiceCombo->currentText().trimmed() : QString();
-
-        if (voice.isEmpty()) {
-            ttsStatusText->setPlainText(tr("⚠️ Select an input voice before testing."));
-            return;
-        }
-
-        QString testText = testTextEdit ? testTextEdit->text().trimmed() : "";
-        if (testText.isEmpty()) {
-            testText = getTestTextForLanguage(inputVoiceCombo->currentText(), true);
-        }
-
-        // Get the language code for this voice
-        QString langCode = getLanguageCodeFromVoice(voice);
-
-        // DEBUG: Print detailed information about voice and language detection
-        qDebug() << "=== INPUT VOICE TEST DEBUG ===";
-        qDebug() << "Selected voice:" << voice;
-        qDebug() << "Detected language code:" << langCode;
-        qDebug() << "Test text:" << testText;
-
-        ttsEngine->setProviderId(providerId);
-        ttsEngine->setPrimaryVoice(voice);
-        ttsEngine->setVolume(1.0);
-        ttsEngine->setPitch(0.0);
-        ttsEngine->setRate(0.0);
-
-        if (providerId == QStringLiteral("google-web")) {
-            // CRUCIAL: Set the language code for Google TTS
-            ttsEngine->configureGoogle(QString(), voice, langCode);
-        } else {
-            const QString exePath = ttsEngine->edgeExecutable();
-            if (exePath.isEmpty() || exePath == "edge-tts") {
-                ttsEngine->setEdgeExecutable("edge-tts");
-            } else if (exePath.isEmpty()) {
-                checkEdgeTTSAvailability();
-                ttsStatusText->setPlainText(tr("⚠️ Edge TTS not configured. Please install it first."));
-                return;
-            }
-            ttsEngine->setEdgeVoice(voice);
-        }
-
-        ttsStatusText->setPlainText(tr("▶️ Playing input voice test..."));
-
-        // Convert language code to QLocale using LanguageManager
-        QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
-
-        // DEBUG: Print locale conversion details
-        qDebug() << "LanguageManager converted" << langCode << "to locale:" << testLocale.name();
-        qDebug() << "Locale language:" << testLocale.language() << "Territory:" << testLocale.territory();
-
-        // Use the configured TTS engine directly with user-selected voice - no auto-selection!
-        qDebug() << "Using direct TTS engine with user-configured settings";
-        ttsEngine->speak(testText, true, testLocale);  // true = isInputText
-    });
-
-    connect(stopInputTTSBtn, &QPushButton::clicked, [this]() {
-        // Stop both old and new TTS systems
-        if (ttsEngine) {
-            ttsEngine->stop();
-        }
-        ModernTTSManager::instance().stop();
-    });
-
-    QWidget *inputVoiceWidget = new QWidget();
-    QHBoxLayout *inputVoiceRow = new QHBoxLayout(inputVoiceWidget);
-    inputVoiceRow->setContentsMargins(0, 0, 0, 0);
-    inputVoiceRow->addWidget(inputVoiceCombo, 1);
-    inputVoiceRow->addWidget(testInputTTSBtn);
-    inputVoiceRow->addWidget(stopInputTTSBtn);
-
-    inputVoiceLabel = new QLabel(tr("Input voice:"));
-    voiceLayout->addRow(inputVoiceLabel, inputVoiceWidget);
-
-    // Output voice combo with test buttons
+    inputVoiceCombo->setPlaceholderText("Select input voice");
+    inputLayout->addWidget(inputVoiceCombo, 1);
+    
+    QPushButton *testInputBtn = new QPushButton("🔊 Test");
+    inputLayout->addWidget(testInputBtn);
+    
+    ttsLayout->addRow("Input Voice:", inputWidget);
+    
+    // Output voice
+    QWidget *outputWidget = new QWidget();
+    QHBoxLayout *outputLayout = new QHBoxLayout(outputWidget);
+    outputLayout->setContentsMargins(0, 0, 0, 0);
+    outputLayout->setSpacing(8);
+    
     outputVoiceCombo = new QComboBox();
     outputVoiceCombo->setEditable(true);
-    outputVoiceCombo->setPlaceholderText(tr("Select output voice"));
-    outputVoiceCombo->setToolTip(tr("Voice used when reading translated text"));
-
-    testTTSBtn = new QPushButton(tr("🔊 Test"));
-    testTTSBtn->setToolTip(tr("Test output voice"));
-    stopTTSBtn = new QPushButton(tr("⏹"));
-    stopTTSBtn->setToolTip(tr("Stop playback"));
-    stopTTSBtn->setEnabled(false);
-    connect(testTTSBtn, &QPushButton::clicked, this, &SettingsWindow::onTestTTSClicked);
-    connect(stopTTSBtn, &QPushButton::clicked, [this]() {
-        // Stop both old and new TTS systems
-        if (ttsEngine) {
-            ttsEngine->stop();
-        }
-        ModernTTSManager::instance().stop();
-    });
-
-    QWidget *outputVoiceWidget = new QWidget();
-    QHBoxLayout *outputVoiceRow = new QHBoxLayout(outputVoiceWidget);
-    outputVoiceRow->setContentsMargins(0, 0, 0, 0);
-    outputVoiceRow->addWidget(outputVoiceCombo, 1);
-    outputVoiceRow->addWidget(testTTSBtn);
-    outputVoiceRow->addWidget(stopTTSBtn);
-    outputVoiceRow->addWidget(refreshVoicesButton);
-
-    outputVoiceLabel = new QLabel(tr("Output voice:"));
-    voiceLayout->addRow(outputVoiceLabel, outputVoiceWidget);
-
-    // Edge TTS auto-detection section (only shown for Edge provider)
-    edgeExePathEdit = new QLineEdit();
-    edgeExePathEdit->setPlaceholderText(tr("Auto-detecting edge-tts..."));
-    edgeExePathEdit->setReadOnly(true);
-    edgeExePathEdit->setVisible(false); // Hidden since we auto-detect
-
-    edgeBrowseButton = new QPushButton();
-    edgeBrowseButton->setVisible(false); // Hidden, not needed anymore
-
-    QPushButton *installEdgeButton = new QPushButton(tr("Install Edge TTS"));
-    installEdgeButton->setToolTip(tr("Install edge-tts using pip (Python required)"));
-
-    edgeExeLabel = new QLabel(tr("Edge TTS Status:"));
-    edgeExeRow = new QWidget();
-    QHBoxLayout *edgeExeLayout = new QHBoxLayout(edgeExeRow);
-    edgeExeLayout->setContentsMargins(0, 0, 0, 0);
-
-    QLabel *edgeStatusLabel = new QLabel(tr("Checking..."));
-    edgeStatusLabel->setObjectName("edgeStatusLabel");
-    edgeExeLayout->addWidget(edgeStatusLabel, 1);
-    edgeExeLayout->addWidget(installEdgeButton);
-
-    voiceLayout->addRow(edgeExeLabel, edgeExeRow);
-
-    edgeHintLabel = new QLabel();
-    edgeHintLabel->setStyleSheet("color: #666; font-size: 11px;");
-    edgeHintLabel->setWordWrap(true);
-    voiceLayout->addRow(QString(), edgeHintLabel);
-
-    // No more advanced voice toggle - always show input/output
-    advancedVoiceToggle = new QCheckBox();
-    advancedVoiceToggle->setVisible(false);
-
-    QLabel *testTextLabel = new QLabel(tr("Sample text:"));
-    testTextEdit = new QLineEdit();
-    testTextEdit->setText(tr("Hello! This is a test of the text-to-speech functionality."));
-    testTextEdit->setPlaceholderText(tr("Enter custom test text or leave empty for language-specific test"));
-    voiceLayout->addRow(testTextLabel, testTextEdit);
-
-    layout->addWidget(voiceGroup);
-
-    ttsStatusText = new QTextEdit();
-    ttsStatusText->setReadOnly(true);
-    ttsStatusText->setMaximumHeight(90);
-    layout->addWidget(ttsStatusText);
-
+    outputVoiceCombo->setPlaceholderText("Select output voice");
+    outputLayout->addWidget(outputVoiceCombo, 1);
+    
+    testTTSBtn = new QPushButton("🔊 Test");
+    outputLayout->addWidget(testTTSBtn);
+    
+    ttsLayout->addRow("Output Voice:", outputWidget);
+    
+    layout->addWidget(ttsGroup);
     layout->addStretch();
-
-    connect(refreshVoicesButton, &QPushButton::clicked, this, [this]() {
-        // Clear voice caches for all providers to force fresh discovery
-        EdgeTTSProvider::clearVoiceCache();
-        GoogleWebTTSProvider::clearVoiceCache();
-
-        // Update voice suggestions using fresh discovery
-        updateVoicesForLanguage();
-
-        if (ttsStatusText) {
-            ttsStatusText->setPlainText(tr("Voice caches cleared and suggestions refreshed."));
-        }
-    });
-
-    // Connect install button for Edge TTS
-    connect(installEdgeButton, &QPushButton::clicked, this, [this, edgeStatusLabel, installEdgeButton]() {
-        installEdgeButton->setEnabled(false);
-        edgeStatusLabel->setText(tr("Installing edge-tts..."));
-
-        QProcess *process = new QProcess(this);
-        connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                [this, process, edgeStatusLabel, installEdgeButton](int exitCode, QProcess::ExitStatus) {
-            process->deleteLater();
-            if (exitCode == 0) {
-                edgeStatusLabel->setText(tr("✅ Installed successfully"));
-                checkEdgeTTSAvailability();
-            } else {
-                const QString errorMsg = QString::fromLocal8Bit(process->readAllStandardError());
-                edgeStatusLabel->setText(tr("❌ Installation failed"));
-                if (edgeHintLabel) {
-                    edgeHintLabel->setText(tr("Error: %1").arg(errorMsg.left(200)));
-                }
-                installEdgeButton->setEnabled(true);
-            }
-        });
-
-        // Try to install edge-tts
-        process->start("pip", {"install", "edge-tts"});
-        if (!process->waitForStarted(1000)) {
-            // If pip doesn't work, try pip3
-            process->start("pip3", {"install", "edge-tts"});
-            if (!process->waitForStarted(1000)) {
-                // Try python -m pip
-                process->start("python", {"-m", "pip", "install", "edge-tts"});
-                if (!process->waitForStarted(1000)) {
-                    // Try python3 -m pip
-                    process->start("python3", {"-m", "pip", "install", "edge-tts"});
-                    if (!process->waitForStarted(1000)) {
-                        edgeStatusLabel->setText(tr("❌ Python/pip not found"));
-                        edgeHintLabel->setText(tr("Please install Python first from python.org"));
-                        installEdgeButton->setEnabled(true);
-                        process->deleteLater();
-                    }
-                }
-            }
-        }
-    });
-
-    if (ttsEngine) {
-        connect(ttsEngine, &TTSEngine::stateChanged, this, [this, stopInputTTSBtn, testInputTTSBtn](QTextToSpeech::State state) {
-            const bool isSpeaking = (state == QTextToSpeech::Speaking);
-            stopTTSBtn->setEnabled(isSpeaking);
-            testTTSBtn->setEnabled(!isSpeaking);
-            stopInputTTSBtn->setEnabled(isSpeaking);
-            testInputTTSBtn->setEnabled(!isSpeaking);
-        });
-
-        refreshVoicesButton->setEnabled(true);
-
-        const QString providerId = ttsEngine->providerId();
-        if (ttsProviderCombo) {
-            const int idx = ttsProviderCombo->findData(providerId);
-            if (idx >= 0) {
-                QSignalBlocker blocker(ttsProviderCombo);
-                ttsProviderCombo->setCurrentIndex(idx);
-            }
-        }
+    
+    // Set deprecated widgets to null
+    voiceCombo = nullptr;
+    refreshVoicesButton = nullptr;
+    inputVoiceLabel = nullptr;
+    outputVoiceLabel = nullptr;
+    testTextEdit = nullptr;
+    stopTTSBtn = nullptr;
+    ttsStatusText = nullptr;
+    edgeExeLabel = nullptr;
+    edgeExeRow = nullptr;
+    edgeExePathEdit = nullptr;
+    ttsProviderLabel = nullptr;
+    edgeHintLabel = nullptr;
+    advancedVoiceToggle = nullptr;
+    edgeBrowseButton = nullptr;
+    
+    // Connect provider change to update hint
+    connect(ttsProviderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        QString providerId = ttsProviderCombo->currentData().toString();
         updateProviderUI(providerId);
-    } else {
-        ttsEnabledCheck->setEnabled(false);
-        if (ttsProviderCombo) ttsProviderCombo->setEnabled(false);
-        if (voiceCombo) voiceCombo->setEnabled(false);
-        if (inputVoiceCombo) inputVoiceCombo->setEnabled(false);
-        if (outputVoiceCombo) outputVoiceCombo->setEnabled(false);
-        if (refreshVoicesButton) refreshVoicesButton->setEnabled(false);
-        advancedVoiceToggle->setEnabled(false);
-        testTTSBtn->setEnabled(false);
-        ttsStatusText->setPlainText(tr("❌ Text-to-Speech engine is unavailable."));
+    });
+    
+    // Connect test buttons
+    connect(testInputBtn, &QPushButton::clicked, this, [this]() {
+        if (!ttsEngine || !ttsEnabledCheck->isChecked()) return;
+        
+        QString providerId = ttsProviderCombo->currentData().toString();
+        QString voice = inputVoiceCombo->currentText().trimmed();
+        if (voice.isEmpty()) return;
+        
+        QString testText = getTestTextForLanguage(voice, true);
+        QString langCode = getLanguageCodeFromVoice(voice);
+        
+        ttsEngine->setProviderId(providerId);
+        ttsEngine->setPrimaryVoice(voice);
+        
+        if (providerId == QStringLiteral("google-web")) {
+            ttsEngine->configureGoogle(QString(), voice, langCode);
+        }
+        
+        QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
+        ttsEngine->speak(testText, true, testLocale);
+    });
+    
+    connect(testTTSBtn, &QPushButton::clicked, this, &SettingsWindow::onTestTTSClicked);
+    
+    // Initialize if engine available
+    if (ttsEngine) {
+        updateProviderUI(ttsEngine->providerId());
+        updateVoicesForLanguage();
     }
 }
+
 
 void SettingsWindow::onVoiceChanged()
 {
@@ -1485,132 +945,21 @@ void SettingsWindow::onTestTTSClicked()
 
 void SettingsWindow::updateProviderUI(const QString& providerId)
 {
-    const bool isSystem = providerId == QStringLiteral("system");
-    const bool isGoogle = providerId.isEmpty() || providerId == QStringLiteral("google-web");
-    const bool isEdge = providerId == QStringLiteral("edge-free");
-
-    if (edgeExeLabel) {
-        edgeExeLabel->setVisible(isEdge);
-    }
-    if (edgeExeRow) {
-        edgeExeRow->setVisible(isEdge);
-    }
-    if (edgeHintLabel) {
-        edgeHintLabel->setVisible(isEdge);
-    }
-
+    // Update contextual hint based on provider
     if (providerInfoLabel) {
-        if (isSystem) {
-            providerInfoLabel->setText(tr("✓ System Voices: Uses your macOS downloaded voices from System Settings → Accessibility → Spoken Content. Works offline, high quality, no installation required."));
-        } else if (isGoogle) {
-            providerInfoLabel->setText(tr("Google Web TTS: Instant playback via Google Translate. Works for short phrases. Requires internet connection."));
-        } else {
-            providerInfoLabel->setText(tr("⚠️ Microsoft Edge TTS: Requires installation (pip install edge-tts). Provides natural-sounding voices in many languages."));
+        if (providerId == QStringLiteral("system")) {
+            providerInfoLabel->setText("Download voices: Settings → Accessibility → Spoken Content");
+        } else if (providerId == QStringLiteral("google-web")) {
+            providerInfoLabel->setText("Works out of the box, no installation required");
+        } else if (providerId == QStringLiteral("edge-free")) {
+            providerInfoLabel->setText("Install: pip install edge-tts");
         }
     }
 
+    // Update TTS engine provider
     if (ttsEngine) {
         ttsEngine->setProviderId(providerId);
-        if (isSystem) {
-            // System TTS - uses QTextToSpeech
-            // No additional configuration needed
-        } else if (isGoogle) {
-            QString langCode = getLanguageCodeFromVoice(ttsEngine->primaryVoice());
-            ttsEngine->configureGoogle(QString(), ttsEngine->primaryVoice(), langCode);
-        } else if (isEdge) {
-            // Auto-detect edge-tts when Edge provider is selected
-            checkEdgeTTSAvailability();
-        }
-
-        if (ttsProviderLabel) {
-            ttsProviderLabel->setText(tr("Voice service: %1").arg(ttsEngine->providerName()));
-        }
-    }
-
-    updateVoicesForLanguage();
-}
-
-void SettingsWindow::checkEdgeTTSAvailability()
-{
-    // Find the edge status label
-    QLabel *edgeStatusLabel = findChild<QLabel*>("edgeStatusLabel");
-    QPushButton *installButton = edgeExeRow ? edgeExeRow->findChild<QPushButton*>() : nullptr;
-
-    if (!edgeStatusLabel) return;
-
-    // Check if edge-tts is available
-    QProcess *checkProcess = new QProcess(this);
-    connect(checkProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            [this, checkProcess, edgeStatusLabel, installButton](int exitCode, QProcess::ExitStatus) {
-        checkProcess->deleteLater();
-
-        if (exitCode == 0) {
-            // edge-tts is installed, get its path
-            QProcess *whichProcess = new QProcess(this);
-            connect(whichProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                    [this, whichProcess, edgeStatusLabel, installButton](int exitCode2, QProcess::ExitStatus) {
-                QString edgePath;
-                if (exitCode2 == 0) {
-                    edgePath = QString::fromLocal8Bit(whichProcess->readAllStandardOutput()).trimmed();
-                }
-                whichProcess->deleteLater();
-
-                if (!edgePath.isEmpty()) {
-                    edgeStatusLabel->setText(tr("✅ Edge TTS is installed"));
-                    if (edgeHintLabel) {
-                        edgeHintLabel->setText(tr("Ready to use Microsoft Edge voices"));
-                    }
-                    if (installButton) {
-                        installButton->setVisible(false);
-                    }
-                    // Set the executable path
-                    if (ttsEngine) {
-                        ttsEngine->setEdgeExecutable("edge-tts"); // Use command name directly
-                    }
-                    if (edgeExePathEdit) {
-                        edgeExePathEdit->setText("edge-tts");
-                    }
-                } else {
-                    // Installed but can't find path, still usable
-                    edgeStatusLabel->setText(tr("✅ Edge TTS is installed"));
-                    if (ttsEngine) {
-                        ttsEngine->setEdgeExecutable("edge-tts");
-                    }
-                }
-            });
-
-            // Try to find edge-tts location
-            #ifdef Q_OS_WIN
-            whichProcess->start("where", {"edge-tts"});
-            #else
-            whichProcess->start("which", {"edge-tts"});
-            #endif
-        } else {
-            // edge-tts not found
-            edgeStatusLabel->setText(tr("⚠️ Edge TTS not installed"));
-            if (edgeHintLabel) {
-                edgeHintLabel->setText(tr("Click 'Install Edge TTS' to enable Microsoft voices"));
-            }
-            if (installButton) {
-                installButton->setVisible(true);
-                installButton->setEnabled(true);
-            }
-        }
-    });
-
-    // Check if edge-tts command exists
-    checkProcess->start("edge-tts", {"--version"});
-    if (!checkProcess->waitForStarted(1000)) {
-        // Command not found
-        edgeStatusLabel->setText(tr("⚠️ Edge TTS not installed"));
-        if (edgeHintLabel) {
-            edgeHintLabel->setText(tr("Click 'Install Edge TTS' to enable Microsoft voices"));
-        }
-        if (installButton) {
-            installButton->setVisible(true);
-            installButton->setEnabled(true);
-        }
-        checkProcess->deleteLater();
+        updateVoicesForLanguage();
     }
 }
 

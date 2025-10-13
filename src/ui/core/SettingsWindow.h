@@ -44,8 +44,6 @@ private slots:
     void onApplyClicked();
     void onCancelClicked();
     void onResetClicked();
-    void onTestOcrClicked();
-    void onTestTranslationClicked();
     void onVoiceChanged();
     void onTestTTSClicked();
 
@@ -83,13 +81,7 @@ private:
     // OCR Tab
     QWidget *ocrTab;
     QComboBox *ocrEngineCombo;
-    QLabel *ocrEngineStatusLabel;
     QComboBox *ocrLanguageCombo;
-    QSlider *ocrQualitySlider;
-    QCheckBox *ocrPreprocessingCheck;
-    QCheckBox *ocrAutoDetectCheck;
-    QPushButton *testOcrBtn;
-    QTextEdit *ocrStatusText;
 
     // Translation Tab
     QWidget *translationTab;
@@ -101,12 +93,12 @@ private:
     QCheckBox *autoDetectSourceCheck;
     QLineEdit *apiKeyEdit;
     QLineEdit *apiUrlEdit;
-    QPushButton *testTranslationBtn;
     QTextEdit *translationStatusText;
 
     // Appearance Tab
     QWidget *appearanceTab;
     QComboBox *themeCombo;
+    QComboBox *widgetSizeCombo;
     QSlider *opacitySlider;
     QCheckBox *animationsCheck;
     QCheckBox *soundsCheck;

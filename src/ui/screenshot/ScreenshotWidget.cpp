@@ -560,10 +560,6 @@ void ScreenshotWidget::handleOCR()
         m_isFirstSelection = false;
         m_firstSelectionRect = selection;
         
-        qDebug() << "⚠️ First selection detected (macOS menu bar offset workaround)";
-        qDebug() << "First selection rect:" << selection;
-        qDebug() << "Will automatically retry after brief delay...";
-        
         // Reset selection state
         hasSelection = false;
         selecting = false;
@@ -575,8 +571,6 @@ void ScreenshotWidget::handleOCR()
         
         // Automatically trigger second OCR with same coordinates after 200ms delay
         QTimer::singleShot(200, this, [this]() {
-            qDebug() << "🔄 Automatic retry with corrected coordinates";
-            
             // Restore selection coordinates
             startPoint = m_firstSelectionRect.topLeft();
             endPoint = m_firstSelectionRect.bottomRight();
@@ -590,11 +584,6 @@ void ScreenshotWidget::handleOCR()
     }
     #endif
     
-    qDebug() << "=== handleOCR Debug ===";
-    qDebug() << "Selection (logical):" << selection;
-    qDebug() << "Screenshot size:" << screenshot.size();
-    qDebug() << "Screenshot DPR:" << screenshot.devicePixelRatio();
-    
     // Calculate physical coordinates
     QRect physicalRect(
         static_cast<int>(selection.x() * screenshot.devicePixelRatio()),
@@ -603,16 +592,7 @@ void ScreenshotWidget::handleOCR()
         static_cast<int>(selection.height() * screenshot.devicePixelRatio())
     );
     
-    qDebug() << "Physical rect for copy:" << physicalRect;
-    
     QPixmap selectedArea = screenshot.copy(physicalRect);
-    
-    qDebug() << "Copied pixmap size:" << selectedArea.size();
-    qDebug() << "Copied pixmap isNull:" << selectedArea.isNull();
-    qDebug() << "Copied pixmap DPR:" << selectedArea.devicePixelRatio();
-    qDebug() << "=== End handleOCR Debug ===";
-
-    qDebug() << "OCR requested for selection:" << selection;
 
     if (selectedArea.isNull() || selectedArea.size().isEmpty()) {
         QMessageBox::warning(this, "OCR Error", "Please select a valid area for OCR processing.");
@@ -639,8 +619,6 @@ void ScreenshotWidget::handleOCR()
     startPoint = QPoint();
     endPoint = QPoint();
     
-    // Keep screenshot widget active for next selection
-    qDebug() << "Screenshot mode stays active for next selection. Press ESC to exit.";
     update();
 }
 
