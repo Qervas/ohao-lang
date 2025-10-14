@@ -69,12 +69,13 @@ private:
     // Settings window
     SettingsWindow *settingsWindow = nullptr;
 
-    // Global shortcut manager (Windows only)
-#ifdef Q_OS_WIN
+    // Global shortcut manager (Windows and macOS)
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
     GlobalShortcutManager *shortcutManager = nullptr;
 #endif
 
     bool screenshotInProgress = false;
+    bool wasVisibleBeforeScreenshot = false;
 
     // Single instance support
     QLocalServer *localServer = nullptr;

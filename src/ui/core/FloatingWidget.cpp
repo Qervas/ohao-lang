@@ -26,13 +26,14 @@ FloatingWidget::FloatingWidget(QWidget *parent)
     setupUI();
     applyModernStyle();
 
-    // Initialize global shortcut manager
-#ifdef Q_OS_WIN
+    // Initialize global shortcut manager (Windows and macOS)
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
     shortcutManager = new GlobalShortcutManager(this);
     connect(shortcutManager, &GlobalShortcutManager::screenshotRequested, 
             this, &FloatingWidget::takeScreenshot);
     connect(shortcutManager, &GlobalShortcutManager::toggleVisibilityRequested,
             this, &FloatingWidget::toggleVisibility);
+    qDebug() << "Global shortcut manager initialized";
 #endif
 
     // Setup local server for single instance support
@@ -329,6 +330,10 @@ void FloatingWidget::takeScreenshot()
 {
     qDebug() << "Taking screenshot using ScreenCapture!";
 
+    // Remember if widget was visible before hiding
+    wasVisibleBeforeScreenshot = isVisible();
+    qDebug() << "Widget was visible before screenshot:" << wasVisibleBeforeScreenshot;
+
     // Hide widget immediately and take screenshot
     hide();
 
@@ -408,20 +413,32 @@ void FloatingWidget::takeScreenshot()
             screenshotWidget->raise();
             screenshotWidget->activateWindow();
 
-            // Show this widget again after screenshot closes
+            // Show this widget again after screenshot closes (only if it was visible before)
             connect(screenshotWidget, &ScreenshotWidget::screenshotFinished, [this]() {
-                qDebug() << "Screenshot finished signal received, showing floating widget again";
-                show();
-                raise();
-                activateWindow();
+                qDebug() << "Screenshot finished signal received";
+                // Only show widget if it was visible before screenshot
+                if (wasVisibleBeforeScreenshot) {
+                    qDebug() << "Restoring widget visibility";
+                    show();
+                    raise();
+                    activateWindow();
+                } else {
+                    qDebug() << "Widget was hidden before screenshot, keeping it hidden";
+                }
             });
 
             // Keep destroyed as backup
             connect(screenshotWidget, &QWidget::destroyed, [this]() {
                 qDebug() << "Screenshot widget destroyed (backup signal)";
-                show();
-                raise();
-                activateWindow();
+                // Only show widget if it was visible before screenshot
+                if (wasVisibleBeforeScreenshot) {
+                    qDebug() << "Restoring widget visibility";
+                    show();
+                    raise();
+                    activateWindow();
+                } else {
+                    qDebug() << "Widget was hidden before screenshot, keeping it hidden";
+                }
             });
         } else {
             qWarning() << "Failed to create screenshot widget!";
