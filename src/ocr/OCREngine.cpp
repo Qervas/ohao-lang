@@ -20,19 +20,44 @@ OCREngine::OCREngine(QObject *parent)
     m_tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/ohao-lang-ocr";
     QDir().mkpath(m_tempDir);
     
-    // Set default engine based on platform
-#ifdef Q_OS_MACOS
-    if (isAppleVisionAvailable()) {
-        m_engine = AppleVision;
-        qDebug() << "OCREngine: Defaulting to Apple Vision (native macOS OCR)";
+    // Load saved OCR engine from settings, or use platform default
+    QString savedEngine = m_settings->value("ocr/engine", "").toString();
+    
+    if (!savedEngine.isEmpty()) {
+        // Use saved preference (matches SettingsWindow internal names)
+        if (savedEngine == "AppleVision") {
+            m_engine = AppleVision;
+        } else if (savedEngine == "Tesseract") {
+            m_engine = Tesseract;
+        } else if (savedEngine == "EasyOCR") {
+            m_engine = EasyOCR;
+        } else if (savedEngine == "PaddleOCR") {
+            m_engine = PaddleOCR;
+        } else if (savedEngine == "WindowsOCR") {
+            m_engine = WindowsOCR;
+        } else if (savedEngine == "OnlineOCR") {
+            m_engine = OnlineOCR;
+        }
+        qDebug() << "OCREngine: Loaded saved engine from settings:" << savedEngine;
     } else {
-        m_engine = OnlineOCR;
-        qDebug() << "OCREngine: Apple Vision not available, using Online OCR";
-    }
+        // Set default engine based on platform AND save it to settings
+#ifdef Q_OS_MACOS
+        if (isAppleVisionAvailable()) {
+            m_engine = AppleVision;
+            m_settings->setValue("ocr/engine", "AppleVision");
+            qDebug() << "OCREngine: Defaulting to Apple Vision (native macOS OCR) and saving to settings";
+        } else {
+            m_engine = OnlineOCR;
+            m_settings->setValue("ocr/engine", "OnlineOCR");
+            qDebug() << "OCREngine: Apple Vision not available, using Online OCR and saving to settings";
+        }
 #else
-    m_engine = Tesseract;  // Default to Tesseract on other platforms
-    qDebug() << "OCREngine: Defaulting to Tesseract on" << PLATFORM_NAME;
+        m_engine = Tesseract;  // Default to Tesseract on other platforms
+        m_settings->setValue("ocr/engine", "Tesseract");
+        qDebug() << "OCREngine: Defaulting to Tesseract on" << PLATFORM_NAME << "and saving to settings";
 #endif
+        m_settings->sync();  // Ensure it's written to disk immediately
+    }
 }
 
 OCREngine::~OCREngine()
@@ -185,7 +210,11 @@ void OCREngine::performAppleVisionOCR(const QPixmap &image)
 void OCREngine::performTesseractOCR(const QPixmap &image)
 {
     if (!isTesseractAvailable()) {
+#ifdef Q_OS_WIN
         QString bundledPath = QCoreApplication::applicationDirPath() + "/tesseract.exe";
+#else
+        QString bundledPath = QCoreApplication::applicationDirPath() + "/tesseract";
+#endif
         QString errorMsg = QString("Tesseract OCR not found!\n\nSearched locations:\n- System PATH\n- Bundled: %1\n\nPlease reinstall the application.").arg(bundledPath);
         qDebug() << "Tesseract not available. Bundled path:" << bundledPath << "Exists:" << QFile::exists(bundledPath);
         emit ocrError(errorMsg);
@@ -312,7 +341,11 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
 
     // Determine which Tesseract to use (bundled or system)
     QString tesseractExe = "tesseract"; // Default to system PATH
+#ifdef Q_OS_WIN
     QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract.exe";
+#else
+    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract";
+#endif
     if (QFile::exists(bundledTesseract)) {
         tesseractExe = bundledTesseract;
         qDebug() << "Using bundled Tesseract:" << tesseractExe;
@@ -945,7 +978,11 @@ bool OCREngine::isAppleVisionAvailable()
 bool OCREngine::isTesseractAvailable()
 {
     // First, check for bundled Tesseract in application directory
+#ifdef Q_OS_WIN
     QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract.exe";
+#else
+    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract";
+#endif
     if (QFile::exists(bundledTesseract)) {
         QProcess process;
         process.start(bundledTesseract, QStringList() << "--version");

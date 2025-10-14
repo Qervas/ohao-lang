@@ -13,6 +13,10 @@
 #include "ui/core/ThemeManager.h"
 #include "updater/UpdateChecker.h"
 
+#ifdef Q_OS_MACOS
+#include "system/PermissionsDialog.h"
+#endif
+
 #ifdef _WIN32
 #include <Windows.h>
 #include <io.h>
@@ -113,6 +117,27 @@ int main(int argc, char *argv[])
 
     // Apply theme early so all widgets inherit styles
     ThemeManager::instance().applyFromSettings();
+
+    // Initialize default OCR engine on first launch
+    QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
+    if (!settings.contains("ocr/engine")) {
+#ifdef Q_OS_MACOS
+        settings.setValue("ocr/engine", "AppleVision");
+        qDebug() << "First launch: Setting default OCR engine to Apple Vision";
+#else
+        settings.setValue("ocr/engine", "Tesseract");
+        qDebug() << "First launch: Setting default OCR engine to Tesseract";
+#endif
+        settings.sync();
+    }
+
+#ifdef Q_OS_MACOS
+    // Show permissions dialog on first launch (macOS only)
+    if (PermissionsDialog::shouldShow()) {
+        PermissionsDialog permDialog;
+        permDialog.exec();
+    }
+#endif
 
     // Create and show floating widget as a top-level window
     FloatingWidget *widget = new FloatingWidget(nullptr);

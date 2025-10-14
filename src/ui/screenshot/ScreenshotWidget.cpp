@@ -86,8 +86,34 @@ ScreenshotWidget::ScreenshotWidget(const QPixmap &screenshot, QWidget *parent)
 
 void ScreenshotWidget::setupWidget()
 {
-    // Always full screen so selection can cover the entire display area
+    // Cover the entire screen without creating a new fullscreen space
+    // Use showMaximized() or manual geometry setting instead of showFullScreen()
+    // to avoid macOS creating a new desktop/space
+    
+#ifdef Q_OS_MACOS
+    // On macOS, manually set geometry to cover all screens and show normal
+    // This prevents the system from creating a new fullscreen space
+    QScreen *primaryScreen = QApplication::primaryScreen();
+    if (primaryScreen) {
+        QRect screenGeometry = primaryScreen->geometry();
+        
+        // If multiple screens, expand to cover all of them
+        const auto screens = QApplication::screens();
+        for (QScreen *screen : screens) {
+            screenGeometry = screenGeometry.united(screen->geometry());
+        }
+        
+        setGeometry(screenGeometry);
+        show();
+        raise();
+        activateWindow();
+    } else {
+        show();
+    }
+#else
+    // On other platforms, showFullScreen() works fine
     showFullScreen();
+#endif
 
     // Enable mouse tracking
     setMouseTracking(true);
@@ -98,8 +124,6 @@ void ScreenshotWidget::setupWidget()
     // Take focus for keyboard events
     setFocusPolicy(Qt::StrongFocus);
     setFocus();
-
-    // Fullscreen handles sizing; nothing else to do
 }
 
 ScreenshotWidget::~ScreenshotWidget()

@@ -56,8 +56,11 @@ endif()
 
 # Create executable
 # WIN32 flag creates Windows subsystem app (no console window)
+# MACOSX_BUNDLE creates a macOS .app bundle
 if(WIN32)
     qt_add_executable(ohao-lang WIN32 ${ALL_SOURCES} ${ALL_HEADERS})
+elseif(APPLE)
+    qt_add_executable(ohao-lang MACOSX_BUNDLE ${ALL_SOURCES} ${ALL_HEADERS})
 else()
     qt_add_executable(ohao-lang ${ALL_SOURCES} ${ALL_HEADERS})
 endif()
@@ -145,5 +148,59 @@ if (WIN32)
             COMMENT "Deploying Qt runtime with windeployqt")
     else()
         message(WARNING "windeployqt.exe not found. The built .exe may not run outside the build tree without Qt DLLs in PATH.")
+    endif()
+endif()
+
+# Deploy Qt runtime on macOS and create DMG
+if(APPLE)
+    # Set bundle properties
+    set_target_properties(ohao-lang PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.ohao.lang"
+        MACOSX_BUNDLE_BUNDLE_NAME "Ohao Lang"
+        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+        MACOSX_BUNDLE_INFO_STRING "OCR & Translation Tool"
+        MACOSX_BUNDLE_ICON_FILE "AppIcon.icns"
+    )
+
+    # Copy icon to Resources folder
+    set(ICON_FILE "${CMAKE_SOURCE_DIR}/resources/AppIcon.icns")
+    if(EXISTS ${ICON_FILE})
+        set_source_files_properties(${ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+        target_sources(ohao-lang PRIVATE ${ICON_FILE})
+        message(STATUS "App icon found and will be included in bundle")
+    else()
+        message(WARNING "App icon not found at ${ICON_FILE}")
+    endif()
+
+    # Find macdeployqt
+    get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
+    get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
+    find_program(MACDEPLOYQT_EXECUTABLE macdeployqt HINTS "${_qt_bin_dir}")
+
+    if(MACDEPLOYQT_EXECUTABLE)
+        add_custom_command(TARGET ohao-lang POST_BUILD
+            COMMAND "${MACDEPLOYQT_EXECUTABLE}"
+                    "$<TARGET_BUNDLE_DIR:ohao-lang>"
+                    -always-overwrite
+            COMMAND codesign
+                    --force
+                    --deep
+                    --sign -
+                    "$<TARGET_BUNDLE_DIR:ohao-lang>"
+            COMMENT "Running macdeployqt and code signing the app bundle")
+        message(STATUS "macdeployqt found - will bundle Qt frameworks and sign automatically")
+
+        # Add custom target to create DMG (run manually with: cmake --build build --target dmg)
+        add_custom_target(dmg
+            COMMAND "${MACDEPLOYQT_EXECUTABLE}"
+                    "$<TARGET_BUNDLE_DIR:ohao-lang>"
+                    -dmg
+            DEPENDS ohao-lang
+            COMMENT "Creating DMG installer..."
+        )
+        message(STATUS "To create DMG installer, run: cmake --build build --target dmg")
+    else()
+        message(WARNING "macdeployqt not found. The app bundle may not run on other systems without Qt installed.")
     endif()
 endif()

@@ -776,6 +776,10 @@ void SettingsWindow::saveSettings()
     }
 
     settings->sync();
+    
+    // CRITICAL: Reload AppSettings cache after saving settings
+    // This ensures that any OCR/Translation operations use the updated settings
+    AppSettings::instance().reload();
 }
 
 void SettingsWindow::resetToDefaults()
@@ -911,7 +915,32 @@ void SettingsWindow::animateHide()
 // Slots
 void SettingsWindow::onOcrEngineChanged()
 {
-    // OCR engine changed - no validation needed for simplified design
+    // Save OCR engine immediately when changed
+    if (!settings || !ocrEngineCombo) {
+        return;
+    }
+    
+    QString displayEngine = ocrEngineCombo->currentText();
+    QString internalEngine;
+    
+    // Map display names to internal names for OCREngine
+    if (displayEngine.contains("Apple Vision")) {
+        internalEngine = "AppleVision";
+    } else if (displayEngine.contains("Windows OCR")) {
+        internalEngine = "WindowsOCR";
+    } else if (displayEngine == "Tesseract") {
+        internalEngine = "Tesseract";
+    } else {
+        internalEngine = displayEngine; // fallback
+    }
+    
+    settings->setValue("ocr/engine", internalEngine);
+    settings->sync();
+    
+    // CRITICAL: Reload AppSettings cache so OCR operations use the new engine
+    AppSettings::instance().reload();
+    
+    qDebug() << "OCR engine changed to:" << internalEngine;
 }
 
 void SettingsWindow::onTranslationEngineChanged()
