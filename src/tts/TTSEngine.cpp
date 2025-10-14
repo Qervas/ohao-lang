@@ -310,9 +310,15 @@ void TTSEngine::applyProviderConfig(const QString& voiceOverride)
     TTSProvider::Config config;
     if (m_providerId == QStringLiteral("system")) {
         // System TTS - uses system voices
-        const QString voice = voiceOverride.isEmpty() ? m_googleVoice : voiceOverride;
+        // For system provider, use inputVoice/outputVoice, NOT googleVoice
+        QString voice = voiceOverride;
+        if (voice.isEmpty()) {
+            // Use outputVoice as default for system voices
+            voice = !m_outputVoice.isEmpty() ? m_outputVoice : 
+                    (!m_inputVoice.isEmpty() ? m_inputVoice : QString());
+        }
         config.voice = voice;
-        config.languageCode = m_googleLanguageCode;
+        config.languageCode = QString(); // System voices don't need language code
     } else if (m_providerId == QStringLiteral("edge-free")) {
         const QString voice = voiceOverride.isEmpty() ? (m_edgeVoice.isEmpty() ? m_googleVoice : m_edgeVoice) : voiceOverride;
         config.voice = voice;

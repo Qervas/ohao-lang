@@ -135,7 +135,20 @@ void SystemTTSProvider::applyConfig(const Config& config)
     qDebug() << "  Language:" << config.languageCode;
     qDebug() << "  Voice:" << config.voice;
 
-    // Set locale
+    // If voice name is provided, try to find and set it directly
+    if (!config.voice.isEmpty()) {
+        QVoice voice = findVoiceByName(config.voice);
+        if (!voice.name().isEmpty()) {
+            qDebug() << "SystemTTSProvider: Setting voice to:" << voice.name();
+            m_engine->setVoice(voice);
+            qDebug() << "SystemTTSProvider: Config applied successfully with voice:" << voice.name();
+            return;
+        } else {
+            qWarning() << "SystemTTSProvider: Voice not found:" << config.voice;
+        }
+    }
+
+    // Fallback: use locale-based selection
     QLocale locale(config.languageCode);
     if (!config.languageCode.isEmpty()) {
         qDebug() << "SystemTTSProvider: Setting locale to:" << locale.name();
@@ -177,6 +190,45 @@ QStringList SystemTTSProvider::suggestedVoicesFor(const QLocale& locale) const
     }
     
     return suggestions;
+}
+
+QVoice SystemTTSProvider::findVoiceByName(const QString& voiceName) const
+{
+    if (!m_engine || voiceName.isEmpty()) {
+        return QVoice();
+    }
+
+    // Search through all available locales and voices
+    for (const QLocale& locale : m_engine->availableLocales()) {
+        // Save current locale
+        QLocale currentLocale = m_engine->locale();
+        
+        // Set to this locale
+        m_engine->setLocale(locale);
+        QList<QVoice> voices = m_engine->availableVoices();
+        
+        // Restore locale
+        m_engine->setLocale(currentLocale);
+        
+        // Search for exact or partial match
+        for (const QVoice& voice : voices) {
+            if (voice.name() == voiceName) {
+                qDebug() << "SystemTTSProvider: Found exact voice match:" << voice.name();
+                return voice;
+            }
+        }
+        
+        // Try partial match
+        for (const QVoice& voice : voices) {
+            if (voice.name().contains(voiceName, Qt::CaseInsensitive)) {
+                qDebug() << "SystemTTSProvider: Found partial voice match:" << voice.name();
+                return voice;
+            }
+        }
+    }
+    
+    qWarning() << "SystemTTSProvider: Voice not found:" << voiceName;
+    return QVoice();
 }
 
 QVoice SystemTTSProvider::findBestVoice(const QLocale& locale, const QString& voiceId) const

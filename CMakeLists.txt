@@ -61,6 +61,13 @@ if(WIN32)
     qt_add_executable(ohao-lang WIN32 ${ALL_SOURCES} ${ALL_HEADERS})
 elseif(APPLE)
     qt_add_executable(ohao-lang MACOSX_BUNDLE ${ALL_SOURCES} ${ALL_HEADERS})
+
+    # Set proper rpath for macOS bundle - this is the standard way
+    set_target_properties(ohao-lang PROPERTIES
+        INSTALL_RPATH "@executable_path/../Frameworks"
+        BUILD_WITH_INSTALL_RPATH TRUE
+        MACOSX_RPATH TRUE
+    )
 else()
     qt_add_executable(ohao-lang ${ALL_SOURCES} ${ALL_HEADERS})
 endif()
@@ -183,12 +190,15 @@ if(APPLE)
             COMMAND "${MACDEPLOYQT_EXECUTABLE}"
                     "$<TARGET_BUNDLE_DIR:ohao-lang>"
                     -always-overwrite
+            COMMAND ${CMAKE_COMMAND} -E echo "Code signing the bundle..."
+            # Sign the entire bundle (macdeployqt already signs components, we just ensure bundle signature)
             COMMAND codesign
                     --force
                     --deep
                     --sign -
                     "$<TARGET_BUNDLE_DIR:ohao-lang>"
-            COMMENT "Running macdeployqt and code signing the app bundle")
+            COMMAND ${CMAKE_COMMAND} -E echo "✅ Bundle ready"
+            COMMENT "Deploying Qt frameworks and signing the app bundle")
         message(STATUS "macdeployqt found - will bundle Qt frameworks and sign automatically")
 
         # Add custom target to create DMG (run manually with: cmake --build build --target dmg)
