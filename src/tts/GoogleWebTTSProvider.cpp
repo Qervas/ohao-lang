@@ -22,7 +22,10 @@ GoogleWebTTSProvider::GoogleWebTTSProvider(QObject* parent)
 {
     m_player = new QMediaPlayer(this);
     m_audio = new QAudioOutput(this);
+    m_audio->setVolume(1.0); // Ensure volume is at maximum
     m_player->setAudioOutput(m_audio);
+    
+    qDebug() << "GoogleWebTTSProvider: Initialized with audio output, volume:" << m_audio->volume();
 }
 
 QString GoogleWebTTSProvider::id() const
@@ -132,11 +135,15 @@ void GoogleWebTTSProvider::speak(const QString& text,
                                  const QLocale& locale,
                                  double rate,
                                  double /*pitch*/,
-                                 double /*volume*/)
+                                 double volume)
 {
     if (text.trimmed().isEmpty()) {
+        qDebug() << "GoogleWebTTSProvider: Empty text, skipping";
         return;
     }
+
+    qDebug() << "GoogleWebTTSProvider: Speaking text:" << text.left(50);
+    qDebug() << "GoogleWebTTSProvider: Locale:" << locale.name() << "Rate:" << rate << "Volume:" << volume;
 
     const QString language = !m_languageCode.isEmpty()
         ? m_languageCode
@@ -144,9 +151,17 @@ void GoogleWebTTSProvider::speak(const QString& text,
             ? languageCodeForLocale(locale)
             : languageCodeForVoice(m_voice);
 
+    qDebug() << "GoogleWebTTSProvider: Using language code:" << language;
+
     if (language.isEmpty()) {
         emit errorOccurred(QStringLiteral("Unable to determine language for Google voices."));
         return;
+    }
+
+    // Apply volume
+    if (m_audio) {
+        m_audio->setVolume(volume);
+        qDebug() << "GoogleWebTTSProvider: Set audio volume to:" << volume;
     }
 
     const double speakingRate = qBound(0.25, 1.0 + rate, 4.0);
@@ -168,6 +183,7 @@ void GoogleWebTTSProvider::speak(const QString& text,
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
+            qDebug() << "GoogleWebTTSProvider: Network error:" << reply->errorString();
             emit errorOccurred(reply->errorString());
             reply->deleteLater();
             return;
@@ -176,7 +192,10 @@ void GoogleWebTTSProvider::speak(const QString& text,
         const QByteArray audio = reply->readAll();
         reply->deleteLater();
 
+        qDebug() << "GoogleWebTTSProvider: Received audio data, size:" << audio.size() << "bytes";
+
         if (audio.isEmpty()) {
+            qDebug() << "GoogleWebTTSProvider: Audio data is empty!";
             emit errorOccurred(QStringLiteral("Google Translate returned no audio data."));
             return;
         }
@@ -185,10 +204,13 @@ void GoogleWebTTSProvider::speak(const QString& text,
         buffer->setData(audio);
         buffer->open(QIODevice::ReadOnly);
         m_player->setSourceDevice(buffer);
+        
+        qDebug() << "GoogleWebTTSProvider: Playing audio, volume:" << m_audio->volume();
         m_player->play();
 
         emit started();
         connect(m_player, &QMediaPlayer::playbackStateChanged, this, [this](QMediaPlayer::PlaybackState state) {
+            qDebug() << "GoogleWebTTSProvider: Playback state changed to:" << state;
             if (state == QMediaPlayer::StoppedState) {
                 emit finished();
             }

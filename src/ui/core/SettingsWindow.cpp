@@ -497,8 +497,10 @@ void SettingsWindow::loadSettings()
             ttsEngine->setEdgeExecutable(edgeExeStored);
         } else {
             primaryVoice = !googleWebVoiceStored.isEmpty() ? googleWebVoiceStored : !googleVoiceStored.isEmpty() ? googleVoiceStored : savedOutputVoice.isEmpty() ? savedInputVoice : savedOutputVoice;
-            QString langCode = getLanguageCodeFromVoice(primaryVoice);
-            ttsEngine->configureGoogle(QString(), primaryVoice, langCode);
+            // Use target language from General settings for Google TTS
+            QString targetLang = settings->value("translation/targetLanguage", "English").toString();
+            QLocale locale = languageNameToLocale(targetLang);
+            ttsEngine->configureGoogle(QString(), primaryVoice, locale.name());
         }
 
         ttsEngine->setPrimaryVoice(primaryVoice);
@@ -636,9 +638,11 @@ void SettingsWindow::saveSettings()
         if (providerId == QStringLiteral("edge-free")) {
             ttsEngine->setEdgeExecutable(edgeExePath);
             ttsEngine->setEdgeVoice(primaryVoice);
-        } else {
-            QString langCode = getLanguageCodeFromVoice(primaryVoice);
-            ttsEngine->configureGoogle(QString(), primaryVoice, langCode);
+        } else if (providerId == QStringLiteral("google-web")) {
+            // Use target language from General settings for Google TTS
+            QString targetLang = targetLanguageCombo ? targetLanguageCombo->currentText() : "English";
+            QLocale locale = languageNameToLocale(targetLang);
+            ttsEngine->configureGoogle(QString(), primaryVoice, locale.name());
         }
 
         settings->setValue("tts/volume", qRound(ttsEngine->volume() * 100.0));
@@ -871,22 +875,16 @@ void SettingsWindow::setupTTSTab()
     connect(testInputBtn, &QPushButton::clicked, this, [this]() {
         if (!ttsEngine || !ttsEnabledCheck->isChecked()) return;
         
-        QString providerId = ttsProviderCombo->currentData().toString();
         QString voice = inputVoiceCombo->currentText().trimmed();
         if (voice.isEmpty()) return;
         
-        QString testText = getTestTextForLanguage(voice, true);
-        QString langCode = getLanguageCodeFromVoice(voice);
+        // Use OCR language from General settings for input voice
+        QString languageName = ocrLanguageCombo ? ocrLanguageCombo->currentText() : "English";
+        QLocale locale = languageNameToLocale(languageName);
+        QString testText = getTestTextForLanguage(languageName, true);
         
-        ttsEngine->setProviderId(providerId);
-        ttsEngine->setPrimaryVoice(voice);
-        
-        if (providerId == QStringLiteral("google-web")) {
-            ttsEngine->configureGoogle(QString(), voice, langCode);
-        }
-        
-        QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
-        ttsEngine->speak(testText, true, testLocale);
+        ttsEngine->setInputVoice(voice);
+        ttsEngine->speak(testText, true, locale);
     });
     
     connect(testTTSBtn, &QPushButton::clicked, this, &SettingsWindow::onTestTTSClicked);
@@ -906,51 +904,18 @@ void SettingsWindow::onVoiceChanged()
 
 void SettingsWindow::onTestTTSClicked()
 {
-    if (!ttsEngine) {
-        ttsStatusText->setPlainText("❌ TTS engine not available");
-        return;
-    }
+    if (!ttsEngine || !ttsEnabledCheck->isChecked()) return;
 
-    if (!ttsEnabledCheck->isChecked()) {
-        ttsStatusText->setPlainText("⚠️ Enable Text-to-Speech to play audio.");
-        return;
-    }
-
-    const QString providerId = ttsProviderCombo ? ttsProviderCombo->currentData().toString() : ttsEngine->providerId();
-
-    // Use output voice for testing (since we test the translation output)
     QString voice = outputVoiceCombo ? outputVoiceCombo->currentText().trimmed() : QString();
-    if (voice.isEmpty() && voiceCombo) {
-        voice = voiceCombo->currentText().trimmed(); // Fallback for compatibility
-    }
+    if (voice.isEmpty()) return;
 
-    if (voice.isEmpty()) {
-        ttsStatusText->setPlainText(tr("⚠️ Select an output voice before testing."));
-        return;
-    }
+    // Use target language from General settings for output voice
+    QString languageName = targetLanguageCombo ? targetLanguageCombo->currentText() : "English";
+    QLocale locale = languageNameToLocale(languageName);
+    QString testText = getTestTextForLanguage(languageName, false);
 
-    QString testText = testTextEdit->text().trimmed();
-    if (testText.isEmpty()) {
-        testText = getTestTextForLanguage(outputVoiceCombo ? outputVoiceCombo->currentText() : voice, false);
-    }
-
-    // Get the language code for this voice
-    QString langCode = getLanguageCodeFromVoice(voice);
-
-    // Use the unified configuration method
-    ttsEngine->configureFromCurrentSettings();
-
-    // Override with test-specific settings for the test
-    ttsEngine->setVolume(1.0);  // Full volume for test
-
-    ttsStatusText->setPlainText(tr("▶️ Playing test text..."));
-
-    // Convert language code to QLocale using LanguageManager
-    QLocale testLocale = LanguageManager::instance().localeFromLanguageCode(langCode);
-
-    // Use the configured TTS engine directly with user-selected voice - no auto-selection!
-    qDebug() << "Using direct TTS engine with user-configured settings";
-    ttsEngine->speak(testText, false, testLocale);  // false = isOutputText
+    ttsEngine->setOutputVoice(voice);
+    ttsEngine->speak(testText, false, locale);
 }
 
 void SettingsWindow::updateProviderUI(const QString& providerId)
@@ -1056,84 +1021,69 @@ void SettingsWindow::updateVoicesForLanguage()
     }
 }
 
-QString SettingsWindow::getTestTextForLanguage(const QString& voice, bool isInputVoice) const
+QLocale SettingsWindow::languageNameToLocale(const QString& languageName) const
 {
-    // Get the language code for this voice and use it to determine test text
-    QString langCode = getLanguageCodeFromVoice(voice);
+    if (languageName.contains("English", Qt::CaseInsensitive)) return QLocale(QLocale::English, QLocale::UnitedStates);
+    if (languageName.contains("Chinese") && languageName.contains("Simplified")) return QLocale(QLocale::Chinese, QLocale::China);
+    if (languageName.contains("Chinese") && languageName.contains("Traditional")) return QLocale(QLocale::Chinese, QLocale::Taiwan);
+    if (languageName.contains("Japanese", Qt::CaseInsensitive)) return QLocale(QLocale::Japanese, QLocale::Japan);
+    if (languageName.contains("Korean", Qt::CaseInsensitive)) return QLocale(QLocale::Korean, QLocale::SouthKorea);
+    if (languageName.contains("Spanish", Qt::CaseInsensitive)) return QLocale(QLocale::Spanish, QLocale::Spain);
+    if (languageName.contains("French", Qt::CaseInsensitive)) return QLocale(QLocale::French, QLocale::France);
+    if (languageName.contains("German", Qt::CaseInsensitive)) return QLocale(QLocale::German, QLocale::Germany);
+    if (languageName.contains("Russian", Qt::CaseInsensitive)) return QLocale(QLocale::Russian, QLocale::Russia);
+    if (languageName.contains("Portuguese", Qt::CaseInsensitive)) return QLocale(QLocale::Portuguese, QLocale::Portugal);
+    if (languageName.contains("Italian", Qt::CaseInsensitive)) return QLocale(QLocale::Italian, QLocale::Italy);
+    if (languageName.contains("Dutch", Qt::CaseInsensitive)) return QLocale(QLocale::Dutch, QLocale::Netherlands);
+    if (languageName.contains("Polish", Qt::CaseInsensitive)) return QLocale(QLocale::Polish, QLocale::Poland);
+    if (languageName.contains("Swedish", Qt::CaseInsensitive)) return QLocale(QLocale::Swedish, QLocale::Sweden);
+    if (languageName.contains("Arabic", Qt::CaseInsensitive)) return QLocale(QLocale::Arabic, QLocale::SaudiArabia);
+    if (languageName.contains("Hindi", Qt::CaseInsensitive)) return QLocale(QLocale::Hindi, QLocale::India);
+    if (languageName.contains("Thai", Qt::CaseInsensitive)) return QLocale(QLocale::Thai, QLocale::Thailand);
+    if (languageName.contains("Vietnamese", Qt::CaseInsensitive)) return QLocale(QLocale::Vietnamese, QLocale::Vietnam);
+    return QLocale::system();
+}
 
-    if (langCode.startsWith("zh-TW") || langCode == "zh-TW") {
+QString SettingsWindow::getTestTextForLanguage(const QString& languageName, bool isInputVoice) const
+{
+    if (languageName.contains("Chinese") && languageName.contains("Traditional")) {
         return isInputVoice ? "這是語音識別測試。" : "這是翻譯輸出的語音測試。";
-    } else if (langCode.startsWith("zh") || langCode == "zh-CN") {
+    } else if (languageName.contains("Chinese") && languageName.contains("Simplified")) {
         return isInputVoice ? "这是语音识别测试。" : "这是翻译输出的语音测试。";
-    } else if (langCode == "ja") {
+    } else if (languageName.contains("Japanese")) {
         return isInputVoice ? "これは音声認識のテストです。" : "これは翻訳出力の音声テストです。";
-    } else if (langCode == "ko") {
+    } else if (languageName.contains("Korean")) {
         return isInputVoice ? "이것은 음성 인식 테스트입니다." : "이것은 번역 출력 음성 테스트입니다.";
-    } else if (langCode.startsWith("es")) {
+    } else if (languageName.contains("Spanish")) {
         return isInputVoice ? "Esta es una prueba de reconocimiento de voz." : "Esta es una prueba de voz para la salida de traducción.";
-    } else if (langCode.startsWith("fr")) {
+    } else if (languageName.contains("French")) {
         return isInputVoice ? "Ceci est un test de reconnaissance vocale." : "Ceci est un test vocal pour la sortie de traduction.";
-    } else if (langCode == "de") {
+    } else if (languageName.contains("German")) {
         return isInputVoice ? "Dies ist ein Spracherkennungstest." : "Dies ist ein Sprachtest für die Übersetzungsausgabe.";
-    } else if (langCode == "it") {
+    } else if (languageName.contains("Italian")) {
         return isInputVoice ? "Questo è un test di riconoscimento vocale." : "Questo è un test vocale per l'output di traduzione.";
-    } else if (langCode.startsWith("pt")) {
+    } else if (languageName.contains("Portuguese")) {
         return isInputVoice ? "Este é um teste de reconhecimento de voz." : "Este é um teste de voz para saída de tradução.";
-    } else if (langCode == "ru") {
+    } else if (languageName.contains("Russian")) {
         return isInputVoice ? "Это тест распознавания речи." : "Это голосовой тест для вывода перевода.";
-    } else if (langCode == "ar") {
+    } else if (languageName.contains("Arabic")) {
         return isInputVoice ? "هذا اختبار للتعرف على الصوت." : "هذا اختبار صوتي لمخرجات الترجمة.";
-    } else if (langCode == "hi") {
+    } else if (languageName.contains("Hindi")) {
         return isInputVoice ? "यह वॉयस रिकग्निशन टेस्ट है।" : "यह अनुवाद आउटपुट के लिए वॉयस टेस्ट है।";
-    } else if (langCode == "th") {
+    } else if (languageName.contains("Thai")) {
         return isInputVoice ? "นี่คือการทดสอบการรู้จำเสียง" : "นี่คือการทดสอบเสียงสำหรับเอาต์พุตการแปล";
-    } else if (langCode == "sv") {
-        return isInputVoice ? "Det här är ett röstigenkänningstest." : "Det här är ett rösttest för översättningsutdata.";
-    } else if (langCode == "vi") {
+    } else if (languageName.contains("Vietnamese")) {
         return isInputVoice ? "Đây là bài kiểm tra nhận dạng giọng nói." : "Đây là bài kiểm tra giọng nói cho đầu ra dịch.";
-    } else if (langCode == "nl") {
+    } else if (languageName.contains("Dutch")) {
         return isInputVoice ? "Dit is een spraakherkenningstest." : "Dit is een spraaktest voor vertaaluitvoer.";
-    } else if (langCode == "pl") {
+    } else if (languageName.contains("Polish")) {
         return isInputVoice ? "To jest test rozpoznawania mowy." : "To jest test głosowy dla wyjścia tłumaczenia.";
+    } else if (languageName.contains("Swedish")) {
+        return isInputVoice ? "Det här är ett röstigenkänningstest." : "Det här är ett rösttest för översättningsutdata.";
     }
 
     // Default to English
     return isInputVoice ? "This is a voice recognition test." : "This is a voice test for translation output.";
-}
-
-QString SettingsWindow::getLanguageCodeFromVoice(const QString& voice) const
-{
-    const QString lower = voice.toLower();
-
-    // Chinese variants
-    if (voice.contains("繁體") || lower.contains("traditional")) return "zh-TW";
-    if (voice.contains("简体") || lower.contains("simplified") || lower.contains("pǔtōnghuà")) return "zh-CN";
-    if (lower.contains("chinese") || voice.contains("中文")) {
-        return voice.contains("繁") ? "zh-TW" : "zh-CN";
-    }
-
-    // Other languages
-    if (lower.contains("japan") || voice.contains("日本")) return "ja";
-    if (lower.contains("korean") || voice.contains("한국")) return "ko";
-    if (voice.contains("(mx)", Qt::CaseInsensitive)) return "es-MX";
-    if (lower.contains("span") || lower.contains("español")) return "es";
-    if (voice.contains("(ca)", Qt::CaseInsensitive)) return "fr-CA";
-    if (lower.contains("french") || lower.contains("fran") || lower.contains("français")) return "fr";
-    if (lower.contains("german") || lower.contains("deutsch")) return "de";
-    if (lower.contains("italian") || lower.contains("italiano")) return "it";
-    if (voice.contains("(br)", Qt::CaseInsensitive)) return "pt-BR";
-    if (lower.contains("portuguese") || lower.contains("português")) return "pt";
-    if (lower.contains("russian") || lower.contains("русский")) return "ru";
-    if (lower.contains("arab") || voice.contains("العربية")) return "ar";
-    if (lower.contains("hindi") || voice.contains("हिन्दी")) return "hi";
-    if (lower.contains("thai") || voice.contains("ไทย")) return "th";
-    if (lower.contains("swed") || voice.contains("svenska") || lower.contains("sv-se")) return "sv";
-    if (lower.contains("vietnam") || voice.contains("tiếng việt")) return "vi";
-    if (lower.contains("dutch") || lower.contains("nederlands")) return "nl";
-    if (lower.contains("polish") || lower.contains("polski")) return "pl";
-
-    // Default to English
-    return "en-US";
 }
 
 void SettingsWindow::updateScreenshotPreview()

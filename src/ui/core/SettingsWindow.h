@@ -63,8 +63,8 @@ private:
     void updateVoicesForLanguage();
     void updateProviderUI(const QString& providerId);
     void checkEdgeTTSAvailability();
-    QString getTestTextForLanguage(const QString& voice, bool isInputVoice) const;
-    QString getLanguageCodeFromVoice(const QString& voice) const;
+    QString getTestTextForLanguage(const QString& languageName, bool isInputVoice) const;
+    QLocale languageNameToLocale(const QString& languageName) const;
     void updateScreenshotPreview();
 
     // UI Components
