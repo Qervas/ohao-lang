@@ -90,12 +90,13 @@ else()
     message(WARNING "Qt6 TextToSpeech not found. TTS features will be disabled.")
 endif()
 
-# Link Apple frameworks on macOS for native OCR support
+# Link Apple frameworks on macOS for native OCR support and global shortcuts
 if(APPLE)
     find_library(VISION_FRAMEWORK Vision)
     find_library(APPKIT_FRAMEWORK AppKit)
     find_library(COREIMAGE_FRAMEWORK CoreImage)
     find_library(FOUNDATION_FRAMEWORK Foundation)
+    find_library(CARBON_FRAMEWORK Carbon)
 
     if(VISION_FRAMEWORK AND APPKIT_FRAMEWORK AND COREIMAGE_FRAMEWORK AND FOUNDATION_FRAMEWORK)
         target_link_libraries(ohao-lang PRIVATE
@@ -108,6 +109,13 @@ if(APPLE)
         message(STATUS "Apple Vision framework found - native OCR support enabled")
     else()
         message(WARNING "Apple Vision framework not found - native OCR will be disabled")
+    endif()
+
+    if(CARBON_FRAMEWORK)
+        target_link_libraries(ohao-lang PRIVATE ${CARBON_FRAMEWORK})
+        message(STATUS "Carbon framework found - global shortcuts enabled")
+    else()
+        message(WARNING "Carbon framework not found - global shortcuts will be disabled")
     endif()
 endif()
 

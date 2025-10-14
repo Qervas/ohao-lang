@@ -12,6 +12,7 @@
 #include <QLabel>
 #include <QGroupBox>
 #include <QSlider>
+#include <QKeySequenceEdit>
 #include <QSpinBox>
 #include <QTextEdit>
 #include <QPropertyAnimation>
@@ -25,6 +26,8 @@
 #include <QNetworkAccessManager>
 
 class TTSEngine;
+class GlobalShortcutManager;
+class SystemTray;
 
 class SettingsWindow : public QDialog
 {
@@ -33,16 +36,18 @@ class SettingsWindow : public QDialog
 public:
     explicit SettingsWindow(QWidget *parent = nullptr);
     ~SettingsWindow();
+    
+    void setShortcutManager(GlobalShortcutManager *manager);
+    void setSystemTray(SystemTray *tray);
 
 protected:
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onOcrEngineChanged();
     void onTranslationEngineChanged();
-    void onApplyClicked();
-    void onCancelClicked();
     void onResetClicked();
     void onVoiceChanged();
     void onTestTTSClicked();
@@ -77,6 +82,8 @@ private:
     QSlider *screenshotDimmingSlider;
     QLabel *screenshotDimmingValue;
     QLabel *screenshotPreview;
+    QKeySequenceEdit *screenshotShortcutEdit;
+    QKeySequenceEdit *toggleShortcutEdit;
 
     // OCR Tab
     QWidget *ocrTab;
@@ -99,6 +106,8 @@ private:
     QWidget *appearanceTab;
     QComboBox *themeCombo;
     QComboBox *widgetSizeCombo;
+    QSlider *widgetWidthSlider;
+    QLabel *widgetWidthLabel;
     QSlider *opacitySlider;
     QCheckBox *animationsCheck;
     QCheckBox *soundsCheck;
@@ -129,8 +138,6 @@ private:
     QPushButton *edgeBrowseButton { nullptr };
 
     // Buttons
-    QPushButton *applyBtn;
-    QPushButton *cancelBtn;
     QPushButton *resetBtn;
 
     // Animation
@@ -142,6 +149,12 @@ private:
 
     // TTS Engine
     TTSEngine *ttsEngine;
+    
+    // Global Shortcut Manager
+    GlobalShortcutManager *shortcutManager = nullptr;
+    
+    // System Tray
+    SystemTray *systemTray = nullptr;
 
     // Language filtering
     // Language now follows Translation target language; no separate picker

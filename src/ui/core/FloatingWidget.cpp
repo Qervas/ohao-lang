@@ -87,8 +87,10 @@ void FloatingWidget::setupUI()
     // Enable mouse tracking for better drag experience
     setMouseTracking(true);
 
-    // Set size
-    setFixedSize(140, 60);
+    // Set size from settings
+    int widgetWidth = settings.value("appearance/widgetWidth", 140).toInt();
+    int widgetHeight = static_cast<int>(widgetWidth * 0.43); // Maintain 140:60 aspect ratio
+    setFixedSize(widgetWidth, widgetHeight);
     
     // Styling now provided globally by ThemeManager via #floatingWidget
     
@@ -98,21 +100,25 @@ void FloatingWidget::setupUI()
     // Force the widget to be a top-level window
     setParent(nullptr);
 
-    // Create horizontal layout
+    // Create horizontal layout with proportional margins and spacing
     QHBoxLayout *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(10, 10, 10, 10);
-    layout->setSpacing(10);
+    int margin = widgetWidth / 14; // 10px at 140px width
+    int spacing = widgetWidth / 14; // 10px at 140px width
+    layout->setContentsMargins(margin, margin, margin, margin);
+    layout->setSpacing(spacing);
 
-    // Screenshot button
+    // Screenshot button - scale proportionally
     screenshotBtn = new QPushButton(this);
-    screenshotBtn->setFixedSize(50, 40);
+    int btnWidth = widgetWidth * 50 / 140; // 50px at 140px width
+    int btnHeight = widgetHeight * 40 / 60; // 40px at 60px height
+    screenshotBtn->setFixedSize(btnWidth, btnHeight);
     screenshotBtn->setCursor(Qt::PointingHandCursor);
     screenshotBtn->setObjectName("floatingButton");
     connect(screenshotBtn, &QPushButton::clicked, this, &FloatingWidget::takeScreenshot);
 
-    // Settings button
+    // Settings button - scale proportionally
     settingsBtn = new QPushButton(this);
-    settingsBtn->setFixedSize(50, 40);
+    settingsBtn->setFixedSize(btnWidth, btnHeight);
     settingsBtn->setCursor(Qt::PointingHandCursor);
     settingsBtn->setObjectName("floatingButton");
     connect(settingsBtn, &QPushButton::clicked, this, &FloatingWidget::openSettings);
@@ -453,11 +459,20 @@ void FloatingWidget::openSettings()
 
     if (!settingsWindow) {
         settingsWindow = new SettingsWindow(this);
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        settingsWindow->setShortcutManager(shortcutManager);
+#endif
+        settingsWindow->setSystemTray(systemTray);
     }
 
     settingsWindow->show();
     settingsWindow->raise();
     settingsWindow->activateWindow();
+}
+
+void FloatingWidget::setSystemTray(SystemTray *tray)
+{
+    systemTray = tray;
 }
 
 void FloatingWidget::toggleVisibility()

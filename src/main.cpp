@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
     // Create system tray for additional control
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         SystemTray *tray = new SystemTray(widget);
-        Q_UNUSED(tray); // Prevent unused variable warning
+        widget->setSystemTray(tray);
     }
 
     // Handle command line arguments (for Linux desktop shortcut support)

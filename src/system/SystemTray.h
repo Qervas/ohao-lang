@@ -12,6 +12,8 @@ class SystemTray : public QSystemTrayIcon
 
 public:
     SystemTray(FloatingWidget *widget, QObject *parent = nullptr);
+    
+    void updateShortcutLabels();
 
 private slots:
     void onTrayActivated(QSystemTrayIcon::ActivationReason reason);

@@ -1,5 +1,8 @@
 #include "SettingsWindow.h"
 #include "OCREngine.h"
+#include "GlobalShortcutManager.h"
+#include "SystemTray.h"
+#include "FloatingWidget.h"
 #include "TTSEngine.h"
 #include "TTSManager.h"
 #include "../tts/ModernTTSManager.h"
@@ -47,6 +50,16 @@ SettingsWindow::~SettingsWindow()
 {
 }
 
+void SettingsWindow::setShortcutManager(GlobalShortcutManager *manager)
+{
+    shortcutManager = manager;
+}
+
+void SettingsWindow::setSystemTray(SystemTray *tray)
+{
+    systemTray = tray;
+}
+
 void SettingsWindow::setupUI()
 {
     setWindowTitle("Settings - Ohao Lang");
@@ -88,19 +101,14 @@ void SettingsWindow::setupUI()
     resetBtn->setObjectName("resetBtn");
     connect(resetBtn, &QPushButton::clicked, this, &SettingsWindow::onResetClicked);
 
-    cancelBtn = new QPushButton("Cancel", this);
-    cancelBtn->setObjectName("cancelBtn");
-    connect(cancelBtn, &QPushButton::clicked, this, &SettingsWindow::onCancelClicked);
-
-    applyBtn = new QPushButton("Apply", this);
-    applyBtn->setObjectName("applyBtn");
-    applyBtn->setDefault(true);
-    connect(applyBtn, &QPushButton::clicked, this, &SettingsWindow::onApplyClicked);
+    QPushButton *closeBtn = new QPushButton("Close", this);
+    closeBtn->setObjectName("closeBtn");
+    closeBtn->setDefault(true);
+    connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
 
     buttonLayout->addWidget(resetBtn);
-    buttonLayout->addSpacing(10);
-    buttonLayout->addWidget(cancelBtn);
-    buttonLayout->addWidget(applyBtn);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(closeBtn);
 
     mainLayout->addLayout(buttonLayout);
 
@@ -242,8 +250,63 @@ void SettingsWindow::setupGeneralTab()
         updateScreenshotPreview();
     });
     
-    // Remove the TTS Options Group as we'll integrate TTS controls with language selectors
-    // The checkboxes are created with the language combos now
+    // Global Shortcuts Group
+    QGroupBox *shortcutsGroup = new QGroupBox("⌨️ Global Shortcuts");
+    shortcutsGroup->setStyleSheet("QGroupBox { font-weight: bold; font-size: 14px; padding-top: 10px; }");
+    QFormLayout *shortcutsLayout = new QFormLayout(shortcutsGroup);
+    shortcutsLayout->setSpacing(15);
+    
+    // Screenshot shortcut
+    screenshotShortcutEdit = new QKeySequenceEdit();
+    screenshotShortcutEdit->setToolTip("Press the key combination you want to use for taking screenshots");
+    shortcutsLayout->addRow("📸 Take Screenshot:", screenshotShortcutEdit);
+    
+    // Disable global shortcuts when field gets focus, enable when loses focus
+    screenshotShortcutEdit->installEventFilter(this);
+    connect(screenshotShortcutEdit, &QKeySequenceEdit::keySequenceChanged, this, [this](const QKeySequence &keySequence) {
+        // Save immediately when changed
+        QSettings settings;
+        QString shortcutString = keySequence.toString();
+        // On macOS, Qt uses "Ctrl" to represent Cmd, but we need "Meta" for Carbon API
+        #ifdef Q_OS_MACOS
+        shortcutString.replace("Ctrl", "Meta");
+        #endif
+        settings.setValue("shortcuts/screenshot", shortcutString);
+        qDebug() << "Screenshot shortcut changed to:" << shortcutString;
+        if (shortcutManager) shortcutManager->reloadShortcuts();
+        if (systemTray) systemTray->updateShortcutLabels();
+    });
+    
+    // Toggle visibility shortcut
+    toggleShortcutEdit = new QKeySequenceEdit();
+    toggleShortcutEdit->setToolTip("Press the key combination you want to use for showing/hiding the floating widget");
+    shortcutsLayout->addRow("👁️ Toggle Widget:", toggleShortcutEdit);
+    
+    // Disable global shortcuts when field gets focus, enable when loses focus
+    toggleShortcutEdit->installEventFilter(this);
+    connect(toggleShortcutEdit, &QKeySequenceEdit::keySequenceChanged, this, [this](const QKeySequence &keySequence) {
+        // Save immediately when changed
+        QSettings settings;
+        QString shortcutString = keySequence.toString();
+        // On macOS, Qt uses "Ctrl" to represent Cmd, but we need "Meta" for Carbon API
+        #ifdef Q_OS_MACOS
+        shortcutString.replace("Ctrl", "Meta");
+        #endif
+        settings.setValue("shortcuts/toggle", shortcutString);
+        qDebug() << "Toggle shortcut changed to:" << shortcutString;
+        if (shortcutManager) shortcutManager->reloadShortcuts();
+        if (systemTray) systemTray->updateShortcutLabels();
+    });
+    
+    // Info label for shortcuts
+    QLabel *shortcutInfoLabel = new QLabel("ℹ️ <i>Shortcuts work globally, even when the app is in the background.<br>"
+                                          "Avoid system shortcuts like Cmd+Q, Cmd+W, etc.</i>");
+    shortcutInfoLabel->setWordWrap(true);
+    shortcutInfoLabel->setStyleSheet("color: #666; font-size: 11px; margin-top: 10px;");
+    shortcutsLayout->addRow(shortcutInfoLabel);
+    
+    layout->addWidget(shortcutsGroup);
+    
     layout->addStretch();
 }
 
@@ -364,12 +427,41 @@ void SettingsWindow::setupAppearanceTab()
     sizeLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
     sizeLayout->setSpacing(12);
 
-    widgetSizeCombo = new QComboBox();
-    widgetSizeCombo->addItems({"Small", "Medium", "Large"});
-    widgetSizeCombo->setCurrentText("Medium");
-    sizeLayout->addRow("Widget Size:", widgetSizeCombo);
+    // Widget width slider (height is calculated proportionally)
+    QHBoxLayout *widthLayout = new QHBoxLayout();
+    widgetWidthSlider = new QSlider(Qt::Horizontal);
+    widgetWidthSlider->setRange(100, 250);
+    widgetWidthSlider->setValue(140);
+    widgetWidthSlider->setTickPosition(QSlider::TicksBelow);
+    widgetWidthSlider->setTickInterval(25);
+    
+    widgetWidthLabel = new QLabel("140 px");
+    widgetWidthLabel->setMinimumWidth(60);
+    widgetWidthLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    
+    widthLayout->addWidget(widgetWidthSlider);
+    widthLayout->addWidget(widgetWidthLabel);
+    
+    sizeLayout->addRow("Widget Width:", widthLayout);
+    
+    // Connect slider to update label and widget size in real-time
+    connect(widgetWidthSlider, &QSlider::valueChanged, this, [this](int width) {
+        widgetWidthLabel->setText(QString("%1 px").arg(width));
+        
+        // Save immediately
+        QSettings settings;
+        settings.setValue("appearance/widgetWidth", width);
+        
+        // Update the actual floating widget size in real-time
+        FloatingWidget *floatingWidget = qobject_cast<FloatingWidget*>(parent());
+        if (floatingWidget) {
+            int height = static_cast<int>(width * 0.43); // 140x60 ratio = 0.43
+            floatingWidget->setFixedSize(width, height);
+        }
+    });
     
     // Deprecated widgets - set to null
+    widgetSizeCombo = nullptr;
     opacitySlider = nullptr;
     animationsCheck = nullptr;
     soundsCheck = nullptr;
@@ -414,6 +506,31 @@ void SettingsWindow::loadSettings()
     int dimmingOpacity = settings->value("screenshot/dimmingOpacity", 120).toInt();
     screenshotDimmingSlider->setValue(dimmingOpacity);
     updateScreenshotPreview();  // Update preview with loaded value
+    
+    // Load Global Shortcuts - default to Cmd+Shift+X on Mac, Ctrl+Shift+X on others
+#ifdef Q_OS_MACOS
+    QString defaultScreenshotShortcut = "Meta+Shift+X";  // Cmd+Shift+X on macOS
+    QString defaultToggleShortcut = "Meta+Shift+Z";      // Cmd+Shift+Z on macOS
+#else
+    QString defaultScreenshotShortcut = "Ctrl+Shift+X";
+    QString defaultToggleShortcut = "Ctrl+Shift+Z";
+#endif
+    
+    QString screenshotShortcut = settings->value("shortcuts/screenshot", defaultScreenshotShortcut).toString();
+    QString toggleShortcut = settings->value("shortcuts/toggle", defaultToggleShortcut).toString();
+    
+    // On macOS, we store as "Meta" for Carbon API, but QKeySequenceEdit needs "Ctrl" (which Qt maps to Cmd)
+    #ifdef Q_OS_MACOS
+    QString screenshotDisplay = screenshotShortcut;
+    screenshotDisplay.replace("Meta", "Ctrl");
+    QString toggleDisplay = toggleShortcut;
+    toggleDisplay.replace("Meta", "Ctrl");
+    screenshotShortcutEdit->setKeySequence(QKeySequence(screenshotDisplay));
+    toggleShortcutEdit->setKeySequence(QKeySequence(toggleDisplay));
+    #else
+    screenshotShortcutEdit->setKeySequence(QKeySequence(screenshotShortcut));
+    toggleShortcutEdit->setKeySequence(QKeySequence(toggleShortcut));
+    #endif
 
     // Translation Settings
     autoTranslateCheck->setChecked(settings->value("translation/autoTranslate", true).toBool());
@@ -437,7 +554,11 @@ void SettingsWindow::loadSettings()
 
     // Appearance Settings
     themeCombo->setCurrentText(settings->value("appearance/theme", "Auto (System)").toString());
-    if (widgetSizeCombo) widgetSizeCombo->setCurrentText(settings->value("appearance/widgetSize", "Medium").toString());
+    if (widgetWidthSlider) {
+        int width = settings->value("appearance/widgetWidth", 140).toInt();
+        widgetWidthSlider->setValue(width);
+        widgetWidthLabel->setText(QString("%1 px").arg(width));
+    }
     if (opacitySlider) opacitySlider->setValue(settings->value("appearance/opacity", 90).toInt());
     if (animationsCheck) animationsCheck->setChecked(settings->value("appearance/animations", true).toBool());
     if (soundsCheck) soundsCheck->setChecked(settings->value("appearance/sounds", false).toBool());
@@ -566,6 +687,8 @@ void SettingsWindow::saveSettings()
     
     // Screenshot Settings
     if (screenshotDimmingSlider) settings->setValue("screenshot/dimmingOpacity", screenshotDimmingSlider->value());
+    
+    // Note: Global Shortcuts are saved immediately when changed, no need to save here
 
     // Translation Settings
     if (autoTranslateCheck) settings->setValue("translation/autoTranslate", autoTranslateCheck->isChecked());
@@ -584,7 +707,7 @@ void SettingsWindow::saveSettings()
 
     // Appearance Settings
     if (themeCombo) settings->setValue("appearance/theme", themeCombo->currentText());
-    if (widgetSizeCombo) settings->setValue("appearance/widgetSize", widgetSizeCombo->currentText());
+    // Note: widgetWidth is saved immediately when slider changes
     if (opacitySlider) settings->setValue("appearance/opacity", opacitySlider->value());
     if (animationsCheck) settings->setValue("appearance/animations", animationsCheck->isChecked());
     if (soundsCheck) settings->setValue("appearance/sounds", soundsCheck->isChecked());
@@ -678,10 +801,41 @@ void SettingsWindow::resetToDefaults()
 
     // Reset Appearance settings
     themeCombo->setCurrentText("Auto (System)");
-    if (widgetSizeCombo) widgetSizeCombo->setCurrentText("Medium");
+    if (widgetWidthSlider) {
+        widgetWidthSlider->setValue(140);
+        QSettings settings;
+        settings.setValue("appearance/widgetWidth", 140);
+    }
     if (opacitySlider) opacitySlider->setValue(90);
     if (animationsCheck) animationsCheck->setChecked(true);
     if (soundsCheck) soundsCheck->setChecked(false);
+    
+    // Reset Shortcuts
+    if (screenshotShortcutEdit) {
+        QSettings settings;
+        #ifdef Q_OS_MACOS
+        // Store as Meta for Carbon API, display as Ctrl for QKeySequenceEdit (Qt maps Ctrl to Cmd on macOS)
+        screenshotShortcutEdit->setKeySequence(QKeySequence("Ctrl+Shift+X"));
+        settings.setValue("shortcuts/screenshot", "Meta+Shift+X");
+        #else
+        screenshotShortcutEdit->setKeySequence(QKeySequence("Ctrl+Shift+X"));
+        settings.setValue("shortcuts/screenshot", "Ctrl+Shift+X");
+        #endif
+    }
+    if (toggleShortcutEdit) {
+        QSettings settings;
+        #ifdef Q_OS_MACOS
+        toggleShortcutEdit->setKeySequence(QKeySequence("Ctrl+Shift+Z"));
+        settings.setValue("shortcuts/toggle", "Meta+Shift+Z");
+        #else
+        toggleShortcutEdit->setKeySequence(QKeySequence("Ctrl+Shift+Z"));
+        settings.setValue("shortcuts/toggle", "Ctrl+Shift+Z");
+        #endif
+    }
+    
+    // Reload shortcuts and update tray
+    if (shortcutManager) shortcutManager->reloadShortcuts();
+    if (systemTray) systemTray->updateShortcutLabels();
     
     // TTS is now always enabled - no checkboxes to reset
     if (ttsProviderCombo) {
@@ -720,6 +874,25 @@ void SettingsWindow::hideEvent(QHideEvent *event)
     QDialog::hideEvent(event);
 }
 
+bool SettingsWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    // Disable global shortcuts when QKeySequenceEdit gets focus
+    if ((obj == screenshotShortcutEdit || obj == toggleShortcutEdit)) {
+        if (event->type() == QEvent::FocusIn) {
+            if (shortcutManager) {
+                shortcutManager->setEnabled(false);
+                qDebug() << "QKeySequenceEdit focused - shortcuts disabled";
+            }
+        } else if (event->type() == QEvent::FocusOut) {
+            if (shortcutManager) {
+                shortcutManager->setEnabled(true);
+                qDebug() << "QKeySequenceEdit unfocused - shortcuts enabled";
+            }
+        }
+    }
+    return QDialog::eventFilter(obj, event);
+}
+
 void SettingsWindow::animateShow()
 {
     opacityEffect->setOpacity(0.0);
@@ -744,24 +917,6 @@ void SettingsWindow::onOcrEngineChanged()
 void SettingsWindow::onTranslationEngineChanged()
 {
     // Translation engine changed - simplified design, no API config needed
-}
-
-void SettingsWindow::onApplyClicked()
-{
-    saveSettings();
-    
-    // Reload AppSettings to invalidate cache and pick up new values
-    AppSettings::instance().reload();
-    
-    QMessageBox::information(this, "Settings Applied",
-                           "Settings have been saved successfully!\n\nSome changes may require restarting the application.");
-    accept();
-}
-
-void SettingsWindow::onCancelClicked()
-{
-    loadSettings(); // Restore original settings
-    reject();
 }
 
 void SettingsWindow::onResetClicked()

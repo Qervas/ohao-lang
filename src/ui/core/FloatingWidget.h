@@ -12,6 +12,7 @@
 
 class SettingsWindow;
 class GlobalShortcutManager;
+class SystemTray;
 
 class FloatingWidget : public QWidget
 {
@@ -25,6 +26,8 @@ public:
     void openSettings();
     void toggleVisibility();
     void activateWindow();
+    
+    void setSystemTray(SystemTray *tray);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -79,4 +82,7 @@ private:
 
     // Single instance support
     QLocalServer *localServer = nullptr;
+    
+    // System tray reference
+    SystemTray *systemTray = nullptr;
 };
