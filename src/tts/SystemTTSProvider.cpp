@@ -64,21 +64,27 @@ void SystemTTSProvider::speak(const QString& text, const QLocale& locale, double
     }
 
     qDebug() << "SystemTTSProvider: Speaking text:" << text.left(50);
+    qDebug() << "SystemTTSProvider: Config voice:" << m_config.voice;
     
-    // Apply settings
-    m_engine->setLocale(locale);
+    // Apply volume, rate, and pitch
     m_engine->setVolume(volume);
     m_engine->setRate(rate);
     m_engine->setPitch(pitch);
     
-    // Find best voice for locale
-    QVoice voice = findBestVoice(locale);
-    if (!voice.name().isEmpty()) {
-        m_engine->setVoice(voice);
+    // Re-apply the voice from config to ensure it's set correctly
+    // This is necessary because the voice state might have been changed elsewhere
+    if (!m_config.voice.isEmpty()) {
+        qDebug() << "SystemTTSProvider: Re-applying voice from config:" << m_config.voice;
+        QVoice voice = findVoiceByName(m_config.voice);
+        if (!voice.name().isEmpty()) {
+            m_engine->setVoice(voice);
+            qDebug() << "SystemTTSProvider: Voice set to:" << voice.name();
+        } else {
+            qWarning() << "SystemTTSProvider: Could not find voice:" << m_config.voice;
+        }
     }
     
-    qDebug() << "SystemTTSProvider: Locale:" << m_engine->locale().name();
-    qDebug() << "SystemTTSProvider: Voice:" << m_engine->voice().name();
+    qDebug() << "SystemTTSProvider: Final voice:" << m_engine->voice().name();
     qDebug() << "SystemTTSProvider: Volume:" << volume << "Rate:" << rate << "Pitch:" << pitch;
     
     emit started();
@@ -137,10 +143,21 @@ void SystemTTSProvider::applyConfig(const Config& config)
 
     // If voice name is provided, try to find and set it directly
     if (!config.voice.isEmpty()) {
+        qDebug() << "SystemTTSProvider: Searching for voice:" << config.voice;
         QVoice voice = findVoiceByName(config.voice);
         if (!voice.name().isEmpty()) {
-            qDebug() << "SystemTTSProvider: Setting voice to:" << voice.name();
+            qDebug() << "SystemTTSProvider: Found voice, setting to:" << voice.name();
             m_engine->setVoice(voice);
+            
+            // Verify it was actually set
+            QVoice currentVoice = m_engine->voice();
+            qDebug() << "SystemTTSProvider: Current voice after setting:" << currentVoice.name();
+            
+            if (currentVoice.name() != voice.name()) {
+                qWarning() << "SystemTTSProvider: WARNING! Voice was not set correctly!";
+                qWarning() << "  Requested:" << voice.name() << "Got:" << currentVoice.name();
+            }
+            
             qDebug() << "SystemTTSProvider: Config applied successfully with voice:" << voice.name();
             return;
         } else {

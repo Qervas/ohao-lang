@@ -40,6 +40,9 @@ public:
     void setShortcutManager(GlobalShortcutManager *manager);
     void setSystemTray(SystemTray *tray);
 
+public slots:
+    void accept() override;
+
 protected:
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;

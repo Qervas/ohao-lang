@@ -878,6 +878,13 @@ void SettingsWindow::hideEvent(QHideEvent *event)
     QDialog::hideEvent(event);
 }
 
+void SettingsWindow::accept()
+{
+    qDebug() << "SettingsWindow: accept() called - saving settings before closing";
+    saveSettings();
+    QDialog::accept();
+}
+
 bool SettingsWindow::eventFilter(QObject *obj, QEvent *event)
 {
     // Disable global shortcuts when QKeySequenceEdit gets focus
@@ -1171,7 +1178,9 @@ void SettingsWindow::updateVoicesForLanguage()
             return;
         }
 
-        const QString preserved = preferredVoice.isEmpty() ? combo->currentText().trimmed() : preferredVoice.trimmed();
+        // Remember the current selection
+        QString currentSelection = combo->currentText().trimmed();
+        
         QStringList suggestions;
         if (ttsEngine) {
             suggestions = ttsEngine->suggestedVoicesFor(locale);
@@ -1184,12 +1193,21 @@ void SettingsWindow::updateVoicesForLanguage()
             combo->addItem(voice, voice);
         }
 
-        if (!preserved.isEmpty() && combo->findText(preserved, Qt::MatchFixedString) != -1) {
-            combo->setCurrentText(preserved);
-        } else if (combo->count() > 0) {
+        // Try to preserve the current selection if it exists in the new list
+        bool selectionRestored = false;
+        if (!currentSelection.isEmpty()) {
+            int index = combo->findText(currentSelection, Qt::MatchFixedString);
+            if (index >= 0) {
+                combo->setCurrentIndex(index);
+                selectionRestored = true;
+                qDebug() << "SettingsWindow: Preserved voice selection:" << currentSelection;
+            }
+        }
+        
+        // If we couldn't restore the selection, use the first voice
+        if (!selectionRestored && combo->count() > 0) {
             combo->setCurrentIndex(0);
-        } else if (!preserved.isEmpty()) {
-            combo->setCurrentText(preserved);
+            qDebug() << "SettingsWindow: Auto-selected voice for locale" << locale.name() << ":" << combo->currentText();
         }
         combo->blockSignals(false);
     };
