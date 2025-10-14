@@ -278,19 +278,56 @@ QPixmap ScreenCapture::captureMacOS()
         return QPixmap();
     }
 
+    qDebug() << "=== macOS Screenshot Capture ===";
+    qDebug() << "Screen name:" << screen->name();
+    qDebug() << "Screen geometry:" << screen->geometry();
+    qDebug() << "Screen logical size:" << screen->geometry().size();
+    qDebug() << "Screen device pixel ratio:" << screen->devicePixelRatio();
+
     QPixmap screenshot = screen->grabWindow(0);
+    
+    qDebug() << "Grabbed screenshot size:" << screenshot.size();
+    qDebug() << "Grabbed screenshot isNull:" << screenshot.isNull();
+    qDebug() << "Grabbed screenshot devicePixelRatio:" << screenshot.devicePixelRatio();
+    
+    // Check if screenshot is valid
+    if (screenshot.isNull() || screenshot.size().isEmpty()) {
+        qWarning() << "⚠️ macOS returned null or empty screenshot!";
+        qWarning() << "This might be a permissions issue or first-launch delay.";
+        return screenshot;
+    }
+    
+    // Verify the screenshot size is reasonable for the screen
+    const QSize expectedMinSize = screen->geometry().size();
+    if (screenshot.size().width() < expectedMinSize.width() || 
+        screenshot.size().height() < expectedMinSize.height()) {
+        qWarning() << "⚠️ Screenshot smaller than screen logical size!";
+        qWarning() << "Expected at least:" << expectedMinSize;
+        qWarning() << "Got:" << screenshot.size();
+        qWarning() << "This suggests a partial capture or permission issue.";
+    }
+    
     {
         const QSize screenLogical = screen->geometry().size();
         const QSize imgPhysical = screenshot.size();
+        qDebug() << "Logical size:" << screenLogical;
+        qDebug() << "Physical size:" << imgPhysical;
+        
         if (screenLogical.width() > 0 && screenLogical.height() > 0) {
             const qreal inferredDprW = static_cast<qreal>(imgPhysical.width()) / static_cast<qreal>(screenLogical.width());
             const qreal inferredDprH = static_cast<qreal>(imgPhysical.height()) / static_cast<qreal>(screenLogical.height());
             const qreal inferredDpr = qMax<qreal>(1.0, (inferredDprW + inferredDprH) / 2.0);
+            
+            qDebug() << "Inferred DPR width:" << inferredDprW;
+            qDebug() << "Inferred DPR height:" << inferredDprH;
+            qDebug() << "Final inferred DPR:" << inferredDpr;
+            
             screenshot.setDevicePixelRatio(inferredDpr);
             qDebug() << "ScreenCapture: macOS inferred DPR:" << inferredDpr;
         }
     }
     qDebug() << "ScreenCapture: macOS capture, size:" << screenshot.size();
+    qDebug() << "=== End macOS Screenshot Capture ===";
     return screenshot;
 }
 #endif // Q_OS_MAC

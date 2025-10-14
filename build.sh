@@ -14,6 +14,14 @@ cd build
 cmake ..
 
 # Build
-make -j$(nproc)
+# Use nproc on Linux, sysctl on macOS, fallback to 4
+if command -v nproc > /dev/null 2>&1; then
+    NPROC=$(nproc)
+elif command -v sysctl > /dev/null 2>&1; then
+    NPROC=$(sysctl -n hw.ncpu)
+else
+    NPROC=4
+fi
+make -j${NPROC}
 
 echo "Build complete! Run with: ./build/ohao-lang"

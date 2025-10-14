@@ -12,6 +12,7 @@
 
 class SettingsWindow;
 class GlobalShortcutManager;
+class SystemTray;
 
 class FloatingWidget : public QWidget
 {
@@ -25,6 +26,8 @@ public:
     void openSettings();
     void toggleVisibility();
     void activateWindow();
+    
+    void setSystemTray(SystemTray *tray);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -69,13 +72,17 @@ private:
     // Settings window
     SettingsWindow *settingsWindow = nullptr;
 
-    // Global shortcut manager (Windows only)
-#ifdef Q_OS_WIN
+    // Global shortcut manager (Windows and macOS)
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
     GlobalShortcutManager *shortcutManager = nullptr;
 #endif
 
     bool screenshotInProgress = false;
+    bool wasVisibleBeforeScreenshot = false;
 
     // Single instance support
     QLocalServer *localServer = nullptr;
+    
+    // System tray reference
+    SystemTray *systemTray = nullptr;
 };

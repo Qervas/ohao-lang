@@ -2,6 +2,7 @@
 #include "../ui/core/FloatingWidget.h"
 #include <QApplication>
 #include <QStyle>
+#include <QSettings>
 
 SystemTray::SystemTray(FloatingWidget *widget, QObject *parent)
     : QSystemTrayIcon(parent), floatingWidget(widget)
@@ -11,7 +12,6 @@ SystemTray::SystemTray(FloatingWidget *widget, QObject *parent)
 
     // Screenshot action
     screenshotAction = new QAction("📷 Take Screenshot", this);
-    screenshotAction->setShortcut(QKeySequence("Ctrl+Shift+S"));
     connect(screenshotAction, &QAction::triggered, this, &SystemTray::takeScreenshot);
     trayMenu->addAction(screenshotAction);
 
@@ -19,9 +19,11 @@ SystemTray::SystemTray(FloatingWidget *widget, QObject *parent)
 
     // Toggle visibility action
     toggleAction = new QAction("👁️ Toggle Visibility", this);
-    toggleAction->setShortcut(QKeySequence("Ctrl+Shift+H"));
     connect(toggleAction, &QAction::triggered, this, &SystemTray::toggleVisibility);
     trayMenu->addAction(toggleAction);
+    
+    // Load and display current shortcuts
+    updateShortcutLabels();
 
     // Settings action
     settingsAction = new QAction("⚙️ Settings", this);
@@ -93,4 +95,32 @@ void SystemTray::openSettings()
 void SystemTray::quitApplication()
 {
     QApplication::quit();
+}
+
+void SystemTray::updateShortcutLabels()
+{
+    QSettings settings;
+    
+    // Load shortcuts from settings
+    QString screenshotShortcut = settings.value("shortcuts/screenshot", "Meta+Shift+X").toString();
+    QString toggleShortcut = settings.value("shortcuts/toggle", "Meta+Shift+Z").toString();
+    
+    // Convert Meta to Cmd/Win/Super based on platform
+    QString screenshotDisplay = screenshotShortcut;
+    QString toggleDisplay = toggleShortcut;
+    
+#ifdef Q_OS_MACOS
+    screenshotDisplay.replace("Meta", "⌘");
+    toggleDisplay.replace("Meta", "⌘");
+    screenshotDisplay.replace("Shift", "⇧");
+    toggleDisplay.replace("Shift", "⇧");
+#elif defined(Q_OS_WIN)
+    screenshotDisplay.replace("Meta", "Win");
+#else
+    screenshotDisplay.replace("Meta", "Super");
+#endif
+    
+    // Update action text with shortcuts
+    screenshotAction->setText(QString("📷 Take Screenshot (%1)").arg(screenshotDisplay));
+    toggleAction->setText(QString("👁️ Toggle Visibility (%1)").arg(toggleDisplay));
 }

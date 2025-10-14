@@ -1,5 +1,6 @@
 #include "ModernTTSManager.h"
 #include "TTSProvider.h"
+#include "SystemTTSProvider.h"
 #include "EdgeTTSProvider.h"
 #include "GoogleWebTTSProvider.h"
 #include "../ui/core/AppSettings.h"
@@ -99,6 +100,11 @@ void ModernTTSManager::speak(const QString& text, const QLocale& locale)
     TTSOptions options = m_defaultOptions;
     options.locale = locale;
     speak(text, options);
+}
+
+void ModernTTSManager::speak(const QString& text)
+{
+    speak(text, m_defaultOptions);
 }
 
 void ModernTTSManager::speakWithVoice(const QString& text, const ModernTTSManager::VoiceInfo& voice, const TTSOptions& options)
@@ -394,16 +400,19 @@ ModernTTSManager::TTSProvider ModernTTSManager::getCurrentProviderType() const
 std::unique_ptr<::TTSProvider> ModernTTSManager::createProvider(TTSProvider type) const
 {
     switch (type) {
-        case TTSProvider::EdgeTTS:
-            return std::make_unique<EdgeTTSProvider>();
+        case TTSProvider::SystemTTS:
+            qDebug() << "ModernTTSManager: Creating SystemTTS provider (native system voices)";
+            return std::make_unique<SystemTTSProvider>();
         case TTSProvider::GoogleWeb:
+            qDebug() << "ModernTTSManager: Creating GoogleWeb provider";
             return std::make_unique<GoogleWebTTSProvider>();
+        case TTSProvider::EdgeTTS:
+            qDebug() << "ModernTTSManager: Creating EdgeTTS provider (requires installation)";
+            return std::make_unique<EdgeTTSProvider>();
         case TTSProvider::AzureCognitive:
             // Not implemented yet
+            qDebug() << "ModernTTSManager: AzureCognitive not implemented";
             return nullptr;
-        case TTSProvider::SystemTTS:
-            // Use EdgeTTS as fallback for now
-            return std::make_unique<EdgeTTSProvider>();
         default:
             qDebug() << "ModernTTSManager: Unknown provider type:" << static_cast<int>(type);
             return nullptr;
@@ -682,9 +691,9 @@ QString ModernTTSManager::generateVoiceName(const QString& voiceId, const QLocal
             language = QLocale::languageToString(locale.language());
         }
 
-        QString region = locale.nativeCountryName();
+        QString region = locale.nativeTerritoryName();
         if (region.isEmpty()) {
-            region = QLocale::countryToString(locale.country());
+            region = QLocale::territoryToString(locale.territory());
         }
 
         QString voiceName = parts.last().replace("Neural", "").replace("Standard", "");

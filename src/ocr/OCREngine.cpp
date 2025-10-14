@@ -1,5 +1,7 @@
 #include "OCREngine.h"
+#include "AppleVisionOCR.h"
 #include "TranslationEngine.h"
+#include "../common/Platform.h"
 #include <QDebug>
 #include <QBuffer>
 #include <QImageWriter>
@@ -17,6 +19,45 @@ OCREngine::OCREngine(QObject *parent)
 {
     m_tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/ohao-lang-ocr";
     QDir().mkpath(m_tempDir);
+    
+    // Load saved OCR engine from settings, or use platform default
+    QString savedEngine = m_settings->value("ocr/engine", "").toString();
+    
+    if (!savedEngine.isEmpty()) {
+        // Use saved preference (matches SettingsWindow internal names)
+        if (savedEngine == "AppleVision") {
+            m_engine = AppleVision;
+        } else if (savedEngine == "Tesseract") {
+            m_engine = Tesseract;
+        } else if (savedEngine == "EasyOCR") {
+            m_engine = EasyOCR;
+        } else if (savedEngine == "PaddleOCR") {
+            m_engine = PaddleOCR;
+        } else if (savedEngine == "WindowsOCR") {
+            m_engine = WindowsOCR;
+        } else if (savedEngine == "OnlineOCR") {
+            m_engine = OnlineOCR;
+        }
+        qDebug() << "OCREngine: Loaded saved engine from settings:" << savedEngine;
+    } else {
+        // Set default engine based on platform AND save it to settings
+#ifdef Q_OS_MACOS
+        if (isAppleVisionAvailable()) {
+            m_engine = AppleVision;
+            m_settings->setValue("ocr/engine", "AppleVision");
+            qDebug() << "OCREngine: Defaulting to Apple Vision (native macOS OCR) and saving to settings";
+        } else {
+            m_engine = OnlineOCR;
+            m_settings->setValue("ocr/engine", "OnlineOCR");
+            qDebug() << "OCREngine: Apple Vision not available, using Online OCR and saving to settings";
+        }
+#else
+        m_engine = Tesseract;  // Default to Tesseract on other platforms
+        m_settings->setValue("ocr/engine", "Tesseract");
+        qDebug() << "OCREngine: Defaulting to Tesseract on" << PLATFORM_NAME << "and saving to settings";
+#endif
+        m_settings->sync();  // Ensure it's written to disk immediately
+    }
 }
 
 OCREngine::~OCREngine()
@@ -98,6 +139,9 @@ void OCREngine::performOCR(const QPixmap &image)
     emit ocrProgress("Starting OCR processing...");
 
     switch (m_engine) {
+    case AppleVision:
+        performAppleVisionOCR(image);
+        break;
     case Tesseract:
         performTesseractOCR(image);
         break;
@@ -116,10 +160,64 @@ void OCREngine::performOCR(const QPixmap &image)
     }
 }
 
+void OCREngine::performAppleVisionOCR(const QPixmap &image)
+{
+#ifdef Q_OS_MACOS
+    if (!AppleVisionOCR::isAvailable()) {
+        emit ocrError("Apple Vision OCR is not available on this system");
+        return;
+    }
+
+    emit ocrProgress("Running Apple Vision OCR...");
+
+    // Determine recognition level based on quality setting
+    AppleVisionOCR::RecognitionLevel level = (m_qualityLevel >= 4) 
+        ? AppleVisionOCR::Accurate 
+        : AppleVisionOCR::Fast;
+
+    // Map language to Apple Vision format
+    QString visionLanguage = m_language;
+    if (m_language == "Auto-Detect") {
+        visionLanguage = QString(); // Empty string means auto-detect
+    }
+
+    // Perform OCR using Apple Vision
+    OCRResult result = AppleVisionOCR::performOCR(image, visionLanguage, level);
+
+    // Apply language-specific character corrections if OCR succeeded
+    if (result.success && !result.text.isEmpty()) {
+        result.text = correctLanguageSpecificCharacters(result.text, m_language);
+    }
+
+    // Store the OCR result and start translation if auto-translate is enabled
+    m_currentOCRResult = result;
+
+    // Ensure tokens exist before emitting or starting translation
+    if (result.success) {
+        ensureTokensExist(m_currentOCRResult, image.size());
+    }
+
+    if (result.success && m_autoTranslate && !result.text.isEmpty()) {
+        startTranslation(result.text);
+    } else {
+        emit ocrFinished(m_currentOCRResult);
+    }
+#else
+    emit ocrError("Apple Vision OCR is only available on macOS");
+#endif
+}
+
 void OCREngine::performTesseractOCR(const QPixmap &image)
 {
     if (!isTesseractAvailable()) {
-        emit ocrError("Tesseract OCR is not installed or not found in PATH");
+#ifdef Q_OS_WIN
+        QString bundledPath = QCoreApplication::applicationDirPath() + "/tesseract.exe";
+#else
+        QString bundledPath = QCoreApplication::applicationDirPath() + "/tesseract";
+#endif
+        QString errorMsg = QString("Tesseract OCR not found!\n\nSearched locations:\n- System PATH\n- Bundled: %1\n\nPlease reinstall the application.").arg(bundledPath);
+        qDebug() << "Tesseract not available. Bundled path:" << bundledPath << "Exists:" << QFile::exists(bundledPath);
+        emit ocrError(errorMsg);
         return;
     }
 
@@ -139,9 +237,12 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         candidateDirs << QCoreApplication::applicationDirPath() + "/tessdata";
 
         for (const QString &dirPath : candidateDirs) {
-            if (QDir(dirPath).exists(dirPath + "/eng.traineddata")) {
-                qputenv("TESSDATA_PREFIX", QFileInfo(dirPath).absolutePath().toUtf8());
-                emit ocrProgress(QString("Set TESSDATA_PREFIX to %1").arg(QFileInfo(dirPath).absolutePath()));
+            if (QDir(dirPath).exists() && QFile::exists(dirPath + "/eng.traineddata")) {
+                // Set TESSDATA_PREFIX to the parent directory containing tessdata
+                QString parentDir = QFileInfo(dirPath).absolutePath();
+                qputenv("TESSDATA_PREFIX", parentDir.toUtf8());
+                emit ocrProgress(QString("Set TESSDATA_PREFIX to %1 (tessdata found at %2)").arg(parentDir).arg(dirPath));
+                qDebug() << "Auto-detected tessdata at:" << dirPath << "Setting TESSDATA_PREFIX to:" << parentDir;
                 break;
             }
         }
@@ -237,6 +338,19 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
     m_process = new QProcess(this);
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &OCREngine::onTesseractFinished);
+
+    // Determine which Tesseract to use (bundled or system)
+    QString tesseractExe = "tesseract"; // Default to system PATH
+#ifdef Q_OS_WIN
+    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract.exe";
+#else
+    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract";
+#endif
+    if (QFile::exists(bundledTesseract)) {
+        tesseractExe = bundledTesseract;
+        qDebug() << "Using bundled Tesseract:" << tesseractExe;
+    }
+
     // Propagate TESSDATA_PREFIX if set after our detection
     if (!qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -244,7 +358,7 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         m_process->setProcessEnvironment(env);
     }
 
-    m_process->start("tesseract", arguments);
+    m_process->start(tesseractExe, arguments);
     if (!m_process->waitForStarted(5000)) {
         emit ocrError("Failed to start Tesseract process");
         return;
@@ -429,6 +543,14 @@ QString OCREngine::getTesseractLanguageCode(const QString &language)
         {"German", "deu"},
         {"Russian", "rus"},
         {"Portuguese", "por"},
+        {"Italian", "ita"},
+        {"Dutch", "nld"},
+        {"Polish", "pol"},
+        {"Swedish", "swe"},      // THIS WAS MISSING!
+        {"Arabic", "ara"},
+        {"Hindi", "hin"},
+        {"Thai", "tha"},
+        {"Vietnamese", "vie"},
         {"Auto-Detect", ""}
     };
 
@@ -648,6 +770,10 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
         
         // Apply intelligent paragraph merging
         result.text = mergeParagraphLines(lines, result.tokens);
+
+        // Apply language-specific character corrections
+        result.text = correctLanguageSpecificCharacters(result.text, m_language);
+
         result.success = !result.text.isEmpty();
         result.confidence = "N/A";
         result.language = m_language;
@@ -672,6 +798,10 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
                     } else {
                         result.text = txt;
                     }
+
+                    // Apply language-specific character corrections
+                    result.text = correctLanguageSpecificCharacters(result.text, m_language);
+
                     result.success = true;
                 }
             }
@@ -733,6 +863,10 @@ void OCREngine::onPythonOCRFinished(int exitCode, QProcess::ExitStatus exitStatu
             QJsonObject obj = doc.object();
             result.success = obj["success"].toBool();
             result.text = obj["text"].toString();
+
+            // Apply language-specific character corrections
+            result.text = correctLanguageSpecificCharacters(result.text, m_language);
+
             result.confidence = obj["confidence"].toString();
             result.language = m_language;
             result.errorMessage = obj["error"].toString();
@@ -808,6 +942,10 @@ void OCREngine::onNetworkReplyFinished()
             if (!parsedResults.isEmpty()) {
                 QJsonObject firstResult = parsedResults[0].toObject();
                 result.text = firstResult["ParsedText"].toString();
+
+                // Apply language-specific character corrections
+                result.text = correctLanguageSpecificCharacters(result.text, m_language);
+
                 result.success = !result.text.isEmpty();
                 result.confidence = "N/A";
                 result.language = m_language;
@@ -828,8 +966,33 @@ void OCREngine::onNetworkReplyFinished()
 }
 
 // Static availability checks
+bool OCREngine::isAppleVisionAvailable()
+{
+#ifdef Q_OS_MACOS
+    return AppleVisionOCR::isAvailable();
+#else
+    return false;
+#endif
+}
+
 bool OCREngine::isTesseractAvailable()
 {
+    // First, check for bundled Tesseract in application directory
+#ifdef Q_OS_WIN
+    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract.exe";
+#else
+    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract";
+#endif
+    if (QFile::exists(bundledTesseract)) {
+        QProcess process;
+        process.start(bundledTesseract, QStringList() << "--version");
+        if (process.waitForFinished(3000) && process.exitCode() == 0) {
+            qDebug() << "Found bundled Tesseract:" << bundledTesseract;
+            return true;
+        }
+    }
+
+    // Fall back to system-installed Tesseract in PATH
     QProcess process;
     process.start("tesseract", QStringList() << "--version");
     return process.waitForFinished(3000) && process.exitCode() == 0;
@@ -1168,13 +1331,27 @@ QString OCREngine::mergeParagraphLines(const QStringList &lines, const QVector<O
             if (!currentParagraph.isEmpty()) {
                 paragraphs.append(currentParagraph.trimmed());
             }
-            currentParagraph = current.text;
+            currentParagraph = current.text.trimmed();
         } else {
-            // Continue current paragraph - join with space
-            if (!currentParagraph.isEmpty()) {
-                currentParagraph += " ";
+            // Continue current paragraph - smart space handling for TTS
+            QString trimmedCurrentText = current.text.trimmed();
+            if (!currentParagraph.isEmpty() && !trimmedCurrentText.isEmpty()) {
+                // Only add space if neither the current paragraph ends with space
+                // nor the new text starts with space/punctuation
+                QString trimmedParagraph = currentParagraph.trimmed();
+                bool needsSpace = !trimmedParagraph.isEmpty() &&
+                                !trimmedParagraph.endsWith(' ') &&
+                                !trimmedCurrentText.startsWith(' ') &&
+                                !trimmedCurrentText.at(0).isPunct();
+
+                if (needsSpace) {
+                    currentParagraph = trimmedParagraph + " " + trimmedCurrentText;
+                } else {
+                    currentParagraph = trimmedParagraph + trimmedCurrentText;
+                }
+            } else if (!trimmedCurrentText.isEmpty()) {
+                currentParagraph += trimmedCurrentText;
             }
-            currentParagraph += current.text.trimmed();
         }
     }
     
@@ -1183,6 +1360,164 @@ QString OCREngine::mergeParagraphLines(const QStringList &lines, const QVector<O
         paragraphs.append(currentParagraph.trimmed());
     }
     
-    // Join paragraphs with double line breaks to preserve paragraph structure
-    return paragraphs.join("\n\n");
+    // Join paragraphs optimized for TTS - use single space instead of line breaks
+    // to avoid TTS pauses while maintaining natural flow
+    QString result = paragraphs.join(" ");
+
+    // Clean up any multiple spaces that might cause TTS hiccups
+    QRegularExpression multipleSpaces("\\s+");
+    result = result.replace(multipleSpaces, " ").trimmed();
+
+    return result;
+}
+
+QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const QString &language)
+{
+    QString correctedText = text;
+
+    if (language == "Swedish") {
+        qDebug() << "Applying Swedish-specific character corrections";
+
+        // SWEDISH ONLY: Only correct characters that specifically should be Swedish
+        QMap<QString, QString> swedishCorrections = {
+            // Only fix obvious OCR errors that should be Swedish characters
+            // ä - ONLY basic ASCII misrecognitions
+            {"a\"", "ä"},    // OCR sometimes sees ä as a with quotes
+            {"a'", "ä"},     // OCR sometimes sees ä as a with apostrophe
+
+            // ö - ONLY basic ASCII misrecognitions
+            {"o\"", "ö"},    // OCR sometimes sees ö as o with quotes
+            {"o'", "ö"},     // OCR sometimes sees ö as o with apostrophe
+
+            // å - ONLY basic ASCII misrecognitions
+            {"a°", "å"},     // OCR sometimes sees å as a with degree symbol
+            {"ao", "å"},     // OCR sometimes sees å as a followed by o
+
+            // Capital versions
+            {"A\"", "Ä"},    {"A'", "Ä"},
+            {"O\"", "Ö"},    {"O'", "Ö"},
+            {"A°", "Å"},     {"AO", "Å"},   {"Ao", "Å"}
+        };
+
+        // Apply character corrections
+        for (auto it = swedishCorrections.begin(); it != swedishCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+
+        // Additional context-based corrections for Swedish
+        // Fix common word-level misrecognitions
+        QMap<QString, QString> swedishWordCorrections = {
+            {"för", "för"},         // Ensure proper ö in common word "för" (for)
+            {"kött", "kött"},       // Ensure proper ö in "kött" (meat)
+            {"höger", "höger"},     // Ensure proper ö in "höger" (right)
+            {"väl", "väl"},         // Ensure proper ä in "väl" (well)
+            {"här", "här"},         // Ensure proper ä in "här" (here)
+            {"år", "år"},           // Ensure proper å in "år" (year)
+            {"på", "på"},           // Ensure proper å in "på" (on)
+            {"då", "då"},           // Ensure proper å in "då" (then)
+        };
+
+        // Apply word-level corrections (case insensitive)
+        for (auto it = swedishWordCorrections.begin(); it != swedishWordCorrections.end(); ++it) {
+            QString pattern = QString("\\b%1\\b").arg(QRegularExpression::escape(it.key()));
+            QRegularExpression regex(pattern, QRegularExpression::CaseInsensitiveOption);
+            correctedText.replace(regex, it.value());
+        }
+
+        qDebug() << "Swedish corrections applied. Original length:" << text.length()
+                 << "Corrected length:" << correctedText.length();
+    }
+
+    // Language-specific character corrections - NO MIXING between languages
+    else if (language == "French") {
+        qDebug() << "Applying French-specific character corrections";
+        QMap<QString, QString> frenchCorrections = {
+            // French accents - ONLY correct OCR errors, not other language characters
+            {"a`", "à"}, {"a'", "á"}, {"a^", "â"}, {"a~", "ã"},
+            {"e`", "è"}, {"e'", "é"}, {"e^", "ê"}, {"e\"", "ë"},
+            {"i`", "ì"}, {"i'", "í"}, {"i^", "î"}, {"i\"", "ï"},
+            {"o`", "ò"}, {"o'", "ó"}, {"o^", "ô"}, {"o~", "õ"},
+            {"u`", "ù"}, {"u'", "ú"}, {"u^", "û"}, {"u\"", "ü"},
+            {"c,", "ç"}, {"n~", "ñ"},
+            // Capital versions
+            {"A`", "À"}, {"A'", "Á"}, {"A^", "Â"}, {"A~", "Ã"},
+            {"E`", "È"}, {"E'", "É"}, {"E^", "Ê"}, {"E\"", "Ë"},
+            {"I`", "Ì"}, {"I'", "Í"}, {"I^", "Î"}, {"I\"", "Ï"},
+            {"O`", "Ò"}, {"O'", "Ó"}, {"O^", "Ô"}, {"O~", "Õ"},
+            {"U`", "Ù"}, {"U'", "Ú"}, {"U^", "Û"}, {"U\"", "Ü"},
+            {"C,", "Ç"}, {"N~", "Ñ"}
+        };
+        for (auto it = frenchCorrections.begin(); it != frenchCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+    else if (language == "Spanish") {
+        qDebug() << "Applying Spanish-specific character corrections";
+        QMap<QString, QString> spanishCorrections = {
+            // Spanish accents - ONLY correct OCR errors, not other language characters
+            {"a'", "á"}, {"e'", "é"}, {"i'", "í"}, {"o'", "ó"}, {"u'", "ú"}, {"u\"", "ü"},
+            {"n~", "ñ"},
+            // Capital versions
+            {"A'", "Á"}, {"E'", "É"}, {"I'", "Í"}, {"O'", "Ó"}, {"U'", "Ú"}, {"U\"", "Ü"},
+            {"N~", "Ñ"}
+        };
+        for (auto it = spanishCorrections.begin(); it != spanishCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+    else if (language == "German") {
+        qDebug() << "Applying German-specific character corrections";
+        QMap<QString, QString> germanCorrections = {
+            // German umlauts - ONLY correct OCR errors
+            {"a\"", "ä"}, {"o\"", "ö"}, {"u\"", "ü"}, {"ss", "ß"},
+            {"A\"", "Ä"}, {"O\"", "Ö"}, {"U\"", "Ü"}
+        };
+        for (auto it = germanCorrections.begin(); it != germanCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+    else if (language == "Portuguese") {
+        qDebug() << "Applying Portuguese-specific character corrections";
+        QMap<QString, QString> portugueseCorrections = {
+            // Portuguese accents - ONLY correct OCR errors
+            {"a'", "á"}, {"a^", "â"}, {"a~", "ã"}, {"a`", "à"},
+            {"e'", "é"}, {"e^", "ê"},
+            {"i'", "í"},
+            {"o'", "ó"}, {"o^", "ô"}, {"o~", "õ"},
+            {"u'", "ú"}, {"u\"", "ü"},
+            {"c,", "ç"},
+            // Capital versions
+            {"A'", "Á"}, {"A^", "Â"}, {"A~", "Ã"}, {"A`", "À"},
+            {"E'", "É"}, {"E^", "Ê"},
+            {"I'", "Í"},
+            {"O'", "Ó"}, {"O^", "Ô"}, {"O~", "Õ"},
+            {"U'", "Ú"}, {"U\"", "Ü"},
+            {"C,", "Ç"}
+        };
+        for (auto it = portugueseCorrections.begin(); it != portugueseCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+    else if (language == "Italian") {
+        qDebug() << "Applying Italian-specific character corrections";
+        QMap<QString, QString> italianCorrections = {
+            // Italian accents - ONLY correct OCR errors
+            {"a'", "á"}, {"a`", "à"},
+            {"e'", "é"}, {"e`", "è"},
+            {"i'", "í"}, {"i`", "ì"},
+            {"o'", "ó"}, {"o`", "ò"},
+            {"u'", "ú"}, {"u`", "ù"},
+            // Capital versions
+            {"A'", "Á"}, {"A`", "À"},
+            {"E'", "É"}, {"E`", "È"},
+            {"I'", "Í"}, {"I`", "Ì"},
+            {"O'", "Ó"}, {"O`", "Ò"},
+            {"U'", "Ú"}, {"U`", "Ù"}
+        };
+        for (auto it = italianCorrections.begin(); it != italianCorrections.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+
+    return correctedText;
 }

@@ -18,11 +18,12 @@ class AppSettings : public QObject
 
 public:
     static AppSettings& instance();
+    static QString getSystemDefaultLanguage();
 
     // === OCR Settings ===
     struct OCRConfig {
         QString engine = "Tesseract";
-        QString language = "English";
+        QString language; // Dynamically set from system locale
         int qualityLevel = 3;
         bool preprocessing = true;
         bool autoDetectOrientation = true;
@@ -35,8 +36,8 @@ public:
     struct TranslationConfig {
         bool autoTranslate = true;
         QString engine = "Google Translate (Free)";
-        QString sourceLanguage = "Auto-Detect";
-        QString targetLanguage = "English";
+        QString sourceLanguage; // Dynamically set from OCR language
+        QString targetLanguage; // Dynamically set from system locale or user preference
         QString overlayMode = "Deep Learning Mode";
     };
 

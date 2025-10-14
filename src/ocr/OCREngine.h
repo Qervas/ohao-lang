@@ -47,11 +47,12 @@ class OCREngine : public QObject
 
 public:
     enum Engine {
+        AppleVision,  // macOS native Vision framework (default on macOS)
         Tesseract,
-        EasyOCR,
+        OnlineOCR,
+        EasyOCR,      // Python-based engines (rarely used)
         PaddleOCR,
-        WindowsOCR,
-        OnlineOCR
+        WindowsOCR
     };
 
     explicit OCREngine(QObject *parent = nullptr);
@@ -76,6 +77,7 @@ public:
     void setTranslationTargetLanguage(const QString &language);
 
     // Engine availability checks
+    static bool isAppleVisionAvailable();
     static bool isTesseractAvailable();
     static bool isEasyOCRAvailable();
     static bool isPaddleOCRAvailable();
@@ -99,6 +101,7 @@ private slots:
     void onTranslationError(const QString &error);
 
 private:
+    void performAppleVisionOCR(const QPixmap &image);
     void performTesseractOCR(const QPixmap &image);
     void performEasyOCR(const QPixmap &image);
     void performPaddleOCR(const QPixmap &image);
@@ -117,17 +120,20 @@ private:
     // Helper to stop any running process safely
     void stopRunningProcess();
 
+    // Language-specific character correction
+    QString correctLanguageSpecificCharacters(const QString &text, const QString &language);
+
     Engine m_engine = Tesseract;
-    QString m_language = "English";
+    QString m_language; // No hardcoded default - loaded from settings
     int m_qualityLevel = 3;
     bool m_preprocessing = true;
     bool m_autoDetectOrientation = true;
 
-    // Translation settings
+    // Translation settings - no hardcoded defaults, loaded from user settings
     bool m_autoTranslate = false;
-    QString m_translationEngine = "Google Translate (Free)";
-    QString m_translationSourceLanguage = "Auto-Detect";
-    QString m_translationTargetLanguage = "English";
+    QString m_translationEngine;
+    QString m_translationSourceLanguage;
+    QString m_translationTargetLanguage;
 
     OCRResult m_currentOCRResult;
     TranslationEngine *m_translationEngineInstance = nullptr;

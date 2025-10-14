@@ -1,5 +1,6 @@
 #include "TTSEngine.h"
 
+#include "SystemTTSProvider.h"
 #include "GoogleWebTTSProvider.h"
 #include "EdgeTTSProvider.h"
 
@@ -26,7 +27,9 @@ void TTSEngine::ensureProvider()
     m_provider.reset();
 
     std::unique_ptr<TTSProvider> providerInstance;
-    if (m_providerId == QStringLiteral("edge-free")) {
+    if (m_providerId == QStringLiteral("system")) {
+        providerInstance = std::make_unique<SystemTTSProvider>();
+    } else if (m_providerId == QStringLiteral("edge-free")) {
         providerInstance = std::make_unique<EdgeTTSProvider>();
     } else {
         providerInstance = std::make_unique<GoogleWebTTSProvider>();
@@ -104,15 +107,17 @@ void TTSEngine::setProviderId(const QString& id)
 
 QStringList TTSEngine::availableProviders() const
 {
-    return { QStringLiteral("google-web"), QStringLiteral("edge-free") };
+    return { QStringLiteral("system"), QStringLiteral("google-web"), QStringLiteral("edge-free") };
 }
 
 QString TTSEngine::providerDisplayName(const QString& id) const
 {
-    if (id == QStringLiteral("edge-free")) {
-        return QStringLiteral("Microsoft Edge (Free)");
+    if (id == QStringLiteral("system")) {
+        return QStringLiteral("System Voices");
+    } else if (id == QStringLiteral("edge-free")) {
+        return QStringLiteral("Microsoft Edge TTS");
     }
-    return QStringLiteral("Google Translate (Free)");
+    return QStringLiteral("Google Web TTS");
 }
 
 void TTSEngine::setEdgeVoice(const QString& voiceName)
@@ -303,7 +308,12 @@ void TTSEngine::applyProviderConfig(const QString& voiceOverride)
     }
 
     TTSProvider::Config config;
-    if (m_providerId == QStringLiteral("edge-free")) {
+    if (m_providerId == QStringLiteral("system")) {
+        // System TTS - uses system voices
+        const QString voice = voiceOverride.isEmpty() ? m_googleVoice : voiceOverride;
+        config.voice = voice;
+        config.languageCode = m_googleLanguageCode;
+    } else if (m_providerId == QStringLiteral("edge-free")) {
         const QString voice = voiceOverride.isEmpty() ? (m_edgeVoice.isEmpty() ? m_googleVoice : m_edgeVoice) : voiceOverride;
         config.voice = voice;
         config.extra.insert(QStringLiteral("exePath"), m_edgeExecutable);

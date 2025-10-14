@@ -1,6 +1,39 @@
 #include "AppSettings.h"
 #include <QCoreApplication>
 #include <QDebug>
+#include <QLocale>
+
+QString AppSettings::getSystemDefaultLanguage()
+{
+    // Map system locale to supported language names
+    QLocale systemLocale = QLocale::system();
+    QString langCode = systemLocale.name().left(2).toLower();
+
+    // Map language codes to our supported language display names
+    static QMap<QString, QString> langMapping = {
+        {"en", "English"},
+        {"zh", "Chinese (Simplified)"},
+        {"ja", "Japanese"},
+        {"ko", "Korean"},
+        {"es", "Spanish"},
+        {"fr", "French"},
+        {"de", "German"},
+        {"ru", "Russian"},
+        {"pt", "Portuguese"},
+        {"it", "Italian"},
+        {"nl", "Dutch"},
+        {"pl", "Polish"},
+        {"sv", "Swedish"},
+        {"ar", "Arabic"},
+        {"hi", "Hindi"},
+        {"th", "Thai"},
+        {"vi", "Vietnamese"}
+    };
+
+    QString mappedLang = langMapping.value(langCode, "English");
+    qDebug() << "System locale:" << systemLocale.name() << "-> Mapped to:" << mappedLang;
+    return mappedLang;
+}
 
 AppSettings& AppSettings::instance()
 {
@@ -26,7 +59,8 @@ AppSettings::OCRConfig AppSettings::getOCRConfig() const
 {
     if (!m_ocrCacheValid) {
         m_cachedOCRConfig.engine = m_settings->value("ocr/engine", "Tesseract").toString();
-        m_cachedOCRConfig.language = m_settings->value("ocr/language", "English").toString();
+        // Use system default language instead of hardcoded "English"
+        m_cachedOCRConfig.language = m_settings->value("ocr/language", getSystemDefaultLanguage()).toString();
         m_cachedOCRConfig.qualityLevel = m_settings->value("ocr/quality", 3).toInt();
         m_cachedOCRConfig.preprocessing = m_settings->value("ocr/preprocessing", true).toBool();
         m_cachedOCRConfig.autoDetectOrientation = m_settings->value("ocr/autoDetect", true).toBool();
@@ -57,8 +91,18 @@ AppSettings::TranslationConfig AppSettings::getTranslationConfig() const
     if (!m_translationCacheValid) {
         m_cachedTranslationConfig.autoTranslate = m_settings->value("translation/autoTranslate", true).toBool();
         m_cachedTranslationConfig.engine = m_settings->value("translation/engine", "Google Translate (Free)").toString();
-        m_cachedTranslationConfig.sourceLanguage = m_settings->value("translation/sourceLanguage", "Auto-Detect").toString();
-        m_cachedTranslationConfig.targetLanguage = m_settings->value("translation/targetLanguage", "English").toString();
+
+        // Default source language to OCR language (intelligent default)
+        QString ocrLang = getOCRConfig().language;
+        m_cachedTranslationConfig.sourceLanguage = m_settings->value("translation/sourceLanguage", ocrLang).toString();
+
+        // Intelligent target language default: ensure source ≠ target for meaningful translation
+        // If OCR language matches system language, use English (most universal)
+        // Otherwise use system language as target (user likely wants to translate TO their native language)
+        QString systemLang = getSystemDefaultLanguage();
+        QString defaultTarget = (ocrLang == systemLang) ? "English" : systemLang;
+        m_cachedTranslationConfig.targetLanguage = m_settings->value("translation/targetLanguage", defaultTarget).toString();
+
         m_cachedTranslationConfig.overlayMode = m_settings->value("translation/overlayMode", "Deep Learning Mode").toString();
         m_translationCacheValid = true;
     }
@@ -117,8 +161,13 @@ AppSettings::TTSConfig AppSettings::getTTSConfig() const
         m_cachedTTSConfig.voice = m_settings->value("tts/voice", "Default").toString();
         m_cachedTTSConfig.speed = m_settings->value("tts/speed", 1.0f).toFloat();
         m_cachedTTSConfig.volume = m_settings->value("tts/volume", 1.0f).toFloat();
-        m_cachedTTSConfig.inputLanguage = m_settings->value("tts/inputLanguage", "Auto-Detect").toString();
-        m_cachedTTSConfig.outputLanguage = m_settings->value("tts/outputLanguage", "English").toString();
+        // Default TTS input language to OCR language
+        QString ocrLang = getOCRConfig().language;
+        m_cachedTTSConfig.inputLanguage = m_settings->value("tts/inputLanguage", ocrLang).toString();
+
+        // Default TTS output language to translation target language
+        QString targetLang = getTranslationConfig().targetLanguage;
+        m_cachedTTSConfig.outputLanguage = m_settings->value("tts/outputLanguage", targetLang).toString();
         m_ttsCacheValid = true;
     }
     return m_cachedTTSConfig;
@@ -322,132 +371,6 @@ QString AppSettings::getComponentStyleSheet(const QString& componentName) const
     QMap<QString, QString> colors = themes.value(currentTheme, darkColors);
 
     // Component-specific stylesheets
-    if (componentName == "LanguageLearningOverlay") {
-        return QString(R"(
-            LanguageLearningOverlay {
-                background-color: %1;
-                border-radius: 12px;
-                border: 1px solid %2;
-            }
-
-            QFrame#headerFrame {
-                background-color: %3;
-                border-radius: 8px;
-                border: none;
-                padding: 5px;
-            }
-
-            QFrame#section {
-                background-color: %4;
-                border-radius: 8px;
-                border: 1px solid %2;
-                padding: 10px;
-            }
-
-            QLabel#titleLabel {
-                font-size: 16px;
-                font-weight: bold;
-                color: %5;
-            }
-
-            QLabel#languageLabel {
-                font-size: 11px;
-                color: %6;
-            }
-
-            QLabel#sectionLabel {
-                font-size: 13px;
-                font-weight: bold;
-                color: %5;
-                margin-bottom: 5px;
-            }
-
-            QPushButton {
-                background-color: %7;
-                color: %5;
-                border: 1px solid %8;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-weight: 500;
-            }
-
-            QPushButton:hover {
-                background-color: %8;
-                border-color: %7;
-            }
-
-            QPushButton:pressed {
-                background-color: %9;
-            }
-
-            QPushButton#wordButton {
-                background-color: %3;
-                color: %5;
-                border: 1px solid %2;
-                font-size: 11px;
-                padding: 4px 8px;
-            }
-
-            QPushButton#wordButton:hover {
-                background-color: %4;
-                border-color: %7;
-            }
-
-            QTextEdit {
-                background-color: %4;
-                border: 1px solid %2;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 12px;
-                color: %5;
-            }
-
-            QProgressBar {
-                border: 1px solid %2;
-                border-radius: 4px;
-                background-color: %3;
-            }
-
-            QProgressBar::chunk {
-                background-color: %10;
-                border-radius: 3px;
-            }
-
-            QSlider::groove:horizontal {
-                height: 4px;
-                background-color: %3;
-                border-radius: 2px;
-            }
-
-            QSlider::handle:horizontal {
-                background-color: %7;
-                width: 16px;
-                height: 16px;
-                border-radius: 8px;
-                margin: -6px 0;
-            }
-
-            QCheckBox {
-                color: %5;
-            }
-
-            QScrollArea {
-                background-color: %1;
-                border: none;
-            }
-        )")
-        .arg(colors["background"])     // %1
-        .arg(colors["border"])         // %2
-        .arg(colors["surface"])        // %3
-        .arg(colors["surface2"])       // %4
-        .arg(colors["text"])           // %5
-        .arg(colors["textSecondary"])  // %6
-        .arg(colors["primary"])        // %7
-        .arg(colors["primaryHover"])   // %8
-        .arg(colors["primaryPressed"]) // %9
-        .arg(colors["success"]);       // %10
-    }
-
     // Add more component stylesheets as needed
     if (componentName == "QuickTranslationOverlay") {
         // For now, QuickTranslationOverlay uses custom painting, not stylesheets

@@ -26,13 +26,14 @@ FloatingWidget::FloatingWidget(QWidget *parent)
     setupUI();
     applyModernStyle();
 
-    // Initialize global shortcut manager
-#ifdef Q_OS_WIN
+    // Initialize global shortcut manager (Windows and macOS)
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
     shortcutManager = new GlobalShortcutManager(this);
     connect(shortcutManager, &GlobalShortcutManager::screenshotRequested, 
             this, &FloatingWidget::takeScreenshot);
     connect(shortcutManager, &GlobalShortcutManager::toggleVisibilityRequested,
             this, &FloatingWidget::toggleVisibility);
+    qDebug() << "Global shortcut manager initialized";
 #endif
 
     // Setup local server for single instance support
@@ -86,8 +87,10 @@ void FloatingWidget::setupUI()
     // Enable mouse tracking for better drag experience
     setMouseTracking(true);
 
-    // Set size
-    setFixedSize(140, 60);
+    // Set size from settings
+    int widgetWidth = settings.value("appearance/widgetWidth", 140).toInt();
+    int widgetHeight = static_cast<int>(widgetWidth * 0.43); // Maintain 140:60 aspect ratio
+    setFixedSize(widgetWidth, widgetHeight);
     
     // Styling now provided globally by ThemeManager via #floatingWidget
     
@@ -97,21 +100,25 @@ void FloatingWidget::setupUI()
     // Force the widget to be a top-level window
     setParent(nullptr);
 
-    // Create horizontal layout
+    // Create horizontal layout with proportional margins and spacing
     QHBoxLayout *layout = new QHBoxLayout(this);
-    layout->setContentsMargins(10, 10, 10, 10);
-    layout->setSpacing(10);
+    int margin = widgetWidth / 14; // 10px at 140px width
+    int spacing = widgetWidth / 14; // 10px at 140px width
+    layout->setContentsMargins(margin, margin, margin, margin);
+    layout->setSpacing(spacing);
 
-    // Screenshot button
+    // Screenshot button - scale proportionally
     screenshotBtn = new QPushButton(this);
-    screenshotBtn->setFixedSize(50, 40);
+    int btnWidth = widgetWidth * 50 / 140; // 50px at 140px width
+    int btnHeight = widgetHeight * 40 / 60; // 40px at 60px height
+    screenshotBtn->setFixedSize(btnWidth, btnHeight);
     screenshotBtn->setCursor(Qt::PointingHandCursor);
     screenshotBtn->setObjectName("floatingButton");
     connect(screenshotBtn, &QPushButton::clicked, this, &FloatingWidget::takeScreenshot);
 
-    // Settings button
+    // Settings button - scale proportionally
     settingsBtn = new QPushButton(this);
-    settingsBtn->setFixedSize(50, 40);
+    settingsBtn->setFixedSize(btnWidth, btnHeight);
     settingsBtn->setCursor(Qt::PointingHandCursor);
     settingsBtn->setObjectName("floatingButton");
     connect(settingsBtn, &QPushButton::clicked, this, &FloatingWidget::openSettings);
@@ -329,6 +336,10 @@ void FloatingWidget::takeScreenshot()
 {
     qDebug() << "Taking screenshot using ScreenCapture!";
 
+    // Remember if widget was visible before hiding
+    wasVisibleBeforeScreenshot = isVisible();
+    qDebug() << "Widget was visible before screenshot:" << wasVisibleBeforeScreenshot;
+
     // Hide widget immediately and take screenshot
     hide();
 
@@ -408,20 +419,32 @@ void FloatingWidget::takeScreenshot()
             screenshotWidget->raise();
             screenshotWidget->activateWindow();
 
-            // Show this widget again after screenshot closes
+            // Show this widget again after screenshot closes (only if it was visible before)
             connect(screenshotWidget, &ScreenshotWidget::screenshotFinished, [this]() {
-                qDebug() << "Screenshot finished signal received, showing floating widget again";
-                show();
-                raise();
-                activateWindow();
+                qDebug() << "Screenshot finished signal received";
+                // Only show widget if it was visible before screenshot
+                if (wasVisibleBeforeScreenshot) {
+                    qDebug() << "Restoring widget visibility";
+                    show();
+                    raise();
+                    activateWindow();
+                } else {
+                    qDebug() << "Widget was hidden before screenshot, keeping it hidden";
+                }
             });
 
             // Keep destroyed as backup
             connect(screenshotWidget, &QWidget::destroyed, [this]() {
                 qDebug() << "Screenshot widget destroyed (backup signal)";
-                show();
-                raise();
-                activateWindow();
+                // Only show widget if it was visible before screenshot
+                if (wasVisibleBeforeScreenshot) {
+                    qDebug() << "Restoring widget visibility";
+                    show();
+                    raise();
+                    activateWindow();
+                } else {
+                    qDebug() << "Widget was hidden before screenshot, keeping it hidden";
+                }
             });
         } else {
             qWarning() << "Failed to create screenshot widget!";
@@ -436,11 +459,20 @@ void FloatingWidget::openSettings()
 
     if (!settingsWindow) {
         settingsWindow = new SettingsWindow(this);
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        settingsWindow->setShortcutManager(shortcutManager);
+#endif
+        settingsWindow->setSystemTray(systemTray);
     }
 
     settingsWindow->show();
     settingsWindow->raise();
     settingsWindow->activateWindow();
+}
+
+void FloatingWidget::setSystemTray(SystemTray *tray)
+{
+    systemTray = tray;
 }
 
 void FloatingWidget::toggleVisibility()

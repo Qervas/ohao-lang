@@ -84,8 +84,8 @@ private:
     QString buildLibreTranslateRequest(const QString &text);
 
     Engine m_engine = GoogleTranslate;
-    QString m_sourceLanguage = "auto";
-    QString m_targetLanguage = "en";
+    QString m_sourceLanguage; // Set from user settings
+    QString m_targetLanguage; // Set from user settings
     QString m_apiKey;
     QString m_apiUrl;
     QString m_currentText;

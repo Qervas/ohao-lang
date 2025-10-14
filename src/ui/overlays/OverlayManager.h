@@ -7,7 +7,6 @@
 
 class ScreenshotWidget;
 class QuickTranslationOverlay;
-class LanguageLearningOverlay;
 
 class OverlayManager : public QObject
 {
@@ -17,27 +16,19 @@ signals:
     void overlayEscapePressed();
 
 public:
-    enum OverlayMode {
-        QuickTranslation,
-        DeepLearning
-    };
-
     explicit OverlayManager(ScreenshotWidget* parent);
     ~OverlayManager();
 
     // Main interface
-    void performOCR(const QPixmap& image, const QRect& selectionRect, const QPixmap& fullScreenshot = QPixmap());
+    void performOCR(const QPixmap& image, const QRect& selectionRect, const QPixmap& fullScreenshot = QPixmap(), const QList<QRect>& existingSelections = QList<QRect>());
     void showOCRResults(const OCRResult& result, const QRect& selectionRect, const QPixmap& sourceImage);
     void showProgress(const QString& message);
     void showError(const QString& error);
     void hideAllOverlays();
 
-    // Configuration
-    void setOverlayMode(OverlayMode mode);
-    OverlayMode getOverlayMode() const;
-
     // State queries
     bool areOverlaysVisible() const;
+    OCRResult getLastOCRResult() const { return m_lastResult; }
 
 private slots:
     void onTTSFinished();
@@ -53,12 +44,11 @@ private:
 
     ScreenshotWidget* m_parent;
     QuickTranslationOverlay* m_quickOverlay;
-    LanguageLearningOverlay* m_deepOverlay;
-    OverlayMode m_currentMode;
     OCRResult m_lastResult;
 
     // OCR management
     OCREngine* m_ocrEngine;
     QRect m_currentSelectionRect;
     QPixmap m_currentSourceImage;
+    QList<QRect> m_existingSelections;
 };

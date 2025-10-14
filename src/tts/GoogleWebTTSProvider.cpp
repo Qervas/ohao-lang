@@ -1,6 +1,8 @@
 #include "GoogleWebTTSProvider.h"
 
 #include <QBuffer>
+#include <QTemporaryFile>
+#include <QDir>
 #include <QtGlobal>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -22,7 +24,10 @@ GoogleWebTTSProvider::GoogleWebTTSProvider(QObject* parent)
 {
     m_player = new QMediaPlayer(this);
     m_audio = new QAudioOutput(this);
+    m_audio->setVolume(1.0); // Ensure volume is at maximum
     m_player->setAudioOutput(m_audio);
+    
+    qDebug() << "GoogleWebTTSProvider: Initialized with audio output, volume:" << m_audio->volume();
 }
 
 QString GoogleWebTTSProvider::id() const
@@ -132,21 +137,30 @@ void GoogleWebTTSProvider::speak(const QString& text,
                                  const QLocale& locale,
                                  double rate,
                                  double /*pitch*/,
-                                 double /*volume*/)
+                                 double volume)
 {
     if (text.trimmed().isEmpty()) {
+        qDebug() << "GoogleWebTTSProvider: Empty text, skipping";
         return;
     }
 
-    const QString language = !m_languageCode.isEmpty()
-        ? m_languageCode
-        : languageCodeForVoice(m_voice).isEmpty()
-            ? languageCodeForLocale(locale)
-            : languageCodeForVoice(m_voice);
+    qDebug() << "GoogleWebTTSProvider: Speaking text:" << text.left(50);
+    qDebug() << "GoogleWebTTSProvider: Locale:" << locale.name() << "Rate:" << rate << "Volume:" << volume;
+
+    // Use the locale directly - convert it to simple language code for Google API
+    QString language = languageCodeForLocale(locale);
+
+    qDebug() << "GoogleWebTTSProvider: Using language code:" << language;
 
     if (language.isEmpty()) {
         emit errorOccurred(QStringLiteral("Unable to determine language for Google voices."));
         return;
+    }
+
+    // Apply volume
+    if (m_audio) {
+        m_audio->setVolume(volume);
+        qDebug() << "GoogleWebTTSProvider: Set audio volume to:" << volume;
     }
 
     const double speakingRate = qBound(0.25, 1.0 + rate, 4.0);
@@ -168,6 +182,7 @@ void GoogleWebTTSProvider::speak(const QString& text,
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
+            qDebug() << "GoogleWebTTSProvider: Network error:" << reply->errorString();
             emit errorOccurred(reply->errorString());
             reply->deleteLater();
             return;
@@ -176,19 +191,43 @@ void GoogleWebTTSProvider::speak(const QString& text,
         const QByteArray audio = reply->readAll();
         reply->deleteLater();
 
+        qDebug() << "GoogleWebTTSProvider: Received audio data, size:" << audio.size() << "bytes";
+
         if (audio.isEmpty()) {
+            qDebug() << "GoogleWebTTSProvider: Audio data is empty!";
             emit errorOccurred(QStringLiteral("Google Translate returned no audio data."));
             return;
         }
 
-        auto *buffer = new QBuffer(this);
-        buffer->setData(audio);
-        buffer->open(QIODevice::ReadOnly);
-        m_player->setSourceDevice(buffer);
+        // Use QTemporaryFile instead of QBuffer - macOS doesn't support setSourceDevice() with QBuffer
+        // Add .mp3 extension so QMediaPlayer can detect the format
+        auto *tempFile = new QTemporaryFile(QDir::tempPath() + "/ohao-tts-XXXXXX.mp3");
+        tempFile->setAutoRemove(true);  // Auto-delete when object is destroyed
+        if (!tempFile->open()) {
+            qDebug() << "GoogleWebTTSProvider: Failed to create temp file";
+            emit errorOccurred(QStringLiteral("Failed to create temporary audio file."));
+            delete tempFile;
+            return;
+        }
+        
+        tempFile->write(audio);
+        tempFile->flush();
+        
+        qDebug() << "GoogleWebTTSProvider: Created temp file:" << tempFile->fileName() << "size:" << audio.size();
+        
+        m_player->setSource(QUrl::fromLocalFile(tempFile->fileName()));
+        
+        qDebug() << "GoogleWebTTSProvider: Playing audio, volume:" << m_audio->volume();
         m_player->play();
+
+        // Add error handling
+        connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error error, const QString &errorString) {
+            qDebug() << "GoogleWebTTSProvider: Media player error:" << error << errorString;
+        });
 
         emit started();
         connect(m_player, &QMediaPlayer::playbackStateChanged, this, [this](QMediaPlayer::PlaybackState state) {
+            qDebug() << "GoogleWebTTSProvider: Playback state changed to:" << state;
             if (state == QMediaPlayer::StoppedState) {
                 emit finished();
             }
@@ -238,6 +277,10 @@ QString GoogleWebTTSProvider::languageCodeForVoice(const QString& voice) const
 
 QString GoogleWebTTSProvider::languageCodeForLocale(const QLocale& locale) const
 {
+    qDebug() << "GoogleWebTTSProvider::languageCodeForLocale: locale.name():" << locale.name() 
+             << "locale.language():" << locale.language() 
+             << "QLocale::Italian:" << QLocale::Italian;
+    
     switch (locale.language()) {
     case QLocale::Japanese: return QStringLiteral("ja");
     case QLocale::Chinese:
@@ -256,7 +299,9 @@ QString GoogleWebTTSProvider::languageCodeForLocale(const QLocale& locale) const
     case QLocale::Thai: return QStringLiteral("th");
     case QLocale::Swedish: return QStringLiteral("sv");
     case QLocale::Vietnamese: return QStringLiteral("vi");
-    default: return QStringLiteral("en-US");
+    default:
+        qDebug() << "GoogleWebTTSProvider::languageCodeForLocale: Unmatched language, defaulting to en-US";
+        return QStringLiteral("en-US");
     }
 }
 

@@ -74,5 +74,15 @@ private:
     QString m_progressText;
     QRect m_resultAreaRect;
     OverlayManager *m_overlayManager;
+    
+    // Track all OCR selections to keep them visible
+    QList<QRect> m_ocrSelections;
+    
+    // Dimming opacity (loaded from settings)
+    int m_dimmingOpacity;
+    
+    // Track first selection after screenshot (workaround for macOS menu bar offset)
+    bool m_isFirstSelection;
+    QRect m_firstSelectionRect;  // Store first selection coordinates for auto-retry
 
 };

@@ -41,10 +41,10 @@ public:
     };
 
     enum class TTSProvider {
-        EdgeTTS,        // Microsoft Edge TTS (free, high quality)
-        GoogleWeb,      // Google Web TTS (free)
-        AzureCognitive, // Azure Cognitive Services (paid, premium)
-        SystemTTS       // OS built-in TTS (fallback)
+        SystemTTS,      // OS built-in TTS (default, uses downloaded voices)
+        GoogleWeb,      // Google Web TTS (free, web-based)
+        EdgeTTS,        // Microsoft Edge TTS (requires installation)
+        AzureCognitive  // Azure Cognitive Services (paid, premium)
     };
 
     struct VoiceInfo {
@@ -57,20 +57,31 @@ public:
     };
 
     struct TTSOptions {
-        QLocale locale = QLocale::system();
-        VoiceQuality preferredQuality = VoiceQuality::Neural;
-        TTSProvider preferredProvider = TTSProvider::EdgeTTS;
-        double volume = 1.0;
-        double rate = 1.0;
-        double pitch = 0.0;
-        bool enableFallback = true;
+        QLocale locale;
+        VoiceQuality preferredQuality;
+        TTSProvider preferredProvider;
+        double volume;
+        double rate;
+        double pitch;
+        bool enableFallback;
+        
+        TTSOptions()
+            : locale(QLocale::system())
+            , preferredQuality(VoiceQuality::Neural)
+            , preferredProvider(TTSProvider::SystemTTS)
+            , volume(1.0)
+            , rate(1.0)
+            , pitch(0.0)
+            , enableFallback(true)
+        {}
     };
 
 public:
     static ModernTTSManager& instance();
 
     // Main TTS API - simple and unified
-    void speak(const QString& text, const TTSOptions& options = TTSOptions());
+    void speak(const QString& text, const TTSOptions& options);
+    void speak(const QString& text);
     void speak(const QString& text, const QString& languageCode);
     void speak(const QString& text, const QLocale& locale);
 
@@ -157,7 +168,7 @@ private:
     VoiceInfo m_currentVoice;
     QTextToSpeech::State m_state = QTextToSpeech::Ready;
     TTSOptions m_defaultOptions;
-    TTSProvider m_currentProviderType = TTSProvider::EdgeTTS;
+    TTSProvider m_currentProviderType = TTSProvider::SystemTTS;
 
     // Voice database
     QList<VoiceInfo> m_availableVoices;

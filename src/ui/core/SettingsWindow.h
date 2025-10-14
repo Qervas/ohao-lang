@@ -12,6 +12,7 @@
 #include <QLabel>
 #include <QGroupBox>
 #include <QSlider>
+#include <QKeySequenceEdit>
 #include <QSpinBox>
 #include <QTextEdit>
 #include <QPropertyAnimation>
@@ -25,6 +26,8 @@
 #include <QNetworkAccessManager>
 
 class TTSEngine;
+class GlobalShortcutManager;
+class SystemTray;
 
 class SettingsWindow : public QDialog
 {
@@ -33,19 +36,19 @@ class SettingsWindow : public QDialog
 public:
     explicit SettingsWindow(QWidget *parent = nullptr);
     ~SettingsWindow();
+    
+    void setShortcutManager(GlobalShortcutManager *manager);
+    void setSystemTray(SystemTray *tray);
 
 protected:
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onOcrEngineChanged();
     void onTranslationEngineChanged();
-    void onApplyClicked();
-    void onCancelClicked();
     void onResetClicked();
-    void onTestOcrClicked();
-    void onTestTranslationClicked();
     void onVoiceChanged();
     void onTestTTSClicked();
 
@@ -65,8 +68,9 @@ private:
     void updateVoicesForLanguage();
     void updateProviderUI(const QString& providerId);
     void checkEdgeTTSAvailability();
-    QString getTestTextForLanguage(const QString& voice, bool isInputVoice) const;
-    QString getLanguageCodeFromVoice(const QString& voice) const;
+    QString getTestTextForLanguage(const QString& languageName, bool isInputVoice) const;
+    QLocale languageNameToLocale(const QString& languageName) const;
+    void updateScreenshotPreview();
 
     // UI Components
     QTabWidget *tabWidget;
@@ -75,16 +79,16 @@ private:
 
     // General Tab
     QWidget *generalTab;
+    QSlider *screenshotDimmingSlider;
+    QLabel *screenshotDimmingValue;
+    QLabel *screenshotPreview;
+    QKeySequenceEdit *screenshotShortcutEdit;
+    QKeySequenceEdit *toggleShortcutEdit;
 
     // OCR Tab
     QWidget *ocrTab;
     QComboBox *ocrEngineCombo;
     QComboBox *ocrLanguageCombo;
-    QSlider *ocrQualitySlider;
-    QCheckBox *ocrPreprocessingCheck;
-    QCheckBox *ocrAutoDetectCheck;
-    QPushButton *testOcrBtn;
-    QTextEdit *ocrStatusText;
 
     // Translation Tab
     QWidget *translationTab;
@@ -93,14 +97,17 @@ private:
     QComboBox *translationEngineCombo;
     QComboBox *sourceLanguageCombo;
     QComboBox *targetLanguageCombo;
+    QCheckBox *autoDetectSourceCheck;
     QLineEdit *apiKeyEdit;
     QLineEdit *apiUrlEdit;
-    QPushButton *testTranslationBtn;
     QTextEdit *translationStatusText;
 
     // Appearance Tab
     QWidget *appearanceTab;
     QComboBox *themeCombo;
+    QComboBox *widgetSizeCombo;
+    QSlider *widgetWidthSlider;
+    QLabel *widgetWidthLabel;
     QSlider *opacitySlider;
     QCheckBox *animationsCheck;
     QCheckBox *soundsCheck;
@@ -131,8 +138,6 @@ private:
     QPushButton *edgeBrowseButton { nullptr };
 
     // Buttons
-    QPushButton *applyBtn;
-    QPushButton *cancelBtn;
     QPushButton *resetBtn;
 
     // Animation
@@ -144,6 +149,12 @@ private:
 
     // TTS Engine
     TTSEngine *ttsEngine;
+    
+    // Global Shortcut Manager
+    GlobalShortcutManager *shortcutManager = nullptr;
+    
+    // System Tray
+    SystemTray *systemTray = nullptr;
 
     // Language filtering
     // Language now follows Translation target language; no separate picker
