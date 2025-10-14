@@ -46,6 +46,7 @@ private slots:
 private:
     void initializeEngine();
     QVoice findBestVoice(const QLocale& locale, const QString& voiceId = QString()) const;
+    QVoice findVoiceByName(const QString& voiceName) const;
 
     std::unique_ptr<QTextToSpeech> m_engine;
     Config m_config;

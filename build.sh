@@ -24,4 +24,17 @@ else
 fi
 make -j${NPROC}
 
-echo "Build complete! Run with: ./build/ohao-lang"
+echo ""
+echo "✅ Build complete!"
+echo ""
+
+# Verify the bundle on macOS
+if [[ "$OSTYPE" == "darwin"* ]] && [ -d "ohao-lang.app" ]; then
+    echo "Verifying macOS bundle..."
+    codesign --verify --deep --verbose=2 ohao-lang.app && echo "✅ Code signature valid!" || echo "⚠️ Code signature verification failed"
+    echo ""
+    echo "To run: open ohao-lang.app"
+    echo "Or from build directory: ./ohao-lang.app/Contents/MacOS/ohao-lang"
+else
+    echo "To run: ./build/ohao-lang"
+fi
