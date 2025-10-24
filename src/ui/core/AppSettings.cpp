@@ -1,4 +1,5 @@
 #include "AppSettings.h"
+#include "ThemeColors.h"
 #include <QCoreApplication>
 #include <QDebug>
 #include <QLocale>
@@ -301,128 +302,27 @@ void AppSettings::invalidateCache()
 
 QString AppSettings::getComponentStyleSheet(const QString& componentName) const
 {
-    QString currentTheme = theme();
-
-    // Define theme color palettes
-    QMap<QString, QMap<QString, QString>> themes;
-
-    // Dark theme colors
-    QMap<QString, QString> darkColors;
-    darkColors["background"] = "#1C2026";
-    darkColors["surface"] = "#2A2F37";
-    darkColors["surface2"] = "#22262C";
-    darkColors["border"] = "#3A404B";
-    darkColors["text"] = "#E6E9EF";
-    darkColors["textSecondary"] = "#C7CDD7";
-    darkColors["primary"] = "#5082E6";
-    darkColors["primaryHover"] = "#3C6DD9";
-    darkColors["primaryPressed"] = "#2A5BC4";
-    darkColors["success"] = "#4CCA6A";
-    darkColors["accent"] = "#5082E6";
-
-    // Light theme colors
-    QMap<QString, QString> lightColors;
-    lightColors["background"] = "#FFFFFF";
-    lightColors["surface"] = "#F5F5F5";
-    lightColors["surface2"] = "#EEEEEE";
-    lightColors["border"] = "#E0E0E0";
-    lightColors["text"] = "#212121";
-    lightColors["textSecondary"] = "#757575";
-    lightColors["primary"] = "#1976D2";
-    lightColors["primaryHover"] = "#1565C0";
-    lightColors["primaryPressed"] = "#0D47A1";
-    lightColors["success"] = "#388E3C";
-    lightColors["accent"] = "#1976D2";
-
-    // High contrast theme colors
-    QMap<QString, QString> highContrastColors;
-    highContrastColors["background"] = "#000000";
-    highContrastColors["surface"] = "#000000";
-    highContrastColors["surface2"] = "#000000";
-    highContrastColors["border"] = "#FFFF00";
-    highContrastColors["text"] = "#FFFF00";
-    highContrastColors["textSecondary"] = "#FFFF00";
-    highContrastColors["primary"] = "#FFFF00";
-    highContrastColors["primaryHover"] = "#000000";
-    highContrastColors["primaryPressed"] = "#000000";
-    highContrastColors["success"] = "#FFFF00";
-    highContrastColors["accent"] = "#FFFF00";
-
-    // Cyberpunk theme colors
-    QMap<QString, QString> cyberpunkColors;
-    cyberpunkColors["background"] = "#0a0e1a";
-    cyberpunkColors["surface"] = "#1a1f2e";
-    cyberpunkColors["surface2"] = "#0f1419";
-    cyberpunkColors["border"] = "#00ff88";
-    cyberpunkColors["text"] = "#00ff88";
-    cyberpunkColors["textSecondary"] = "#66ffaa";
-    cyberpunkColors["primary"] = "#ff0066";
-    cyberpunkColors["primaryHover"] = "#ff3385";
-    cyberpunkColors["primaryPressed"] = "#cc0052";
-    cyberpunkColors["success"] = "#00ff88";
-    cyberpunkColors["accent"] = "#00ff88";
-
-    themes["Auto"] = darkColors; // Default to dark for auto
-    themes["Light"] = lightColors;
-    themes["Dark"] = darkColors;
-    themes["HighContrast"] = highContrastColors;
-    themes["Cyberpunk"] = cyberpunkColors;
-
-    QMap<QString, QString> colors = themes.value(currentTheme, darkColors);
-
-    // Component-specific stylesheets
-    // Add more component stylesheets as needed
-    if (componentName == "QuickTranslationOverlay") {
-        // For now, QuickTranslationOverlay uses custom painting, not stylesheets
-        return "";
-    }
-
+    // This method is deprecated. Use ThemeManager and ThemeColors instead.
+    // Kept for backward compatibility but returns empty string.
+    Q_UNUSED(componentName);
     return "";
 }
 
 QColor AppSettings::getThemeColor(const QString& colorName) const
 {
+    // Use centralized theme colors from ThemeColors.h
     QString currentTheme = theme();
+    ThemeColors::ThemeColorSet colors = ThemeColors::getColorSet(currentTheme);
 
-    // Same color definitions as above
-    QMap<QString, QMap<QString, QString>> themes;
+    // Map color names to theme colors
+    if (colorName == "background") return colors.window;
+    if (colorName == "surface") return colors.button;
+    if (colorName == "border") return colors.floatingWidgetBorder;
+    if (colorName == "text") return colors.windowText;
+    if (colorName == "primary") return colors.highlight;
+    if (colorName == "success") return colors.success;
+    if (colorName == "error") return colors.error;
 
-    QMap<QString, QString> darkColors;
-    darkColors["background"] = "#1C2026";
-    darkColors["surface"] = "#2A2F37";
-    darkColors["border"] = "#3A404B";
-    darkColors["text"] = "#E6E9EF";
-    darkColors["primary"] = "#5082E6";
-
-    QMap<QString, QString> lightColors;
-    lightColors["background"] = "#FFFFFF";
-    lightColors["surface"] = "#F5F5F5";
-    lightColors["border"] = "#E0E0E0";
-    lightColors["text"] = "#212121";
-    lightColors["primary"] = "#1976D2";
-
-    QMap<QString, QString> highContrastColors;
-    highContrastColors["background"] = "#000000";
-    highContrastColors["surface"] = "#000000";
-    highContrastColors["border"] = "#FFFF00";
-    highContrastColors["text"] = "#FFFF00";
-    highContrastColors["primary"] = "#FFFF00";
-
-    QMap<QString, QString> cyberpunkColors;
-    cyberpunkColors["background"] = "#0a0e1a";
-    cyberpunkColors["surface"] = "#1a1f2e";
-    cyberpunkColors["border"] = "#00ff88";
-    cyberpunkColors["text"] = "#00ff88";
-    cyberpunkColors["primary"] = "#ff0066";
-
-    themes["Auto"] = darkColors;
-    themes["Light"] = lightColors;
-    themes["Dark"] = darkColors;
-    themes["HighContrast"] = highContrastColors;
-    themes["Cyberpunk"] = cyberpunkColors;
-
-    QMap<QString, QString> colors = themes.value(currentTheme, darkColors);
-    QString colorHex = colors.value(colorName, "#000000");
-
-    return QColor(colorHex);
+    // Default fallback
+    return colors.window;
 }

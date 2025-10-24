@@ -4,6 +4,7 @@
 #include "GlobalShortcutManager.h"
 #include "SystemTray.h"
 #include "ThemeManager.h"
+#include "ThemeColors.h"
 #include "FloatingWidget.h"
 #include <QApplication>
 #include <QScreen>
@@ -33,6 +34,12 @@ ModernSettingsWindow::ModernSettingsWindow(QWidget *parent)
 
     // Done initializing
     isInitializing = false;
+
+    // Connect to theme changes for runtime updates
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme) {
+        QString currentTheme = settings.value("appearance/theme", "Light").toString();
+        applyTheme(currentTheme);
+    });
 
     qDebug() << "ModernSettingsWindow: Initialization complete!";
 }
@@ -547,34 +554,20 @@ void ModernSettingsWindow::applyMacOSStyle()
 
 void ModernSettingsWindow::applyTheme(const QString &themeName)
 {
-    QString bgColor, contentBg, sidebarBg, sidebarHover, textColor, borderColor,
-            inputBg, groupBg, secondaryText, sliderGroove;
+    // Use centralized theme colors
+    ThemeColors::ThemeColorSet colors = ThemeColors::getColorSet(themeName);
 
-    if (themeName == "Dark") {
-        // Dark theme colors
-        bgColor = "#1C1C1E";           // Main background
-        contentBg = "#1C1C1E";          // Content area
-        sidebarBg = "#2C2C2E";          // Sidebar background
-        sidebarHover = "#3A3A3C";       // Sidebar hover
-        textColor = "#F5F5F7";          // Primary text
-        borderColor = "#48484A";        // Borders
-        inputBg = "#2C2C2E";            // Input backgrounds
-        groupBg = "#2C2C2E";            // Group box backgrounds
-        secondaryText = "#8E8E93";      // Placeholder/secondary text
-        sliderGroove = "#48484A";       // Slider track
-    } else {
-        // Light theme colors
-        bgColor = "#FFFFFF";
-        contentBg = "#FFFFFF";
-        sidebarBg = "#F5F5F7";
-        sidebarHover = "#E5E5E7";
-        textColor = "#1D1D1F";
-        borderColor = "#E0E0E0";
-        inputBg = "#FFFFFF";
-        groupBg = "#FAFAFA";
-        secondaryText = "#8E8E93";
-        sliderGroove = "#E0E0E0";
-    }
+    QString bgColor = colors.window.name();
+    QString contentBg = colors.window.name();
+    QString sidebarBg = colors.button.name();
+    QString sidebarHover = colors.buttonHover.name();
+    QString textColor = colors.windowText.name();
+    QString borderColor = colors.floatingWidgetBorder.name();
+    QString inputBg = colors.base.name();
+    QString groupBg = colors.alternateBase.name();
+    QString secondaryText = colors.windowText.lighter(150).name();
+    QString sliderGroove = colors.floatingWidgetBorder.name();
+    QString highlightColor = colors.highlight.name();
 
     QString style = QString(R"(
         QDialog {
@@ -603,7 +596,7 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
         }
 
         QListWidget#settingsSidebar::item:selected {
-            background-color: #007AFF;
+            background-color: %11;
             color: white;
         }
 
@@ -667,7 +660,7 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
 
         QSlider::handle:horizontal {
             background: %16;
-            border: 2px solid #007AFF;
+            border: 2px solid %11;
             width: 16px;
             height: 16px;
             margin: -6px 0;
@@ -675,7 +668,7 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
         }
 
         QSlider::handle:horizontal:hover {
-            border-color: #005BBB;
+            border-color: %11;
         }
 
         QLabel {
@@ -714,7 +707,7 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
         }
 
         QLineEdit:focus {
-            border-color: #007AFF;
+            border-color: %11;
             outline: none;
         }
 
@@ -724,7 +717,7 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
 
         QPushButton {
             padding: 6px 16px;
-            background-color: #007AFF;
+            background-color: %11;
             color: white;
             border: none;
             border-radius: 6px;
@@ -733,11 +726,13 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
         }
 
         QPushButton:hover {
-            background-color: #005BBB;
+            background-color: %11;
+            opacity: 0.8;
         }
 
         QPushButton:pressed {
-            background-color: #004499;
+            background-color: %11;
+            opacity: 0.6;
         }
 
         QComboBox QAbstractItemView {
@@ -759,7 +754,7 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
         }
 
         QKeySequenceEdit:focus {
-            border-color: #007AFF;
+            border-color: %11;
             outline: none;
         }
     )")
@@ -773,7 +768,7 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
     .arg(textColor)         // 8
     .arg(borderColor)       // 9
     .arg(groupBg)           // 10
-    .arg(groupBg)           // 11
+    .arg(highlightColor)    // 11 - highlight/accent color for selections and focus
     .arg(borderColor)       // 12
     .arg(inputBg)           // 13
     .arg(textColor)         // 14

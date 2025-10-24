@@ -1,4 +1,5 @@
 #include "ThemeManager.h"
+#include "ThemeColors.h"
 #include "AppSettings.h"
 #include <QApplication>
 #include <QGuiApplication>
@@ -82,18 +83,19 @@ static void setAppPaletteAndStyle(const QPalette &pal, const QString &styleSheet
 }
 
 void ThemeManager::applyLight() {
+    using namespace ThemeColors::Light;
     QPalette pal;
-    pal.setColor(QPalette::Window, QColor(250, 252, 255));
-    pal.setColor(QPalette::WindowText, QColor(45, 55, 72));
-    pal.setColor(QPalette::Base, QColor(255, 255, 255));
-    pal.setColor(QPalette::AlternateBase, QColor(245, 247, 250));
+    pal.setColor(QPalette::Window, Window);
+    pal.setColor(QPalette::WindowText, WindowText);
+    pal.setColor(QPalette::Base, Base);
+    pal.setColor(QPalette::AlternateBase, AlternateBase);
     pal.setColor(QPalette::ToolTipBase, QColor(255, 255, 220));
-    pal.setColor(QPalette::ToolTipText, QColor(45, 55, 72));
-    pal.setColor(QPalette::Text, QColor(45, 55, 72));
-    pal.setColor(QPalette::Button, QColor(245, 247, 250));
-    pal.setColor(QPalette::ButtonText, QColor(45, 55, 72));
-    pal.setColor(QPalette::Highlight, QColor(100, 150, 250));
-    pal.setColor(QPalette::HighlightedText, Qt::white);
+    pal.setColor(QPalette::ToolTipText, WindowText);
+    pal.setColor(QPalette::Text, Text);
+    pal.setColor(QPalette::Button, Button);
+    pal.setColor(QPalette::ButtonText, ButtonText);
+    pal.setColor(QPalette::Highlight, Highlight);
+    pal.setColor(QPalette::HighlightedText, HighlightedText);
     const QString style = R"(
         /* Floating widget */
         #floatingWidget { background:rgba(255,255,255,205); border:1px solid rgba(190,195,205,0.65); border-radius:18px; }
@@ -111,18 +113,19 @@ void ThemeManager::applyLight() {
 }
 
 void ThemeManager::applyDark() {
+    using namespace ThemeColors::Dark;
     QPalette pal;
-    pal.setColor(QPalette::Window, QColor(28, 32, 38));
-    pal.setColor(QPalette::WindowText, QColor(230, 233, 239));
-    pal.setColor(QPalette::Base, QColor(22, 26, 31));
-    pal.setColor(QPalette::AlternateBase, QColor(32, 36, 43));
+    pal.setColor(QPalette::Window, Window);
+    pal.setColor(QPalette::WindowText, WindowText);
+    pal.setColor(QPalette::Base, Base);
+    pal.setColor(QPalette::AlternateBase, AlternateBase);
     pal.setColor(QPalette::ToolTipBase, QColor(60, 60, 70));
     pal.setColor(QPalette::ToolTipText, QColor(240, 240, 240));
-    pal.setColor(QPalette::Text, QColor(230, 233, 239));
-    pal.setColor(QPalette::Button, QColor(38, 43, 50));
-    pal.setColor(QPalette::ButtonText, QColor(230, 233, 239));
-    pal.setColor(QPalette::Highlight, QColor(80, 130, 230));
-    pal.setColor(QPalette::HighlightedText, Qt::white);
+    pal.setColor(QPalette::Text, Text);
+    pal.setColor(QPalette::Button, Button);
+    pal.setColor(QPalette::ButtonText, ButtonText);
+    pal.setColor(QPalette::Highlight, Highlight);
+    pal.setColor(QPalette::HighlightedText, HighlightedText);
 
     const QString style = R"( 
         QWidget { color: #E6E9EF; background-color: #1C2026; }
@@ -167,15 +170,16 @@ void ThemeManager::applyDark() {
 }
 
 void ThemeManager::applyHighContrast() {
+    using namespace ThemeColors::HighContrast;
     QPalette pal;
-    pal.setColor(QPalette::Window, Qt::black);
-    pal.setColor(QPalette::WindowText, Qt::yellow);
-    pal.setColor(QPalette::Base, Qt::black);
-    pal.setColor(QPalette::Text, Qt::yellow);
-    pal.setColor(QPalette::Button, Qt::black);
-    pal.setColor(QPalette::ButtonText, Qt::yellow);
-    pal.setColor(QPalette::Highlight, Qt::yellow);
-    pal.setColor(QPalette::HighlightedText, Qt::black);
+    pal.setColor(QPalette::Window, Window);
+    pal.setColor(QPalette::WindowText, WindowText);
+    pal.setColor(QPalette::Base, Base);
+    pal.setColor(QPalette::Text, Text);
+    pal.setColor(QPalette::Button, Button);
+    pal.setColor(QPalette::ButtonText, ButtonText);
+    pal.setColor(QPalette::Highlight, Highlight);
+    pal.setColor(QPalette::HighlightedText, HighlightedText);
     const QString style = R"(
         QWidget { background: black; color: yellow; }
         QPushButton { background: black; color: yellow; border: 2px solid yellow; }
@@ -196,18 +200,19 @@ void ThemeManager::applyHighContrast() {
 }
 
 void ThemeManager::applyCyberpunk() {
+    using namespace ThemeColors::Cyberpunk;
     QPalette pal;
-    pal.setColor(QPalette::Window, QColor(10, 12, 20));
-    pal.setColor(QPalette::WindowText, QColor(255, 255, 255));
-    pal.setColor(QPalette::Base, QColor(8, 10, 18));
-    pal.setColor(QPalette::AlternateBase, QColor(14, 16, 26));
+    pal.setColor(QPalette::Window, Window);
+    pal.setColor(QPalette::WindowText, WindowText);
+    pal.setColor(QPalette::Base, Base);
+    pal.setColor(QPalette::AlternateBase, AlternateBase);
     pal.setColor(QPalette::ToolTipBase, QColor(20, 24, 40));
-    pal.setColor(QPalette::ToolTipText, QColor(255, 255, 255));
-    pal.setColor(QPalette::Text, QColor(230, 255, 252));
-    pal.setColor(QPalette::Button, QColor(14, 16, 26));
-    pal.setColor(QPalette::ButtonText, QColor(255, 255, 255));
-    pal.setColor(QPalette::Highlight, QColor(0, 255, 208));
-    pal.setColor(QPalette::HighlightedText, QColor(10, 12, 20));
+    pal.setColor(QPalette::ToolTipText, WindowText);
+    pal.setColor(QPalette::Text, Text);
+    pal.setColor(QPalette::Button, Button);
+    pal.setColor(QPalette::ButtonText, ButtonText);
+    pal.setColor(QPalette::Highlight, Highlight);
+    pal.setColor(QPalette::HighlightedText, HighlightedText);
 
     const QString style = R"(
         /* Neon cyberpunk: teal + magenta accents */

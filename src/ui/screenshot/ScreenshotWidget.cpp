@@ -3,6 +3,7 @@
 #include "TTSManager.h"
 #include "TTSEngine.h"
 #include "../core/ThemeManager.h"
+#include "../core/ThemeColors.h"
 #include "../core/LanguageManager.h"
 #include <QApplication>
 #include <QScreen>
@@ -49,6 +50,11 @@ ScreenshotWidget::ScreenshotWidget(QWidget *parent)
     captureScreen();
 
     setupWidget();
+
+    // Connect to theme changes for runtime updates
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        update(); // Redraw the widget with new theme colors
+    });
 }
 
 ScreenshotWidget::ScreenshotWidget(const QPixmap &screenshot, QWidget *parent)
@@ -82,6 +88,11 @@ ScreenshotWidget::ScreenshotWidget(const QPixmap &screenshot, QWidget *parent)
     qDebug() << "Screenshot widget initialized with image:" << screenshot.size();
 
     setupWidget();
+
+    // Connect to theme changes for runtime updates
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        update(); // Redraw the widget with new theme colors
+    });
 }
 
 void ScreenshotWidget::setupWidget()
@@ -330,16 +341,21 @@ void ScreenshotWidget::drawToolbar(QPainter &painter)
 
     std::cout << "*** Drawing integrated toolbar at: " << x << "," << y << std::endl;
 
+    // Get current theme colors
+    ThemeManager::Theme currentTheme = ThemeManager::instance().getCurrentTheme();
+    QString themeName = ThemeManager::toString(currentTheme);
+    ThemeColors::ThemeColorSet colors = ThemeColors::getColorSet(themeName);
+
     // Draw toolbar background
     painter.setRenderHint(QPainter::Antialiasing);
     QPainterPath toolbarPath;
     toolbarPath.addRoundedRect(toolbarRect, 24, 24);
 
-    QBrush toolbarBrush(QColor(30, 30, 35, 240));
+    QBrush toolbarBrush(colors.screenshotToolbarBg);
     painter.fillPath(toolbarPath, toolbarBrush);
 
     // Draw toolbar border
-    painter.setPen(QPen(QColor(100, 100, 120, 150), 1));
+    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
     painter.drawPath(toolbarPath);
 
     // Draw buttons
@@ -348,10 +364,10 @@ void ScreenshotWidget::drawToolbar(QPainter &painter)
 
     // Copy button 📋
     copyButtonRect = QRect(buttonX, buttonY, buttonSize, buttonSize);
-    painter.fillRect(copyButtonRect, QColor(70, 70, 80, 200));
-    painter.setPen(QPen(QColor(100, 100, 120, 150), 1));
+    painter.fillRect(copyButtonRect, colors.screenshotButtonBg);
+    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
     painter.drawRoundedRect(copyButtonRect, 18, 18);
-    painter.setPen(Qt::white);
+    painter.setPen(colors.windowText);
     painter.setFont(QFont("Arial", 16, QFont::Bold));
     painter.drawText(copyButtonRect, Qt::AlignCenter, "📋");
 
@@ -359,30 +375,30 @@ void ScreenshotWidget::drawToolbar(QPainter &painter)
 
     // Save button 💾
     saveButtonRect = QRect(buttonX, buttonY, buttonSize, buttonSize);
-    painter.fillRect(saveButtonRect, QColor(70, 70, 80, 200));
-    painter.setPen(QPen(QColor(100, 100, 120, 150), 1));
+    painter.fillRect(saveButtonRect, colors.screenshotButtonBg);
+    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
     painter.drawRoundedRect(saveButtonRect, 18, 18);
-    painter.setPen(Qt::white);
+    painter.setPen(colors.windowText);
     painter.drawText(saveButtonRect, Qt::AlignCenter, "💾");
 
     buttonX += buttonSize + spacing;
 
     // OCR button 📝
     ocrButtonRect = QRect(buttonX, buttonY, buttonSize, buttonSize);
-    painter.fillRect(ocrButtonRect, QColor(70, 70, 80, 200));
-    painter.setPen(QPen(QColor(100, 100, 120, 150), 1));
+    painter.fillRect(ocrButtonRect, colors.screenshotButtonBg);
+    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
     painter.drawRoundedRect(ocrButtonRect, 18, 18);
-    painter.setPen(Qt::white);
+    painter.setPen(colors.windowText);
     painter.drawText(ocrButtonRect, Qt::AlignCenter, "📝");
 
     buttonX += buttonSize + spacing;
 
     // Cancel button ❌
     cancelButtonRect = QRect(buttonX, buttonY, buttonSize, buttonSize);
-    painter.fillRect(cancelButtonRect, QColor(70, 70, 80, 200));
-    painter.setPen(QPen(QColor(100, 100, 120, 150), 1));
+    painter.fillRect(cancelButtonRect, colors.screenshotButtonBg);
+    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
     painter.drawRoundedRect(cancelButtonRect, 18, 18);
-    painter.setPen(Qt::white);
+    painter.setPen(colors.windowText);
     painter.drawText(cancelButtonRect, Qt::AlignCenter, "❌");
 }
 

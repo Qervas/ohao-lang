@@ -33,6 +33,11 @@ FloatingWidget::FloatingWidget(QWidget *parent)
     setupUI();
     applyModernStyle();
 
+    // Connect to theme changes for runtime updates
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
+        applyModernStyle(); // Reapply style when theme changes
+    });
+
     // Initialize global shortcut manager (all platforms)
     shortcutManager = new GlobalShortcutManager(this);
     connect(shortcutManager, &GlobalShortcutManager::screenshotRequested,
