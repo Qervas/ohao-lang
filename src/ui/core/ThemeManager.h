@@ -12,7 +12,6 @@ public:
         Auto,
         Light,
         Dark,
-        HighContrast,
         Cyberpunk
     };
 
@@ -44,7 +43,6 @@ private:
     // Theme application methods
     void applyLight();
     void applyDark();
-    void applyHighContrast();
     void applyCyberpunk();
 
     // Current state

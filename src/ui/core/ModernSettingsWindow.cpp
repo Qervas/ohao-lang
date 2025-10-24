@@ -36,9 +36,9 @@ ModernSettingsWindow::ModernSettingsWindow(QWidget *parent)
     isInitializing = false;
 
     // Connect to theme changes for runtime updates
-    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme) {
-        QString currentTheme = settings.value("appearance/theme", "Light").toString();
-        applyTheme(currentTheme);
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme theme) {
+        QString themeName = ThemeManager::toString(theme);
+        applyTheme(themeName);
     });
 
     qDebug() << "ModernSettingsWindow: Initialization complete!";
@@ -391,7 +391,7 @@ QWidget* ModernSettingsWindow::createAppearancePage()
     themeLayout->setContentsMargins(0, 0, 0, 0);
 
     themeCombo = new QComboBox();
-    themeCombo->addItems({"Light", "Dark"});
+    themeCombo->addItems({"Auto (System)", "Light", "Dark", "Cyberpunk"});
     connect(themeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         if (!isInitializing && themeCombo) {
             QString selectedTheme = themeCombo->currentText();
@@ -548,12 +548,16 @@ QWidget* ModernSettingsWindow::createVoicePage()
 void ModernSettingsWindow::applyMacOSStyle()
 {
     // Initial style will be applied by applyTheme
-    QString currentTheme = settings.value("appearance/theme", "Light").toString();
-    applyTheme(currentTheme);
+    // Use the CURRENT theme from ThemeManager (not settings, to handle Auto properly)
+    ThemeManager::Theme currentTheme = ThemeManager::instance().getCurrentTheme();
+    QString themeName = ThemeManager::toString(currentTheme);
+    applyTheme(themeName);
 }
 
 void ModernSettingsWindow::applyTheme(const QString &themeName)
 {
+    qDebug() << "ModernSettingsWindow::applyTheme called with theme:" << themeName;
+
     // Use centralized theme colors
     ThemeColors::ThemeColorSet colors = ThemeColors::getColorSet(themeName);
 
@@ -568,6 +572,8 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
     QString secondaryText = colors.windowText.lighter(150).name();
     QString sliderGroove = colors.floatingWidgetBorder.name();
     QString highlightColor = colors.highlight.name();
+
+    qDebug() << "ModernSettingsWindow colors: bg=" << bgColor << "text=" << textColor << "highlight=" << highlightColor;
 
     QString style = QString(R"(
         QDialog {
@@ -878,13 +884,7 @@ void ModernSettingsWindow::loadSettings()
 
     // Appearance
     if (themeCombo) {
-        QString savedTheme = settings.value("appearance/theme", "Light").toString();
-        // Map old theme names to new simplified ones
-        if (savedTheme.contains("Auto") || savedTheme.contains("System")) {
-            savedTheme = "Light";
-        } else if (savedTheme.contains("Dark") || savedTheme.contains("High Contrast") || savedTheme.contains("Cyberpunk")) {
-            savedTheme = "Dark";
-        }
+        QString savedTheme = settings.value("appearance/theme", "Auto (System)").toString();
         themeCombo->setCurrentText(savedTheme);
     }
     if (widgetWidthSlider) {

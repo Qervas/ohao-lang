@@ -34,8 +34,18 @@ FloatingWidget::FloatingWidget(QWidget *parent)
     applyModernStyle();
 
     // Connect to theme changes for runtime updates
-    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this]() {
-        applyModernStyle(); // Reapply style when theme changes
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme theme) {
+        qDebug() << "FloatingWidget: Received theme change signal, new theme:" << ThemeManager::toString(theme);
+        // Update palette from application palette (set by ThemeManager)
+        setPalette(QApplication::palette());
+
+        // Update child widgets' palettes
+        if (screenshotBtn) screenshotBtn->setPalette(QApplication::palette());
+        if (settingsBtn) settingsBtn->setPalette(QApplication::palette());
+
+        qDebug() << "FloatingWidget: Palette updated. Window color:" << palette().window().color().name();
+        // Force repaint with new colors
+        update();
     });
 
     // Initialize global shortcut manager (all platforms)
@@ -215,7 +225,10 @@ void FloatingWidget::paintEvent(QPaintEvent *event)
     path.addRoundedRect(r.adjusted(0,0,-1,-1), radius, radius);
     p.fillPath(path, fill);
     if (hl) {
-        QPen pen(QColor(255,255,255,90));
+        // Use theme highlight color for border
+        QColor borderColor = palette().highlight().color();
+        borderColor.setAlpha(90);
+        QPen pen(borderColor);
         pen.setWidth(2);
         p.setPen(pen);
         p.drawPath(path);

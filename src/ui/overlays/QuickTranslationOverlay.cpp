@@ -32,6 +32,14 @@ QuickTranslationOverlay::QuickTranslationOverlay(QWidget *parent)
     // Initialize colors from theme
     updateThemeColors();
 
+    // Connect to theme changes for runtime updates
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme theme) {
+        qDebug() << "QuickTranslationOverlay: Received theme change signal, new theme:" << ThemeManager::toString(theme);
+        updateThemeColors();
+        update(); // Redraw with new colors
+        qDebug() << "QuickTranslationOverlay: Repaint triggered";
+    });
+
     hide();
 }
 
@@ -82,7 +90,18 @@ void QuickTranslationOverlay::updateThemeColors()
 
     m_textColor = AppSettings::instance().getThemeColor("text");
     m_borderColor = AppSettings::instance().getThemeColor("border");
-    m_shadowColor = QColor(0, 0, 0, 80);
+
+    // Shadow color - darker for light themes, lighter for dark themes
+    if (m_backgroundColor.lightness() > 128) {
+        m_shadowColor = QColor(0, 0, 0, 80); // Dark shadow for light backgrounds
+    } else {
+        m_shadowColor = QColor(0, 0, 0, 120); // Stronger shadow for dark backgrounds
+    }
+
+    qDebug() << "QuickTranslationOverlay theme colors updated:"
+             << "bg=" << m_backgroundColor.name()
+             << "text=" << m_textColor.name()
+             << "border=" << m_borderColor.name();
 }
 
 void QuickTranslationOverlay::calculatePanelSize()

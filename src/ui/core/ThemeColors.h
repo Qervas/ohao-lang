@@ -39,6 +39,10 @@ namespace ThemeColors {
         // Status colors
         const QColor Success(40, 167, 69);
         const QColor Error(220, 53, 69);
+
+        // Tooltip colors
+        const QColor ToolTipBase(255, 255, 220);
+        const QColor ToolTipText(45, 55, 72);
     }
 
     // Dark Theme Colors
@@ -71,38 +75,12 @@ namespace ThemeColors {
         // Status colors
         const QColor Success(76, 202, 106);
         const QColor Error(255, 90, 95);
+
+        // Tooltip colors
+        const QColor ToolTipBase(60, 60, 70);
+        const QColor ToolTipText(240, 240, 240);
     }
 
-    // High Contrast Theme Colors
-    namespace HighContrast {
-        // Base colors
-        const QColor Window(0, 0, 0);
-        const QColor WindowText(255, 255, 0);
-        const QColor Base(0, 0, 0);
-        const QColor Text(255, 255, 0);
-        const QColor Button(0, 0, 0);
-        const QColor ButtonText(255, 255, 0);
-        const QColor Highlight(255, 255, 0);
-        const QColor HighlightedText(0, 0, 0);
-
-        // Component-specific colors
-        const QColor FloatingWidgetBg(0, 0, 0, 210);
-        const QColor FloatingWidgetBorder(255, 255, 0);
-        const QColor FloatingWidgetHighlight(255, 255, 255);
-        const QColor ButtonHover(255, 255, 0, 51);
-        const QColor ButtonPressed(255, 255, 0, 89);
-
-        // Screenshot toolbar colors
-        const QColor ScreenshotToolbarBg(0, 0, 0, 240);
-        const QColor ScreenshotToolbarBorder(255, 255, 0, 255);
-        const QColor ScreenshotButtonBg(0, 0, 0, 255);
-        const QColor ScreenshotButtonHover(255, 255, 0, 80);
-        const QColor ScreenshotButtonPressed(255, 255, 0, 120);
-
-        // Status colors
-        const QColor Success(0, 255, 0);
-        const QColor Error(255, 0, 0);
-    }
 
     // Cyberpunk Theme Colors
     namespace Cyberpunk {
@@ -138,6 +116,10 @@ namespace ThemeColors {
         // Status colors
         const QColor Success(0, 255, 208);
         const QColor Error(255, 71, 156);
+
+        // Tooltip colors
+        const QColor ToolTipBase(20, 24, 40);
+        const QColor ToolTipText(255, 255, 255);
     }
 
     // Helper function to get colors by theme name
@@ -163,6 +145,8 @@ namespace ThemeColors {
         QColor screenshotButtonPressed;
         QColor success;
         QColor error;
+        QColor toolTipBase;
+        QColor toolTipText;
     };
 
     inline ThemeColorSet getColorSet(const QString& themeName) {
@@ -176,20 +160,8 @@ namespace ThemeColors {
                 Dark::FloatingWidgetHighlight, Dark::ButtonHover, Dark::ButtonPressed,
                 Dark::ScreenshotToolbarBg, Dark::ScreenshotToolbarBorder,
                 Dark::ScreenshotButtonBg, Dark::ScreenshotButtonHover,
-                Dark::ScreenshotButtonPressed, Dark::Success, Dark::Error
-            };
-        } else if (theme.contains("high")) {
-            return {
-                HighContrast::Window, HighContrast::WindowText, HighContrast::Base,
-                HighContrast::Base, HighContrast::Text, HighContrast::Button,
-                HighContrast::ButtonText, HighContrast::Highlight,
-                HighContrast::HighlightedText, HighContrast::FloatingWidgetBg,
-                HighContrast::FloatingWidgetBorder, HighContrast::FloatingWidgetHighlight,
-                HighContrast::ButtonHover, HighContrast::ButtonPressed,
-                HighContrast::ScreenshotToolbarBg, HighContrast::ScreenshotToolbarBorder,
-                HighContrast::ScreenshotButtonBg, HighContrast::ScreenshotButtonHover,
-                HighContrast::ScreenshotButtonPressed, HighContrast::Success,
-                HighContrast::Error
+                Dark::ScreenshotButtonPressed, Dark::Success, Dark::Error,
+                Dark::ToolTipBase, Dark::ToolTipText
             };
         } else if (theme.contains("cyber")) {
             return {
@@ -201,7 +173,8 @@ namespace ThemeColors {
                 Cyberpunk::ButtonPressed, Cyberpunk::ScreenshotToolbarBg,
                 Cyberpunk::ScreenshotToolbarBorder, Cyberpunk::ScreenshotButtonBg,
                 Cyberpunk::ScreenshotButtonHover, Cyberpunk::ScreenshotButtonPressed,
-                Cyberpunk::Success, Cyberpunk::Error
+                Cyberpunk::Success, Cyberpunk::Error,
+                Cyberpunk::ToolTipBase, Cyberpunk::ToolTipText
             };
         } else {
             // Default to Light theme
@@ -212,7 +185,8 @@ namespace ThemeColors {
                 Light::FloatingWidgetHighlight, Light::ButtonHover, Light::ButtonPressed,
                 Light::ScreenshotToolbarBg, Light::ScreenshotToolbarBorder,
                 Light::ScreenshotButtonBg, Light::ScreenshotButtonHover,
-                Light::ScreenshotButtonPressed, Light::Success, Light::Error
+                Light::ScreenshotButtonPressed, Light::Success, Light::Error,
+                Light::ToolTipBase, Light::ToolTipText
             };
         }
     }
