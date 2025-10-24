@@ -2,11 +2,12 @@
 #include "GlobalShortcutManager.h"
 #include "../screenshot/ScreenshotWidget.h"
 #include "ScreenCapture.h"
-#include "SettingsWindow.h"
+#include "ModernSettingsWindow.h"
 #include "ThemeManager.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QMouseEvent>
 #include <QGraphicsOpacityEffect>
 #include <QTimer>
@@ -18,6 +19,12 @@
 #include <QWindow>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QDialog>
+#include <QLabel>
+
+#ifdef Q_OS_LINUX
+#include <QProcess>
+#endif
 
 FloatingWidget::FloatingWidget(QWidget *parent)
     : QWidget(parent), isDragging(false), currentScale(1.0), currentOpacity(200)
@@ -26,15 +33,13 @@ FloatingWidget::FloatingWidget(QWidget *parent)
     setupUI();
     applyModernStyle();
 
-    // Initialize global shortcut manager (Windows and macOS)
-#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+    // Initialize global shortcut manager (all platforms)
     shortcutManager = new GlobalShortcutManager(this);
-    connect(shortcutManager, &GlobalShortcutManager::screenshotRequested, 
+    connect(shortcutManager, &GlobalShortcutManager::screenshotRequested,
             this, &FloatingWidget::takeScreenshot);
     connect(shortcutManager, &GlobalShortcutManager::toggleVisibilityRequested,
             this, &FloatingWidget::toggleVisibility);
     qDebug() << "Global shortcut manager initialized";
-#endif
 
     // Setup local server for single instance support
     localServer = new QLocalServer(this);
@@ -78,14 +83,33 @@ FloatingWidget::FloatingWidget(QWidget *parent)
 
 void FloatingWidget::setupUI()
 {
-    // Make widget frameless and always on top - force it to be a top-level window
-    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Window);
+    // Make widget frameless
+    setWindowFlags(Qt::FramelessWindowHint | Qt::Window | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_StyledBackground, true);
     setObjectName("floatingWidget");
-    
+
     // Enable mouse tracking for better drag experience
     setMouseTracking(true);
+
+    // Apply always-on-top setting after widget is created
+    bool alwaysOnTop = settings.value("window/alwaysOnTop", true).toBool();
+    if (alwaysOnTop) {
+        QTimer::singleShot(100, this, [this]() {
+            setAlwaysOnTop(true);
+
+#ifdef Q_OS_LINUX
+            // On Wayland, periodically raise the window to keep it on top
+            QTimer *keepOnTopTimer = new QTimer(this);
+            connect(keepOnTopTimer, &QTimer::timeout, this, [this]() {
+                if (settings.value("window/alwaysOnTop", true).toBool() && isVisible()) {
+                    raise();
+                }
+            });
+            keepOnTopTimer->start(2000);  // Every 2 seconds
+#endif
+        });
+    }
 
     // Set size from settings
     int widgetWidth = settings.value("appearance/widgetWidth", 140).toInt();
@@ -458,21 +482,51 @@ void FloatingWidget::openSettings()
     qDebug() << "Opening settings window...";
 
     if (!settingsWindow) {
-        settingsWindow = new SettingsWindow(this);
-#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        qDebug() << "Creating new ModernSettingsWindow...";
+        settingsWindow = new ModernSettingsWindow(this);
         settingsWindow->setShortcutManager(shortcutManager);
-#endif
         settingsWindow->setSystemTray(systemTray);
+        qDebug() << "ModernSettingsWindow created successfully!";
     }
 
+    qDebug() << "Showing settings window...";
     settingsWindow->show();
     settingsWindow->raise();
     settingsWindow->activateWindow();
+    qDebug() << "Settings window shown!";
 }
 
 void FloatingWidget::setSystemTray(SystemTray *tray)
 {
     systemTray = tray;
+}
+
+void FloatingWidget::setAlwaysOnTop(bool onTop)
+{
+    Qt::WindowFlags flags = windowFlags();
+    if (onTop) {
+        flags |= Qt::WindowStaysOnTopHint;
+    } else {
+        flags &= ~Qt::WindowStaysOnTopHint;
+    }
+    setWindowFlags(flags);
+    show();  // Need to show after changing flags
+
+#ifdef Q_OS_LINUX
+    // On Wayland/Linux, Qt's WindowStaysOnTopHint doesn't always work
+    // Use wmctrl as a fallback if available
+    if (onTop && windowHandle()) {
+        QTimer::singleShot(100, this, [this]() {
+            WId windowId = winId();
+            QString cmd = QString("wmctrl -i -r %1 -b add,above").arg(windowId);
+            QProcess::execute("sh", QStringList() << "-c" << cmd);
+
+            // Also try raise() repeatedly on Wayland
+            raise();
+            activateWindow();
+        });
+    }
+#endif
 }
 
 void FloatingWidget::toggleVisibility()
@@ -515,6 +569,12 @@ void FloatingWidget::handleNewConnection()
 
             if (command == "activate") {
                 activateWindow();
+            } else if (command == "screenshot") {
+                qDebug() << "Taking screenshot via IPC command";
+                takeScreenshot();
+            } else if (command == "toggle") {
+                qDebug() << "Toggling visibility via IPC command";
+                toggleVisibility();
             }
 
             socket->deleteLater();

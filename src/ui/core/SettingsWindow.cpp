@@ -33,9 +33,17 @@ SettingsWindow::SettingsWindow(QWidget *parent)
     // Use global TTS engine from manager
     ttsEngine = TTSManager::instance().ttsEngine();
 
+    // Phase 1: Create all UI elements (no signals connected)
     setupUI();
+
+    // Phase 2: Apply styling
     applyModernStyling();
+
+    // Phase 3: Load settings (signals will be blocked during load)
     loadSettings();
+
+    // Phase 4: Connect all signals AFTER everything is initialized
+    connectSignals();
 
     // Setup animations
     opacityEffect = new QGraphicsOpacityEffect(this);
@@ -99,12 +107,12 @@ void SettingsWindow::setupUI()
 
     resetBtn = new QPushButton("Reset to Defaults", this);
     resetBtn->setObjectName("resetBtn");
-    connect(resetBtn, &QPushButton::clicked, this, &SettingsWindow::onResetClicked);
+    // Signal connection moved to connectSignals()
 
-    QPushButton *closeBtn = new QPushButton("Close", this);
+    closeBtn = new QPushButton("Close", this);
     closeBtn->setObjectName("closeBtn");
     closeBtn->setDefault(true);
-    connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
+    // Signal connection moved to connectSignals()
 
     buttonLayout->addWidget(resetBtn);
     buttonLayout->addStretch();
@@ -148,13 +156,7 @@ void SettingsWindow::setupGeneralTab()
                                "Japanese", "Korean", "Spanish", "French", "German", "Russian",
                                "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
     ocrLanguageCombo->setToolTip("Language for text recognition from screenshots");
-    connect(ocrLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString& language){
-        updateVoicesForLanguage();
-        // Auto-sync translation source language with OCR input language (unless auto-detect is enabled)
-        if (sourceLanguageCombo && autoDetectSourceCheck && !autoDetectSourceCheck->isChecked()) {
-            sourceLanguageCombo->setCurrentText(language);
-        }
-    });
+    // Signal connection moved to connectSignals()
 
     inputLangLayout->addWidget(ocrLanguageCombo, 1);
 
@@ -174,11 +176,7 @@ void SettingsWindow::setupGeneralTab()
                                   "French", "German", "Russian", "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic", "Hindi", "Thai", "Vietnamese"});
     targetLanguageCombo->setCurrentText("English");
     targetLanguageCombo->setToolTip("Target language for translation and TTS voice selection");
-    connect(targetLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString& language){
-        updateVoicesForLanguage();
-        // Ensure translation target language stays in sync with general target language
-        qDebug() << "Target language changed to:" << language << "- this will be used for translation";
-    });
+    // Signal connection moved to connectSignals()
 
     outputLangLayout->addWidget(targetLanguageCombo, 1);
 
@@ -242,14 +240,9 @@ void SettingsWindow::setupGeneralTab()
     screenshotLayout->addWidget(previewLabel);
     
     layout->addWidget(screenshotGroup);
-    
-    // Connect slider to update preview
-    connect(screenshotDimmingSlider, &QSlider::valueChanged, this, [this](int value) {
-        int percentage = (value * 100) / 255;
-        screenshotDimmingValue->setText(QString("%1%").arg(percentage));
-        updateScreenshotPreview();
-    });
-    
+
+    // Connect slider to update preview - moved to connectSignals()
+
     // Global Shortcuts Group
     QGroupBox *shortcutsGroup = new QGroupBox("⌨️ Global Shortcuts");
     shortcutsGroup->setStyleSheet("QGroupBox { font-weight: bold; font-size: 14px; padding-top: 10px; }");
@@ -263,20 +256,8 @@ void SettingsWindow::setupGeneralTab()
     
     // Disable global shortcuts when field gets focus, enable when loses focus
     screenshotShortcutEdit->installEventFilter(this);
-    connect(screenshotShortcutEdit, &QKeySequenceEdit::keySequenceChanged, this, [this](const QKeySequence &keySequence) {
-        // Save immediately when changed
-        QSettings settings;
-        QString shortcutString = keySequence.toString();
-        // On macOS, Qt uses "Ctrl" to represent Cmd, but we need "Meta" for Carbon API
-        #ifdef Q_OS_MACOS
-        shortcutString.replace("Ctrl", "Meta");
-        #endif
-        settings.setValue("shortcuts/screenshot", shortcutString);
-        qDebug() << "Screenshot shortcut changed to:" << shortcutString;
-        if (shortcutManager) shortcutManager->reloadShortcuts();
-        if (systemTray) systemTray->updateShortcutLabels();
-    });
-    
+    // Signal connection moved to connectSignals()
+
     // Toggle visibility shortcut
     toggleShortcutEdit = new QKeySequenceEdit();
     toggleShortcutEdit->setToolTip("Press the key combination you want to use for showing/hiding the floating widget");
@@ -284,20 +265,8 @@ void SettingsWindow::setupGeneralTab()
     
     // Disable global shortcuts when field gets focus, enable when loses focus
     toggleShortcutEdit->installEventFilter(this);
-    connect(toggleShortcutEdit, &QKeySequenceEdit::keySequenceChanged, this, [this](const QKeySequence &keySequence) {
-        // Save immediately when changed
-        QSettings settings;
-        QString shortcutString = keySequence.toString();
-        // On macOS, Qt uses "Ctrl" to represent Cmd, but we need "Meta" for Carbon API
-        #ifdef Q_OS_MACOS
-        shortcutString.replace("Ctrl", "Meta");
-        #endif
-        settings.setValue("shortcuts/toggle", shortcutString);
-        qDebug() << "Toggle shortcut changed to:" << shortcutString;
-        if (shortcutManager) shortcutManager->reloadShortcuts();
-        if (systemTray) systemTray->updateShortcutLabels();
-    });
-    
+    // Signal connection moved to connectSignals()
+
     // Info label for shortcuts
     QLabel *shortcutInfoLabel = new QLabel("ℹ️ <i>Shortcuts work globally, even when the app is in the background.<br>"
                                           "Avoid system shortcuts like Cmd+Q, Cmd+W, etc.</i>");
@@ -350,8 +319,8 @@ void SettingsWindow::setupOcrTab()
 #else
     ocrEngineCombo->addItems({"Tesseract"});
 #endif
-    
-    connect(ocrEngineCombo, &QComboBox::currentTextChanged, this, &SettingsWindow::onOcrEngineChanged);
+
+    // Signal connection moved to connectSignals()
     engineLayout->addRow("Engine:", ocrEngineCombo);
 
     layout->addWidget(engineGroup);
@@ -387,7 +356,7 @@ void SettingsWindow::setupTranslationTab()
     translationEngineCombo = new QComboBox();
     translationEngineCombo->addItems({"Google Translate (Free)", "LibreTranslate", "Ollama Local LLM",
                                      "Microsoft Translator", "DeepL (Free)", "Offline Dictionary"});
-    connect(translationEngineCombo, &QComboBox::currentTextChanged, this, &SettingsWindow::onTranslationEngineChanged);
+    // Signal connection moved to connectSignals()
     engineLayout->addRow("Engine:", translationEngineCombo);
 
     layout->addWidget(engineGroup);
@@ -412,10 +381,7 @@ void SettingsWindow::setupAppearanceTab()
 
     themeCombo = new QComboBox();
     themeCombo->addItems({"Auto (System)", "Light", "Dark", "High Contrast", "Cyberpunk"});
-    connect(themeCombo, &QComboBox::currentTextChanged, this, [this](const QString &text){
-        // Preview theme instantly
-        ThemeManager::instance().applyTheme(ThemeManager::fromString(text));
-    });
+    // Signal connection moved to connectSignals()
     themeLayout->addRow("Theme:", themeCombo);
 
     layout->addWidget(themeGroup);
@@ -443,23 +409,9 @@ void SettingsWindow::setupAppearanceTab()
     widthLayout->addWidget(widgetWidthLabel);
     
     sizeLayout->addRow("Widget Width:", widthLayout);
-    
-    // Connect slider to update label and widget size in real-time
-    connect(widgetWidthSlider, &QSlider::valueChanged, this, [this](int width) {
-        widgetWidthLabel->setText(QString("%1 px").arg(width));
-        
-        // Save immediately
-        QSettings settings;
-        settings.setValue("appearance/widgetWidth", width);
-        
-        // Update the actual floating widget size in real-time
-        FloatingWidget *floatingWidget = qobject_cast<FloatingWidget*>(parent());
-        if (floatingWidget) {
-            int height = static_cast<int>(width * 0.43); // 140x60 ratio = 0.43
-            floatingWidget->setFixedSize(width, height);
-        }
-    });
-    
+
+    // Signal connection moved to connectSignals()
+
     // Deprecated widgets - set to null
     widgetSizeCombo = nullptr;
     opacitySlider = nullptr;
@@ -498,9 +450,16 @@ void SettingsWindow::loadSettings()
         displayEngine = "Tesseract";
 #endif
     }
-    
-    ocrEngineCombo->setCurrentText(displayEngine);
-    ocrLanguageCombo->setCurrentText(settings->value("ocr/language", "English").toString());
+
+    // Block signals during initialization to prevent premature handler execution
+    if (ocrEngineCombo) {
+        QSignalBlocker blocker(ocrEngineCombo);
+        ocrEngineCombo->setCurrentText(displayEngine);
+    }
+    if (ocrLanguageCombo) {
+        QSignalBlocker blocker(ocrLanguageCombo);
+        ocrLanguageCombo->setCurrentText(settings->value("ocr/language", "English").toString());
+    }
     
     // Screenshot Settings
     int dimmingOpacity = settings->value("screenshot/dimmingOpacity", 120).toInt();
@@ -533,9 +492,17 @@ void SettingsWindow::loadSettings()
     #endif
 
     // Translation Settings
-    autoTranslateCheck->setChecked(settings->value("translation/autoTranslate", true).toBool());
-    if (overlayModeCombo) overlayModeCombo->setCurrentText(settings->value("translation/overlayMode", "Deep Learning Mode").toString());
-    translationEngineCombo->setCurrentText(settings->value("translation/engine", "Google Translate (Free)").toString());
+    if (autoTranslateCheck) {
+        autoTranslateCheck->setChecked(settings->value("translation/autoTranslate", true).toBool());
+    }
+    if (overlayModeCombo) {
+        QSignalBlocker blocker(overlayModeCombo);
+        overlayModeCombo->setCurrentText(settings->value("translation/overlayMode", "Deep Learning Mode").toString());
+    }
+    if (translationEngineCombo) {
+        QSignalBlocker blocker(translationEngineCombo);
+        translationEngineCombo->setCurrentText(settings->value("translation/engine", "Google Translate (Free)").toString());
+    }
 
     // Load legacy settings if needed
     if (autoDetectSourceCheck) {
@@ -544,16 +511,23 @@ void SettingsWindow::loadSettings()
     }
     
     if (sourceLanguageCombo) {
+        QSignalBlocker blocker(sourceLanguageCombo);
         QString defaultSourceLang = settings->value("general/ocrLanguage", "English").toString();
         sourceLanguageCombo->setCurrentText(settings->value("translation/sourceLanguage", defaultSourceLang).toString());
     }
 
-    if (targetLanguageCombo) targetLanguageCombo->setCurrentText(settings->value("translation/targetLanguage", "English").toString());
+    if (targetLanguageCombo) {
+        QSignalBlocker blocker(targetLanguageCombo);
+        targetLanguageCombo->setCurrentText(settings->value("translation/targetLanguage", "English").toString());
+    }
     if (apiUrlEdit) apiUrlEdit->setText(settings->value("translation/apiUrl", "").toString());
     if (apiKeyEdit) apiKeyEdit->setText(settings->value("translation/apiKey", "").toString());
 
     // Appearance Settings
-    themeCombo->setCurrentText(settings->value("appearance/theme", "Auto (System)").toString());
+    if (themeCombo) {
+        QSignalBlocker blocker(themeCombo);
+        themeCombo->setCurrentText(settings->value("appearance/theme", "Auto (System)").toString());
+    }
     if (widgetWidthSlider) {
         int width = settings->value("appearance/widgetWidth", 140).toInt();
         widgetWidthSlider->setValue(width);
@@ -591,11 +565,25 @@ void SettingsWindow::loadSettings()
             providerId = QStringLiteral("edge-free");
         }
 
+        // If "system" provider is saved but not available (e.g., Qt TextToSpeech not found on Linux),
+        // fall back to google-web
+#ifndef QT_TEXTTOSPEECH_AVAILABLE
+        if (providerId == QStringLiteral("system")) {
+            qWarning() << "System TTS provider not available, falling back to google-web";
+            providerId = QStringLiteral("google-web");
+        }
+#endif
+
         if (ttsProviderCombo) {
             const int idx = ttsProviderCombo->findData(providerId);
             if (idx >= 0) {
                 QSignalBlocker blocker(*ttsProviderCombo);
                 ttsProviderCombo->setCurrentIndex(idx);
+            } else {
+                // Provider not found in combo, fall back to first available (usually google-web)
+                qWarning() << "Provider" << providerId << "not found in combo box, using default";
+                ttsProviderCombo->setCurrentIndex(0);
+                providerId = ttsProviderCombo->currentData().toString();
             }
         }
 
@@ -994,7 +982,9 @@ void SettingsWindow::setupTTSTab()
     
     // Provider dropdown
     ttsProviderCombo = new QComboBox();
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
     ttsProviderCombo->addItem("System Voices (Recommended)", QStringLiteral("system"));
+#endif
     ttsProviderCombo->addItem("Google Web TTS", QStringLiteral("google-web"));
     ttsProviderCombo->addItem("Microsoft Edge TTS", QStringLiteral("edge-free"));
     ttsLayout->addRow("Voice Provider:", ttsProviderCombo);
@@ -1015,8 +1005,8 @@ void SettingsWindow::setupTTSTab()
     inputVoiceCombo->setEditable(true);
     inputVoiceCombo->setPlaceholderText("Select input voice");
     inputLayout->addWidget(inputVoiceCombo, 1);
-    
-    QPushButton *testInputBtn = new QPushButton("🔊 Test");
+
+    testInputBtn = new QPushButton("🔊 Test");
     inputLayout->addWidget(testInputBtn);
     
     ttsLayout->addRow("Input Voice:", inputWidget);
@@ -1055,38 +1045,164 @@ void SettingsWindow::setupTTSTab()
     edgeHintLabel = nullptr;
     advancedVoiceToggle = nullptr;
     edgeBrowseButton = nullptr;
-    
-    // Connect provider change to update hint
-    connect(ttsProviderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
-        QString providerId = ttsProviderCombo->currentData().toString();
-        updateProviderUI(providerId);
-    });
-    
-    // Connect test buttons
-    connect(testInputBtn, &QPushButton::clicked, this, [this]() {
-        if (!ttsEngine || !ttsEnabledCheck->isChecked()) return;
-        
-        QString voice = inputVoiceCombo->currentText().trimmed();
-        if (voice.isEmpty()) return;
-        
-        // Use OCR language from General settings for input voice
-        QString languageName = ocrLanguageCombo ? ocrLanguageCombo->currentText() : "English";
-        QLocale locale = languageNameToLocale(languageName);
-        QString testText = getTestTextForLanguage(languageName, true);
-        
-        ttsEngine->setInputVoice(voice);
-        ttsEngine->speak(testText, true, locale);
-    });
-    
-    connect(testTTSBtn, &QPushButton::clicked, this, &SettingsWindow::onTestTTSClicked);
-    
-    // Initialize if engine available
-    if (ttsEngine) {
-        updateProviderUI(ttsEngine->providerId());
-        updateVoicesForLanguage();
-    }
+
+    // Signal connections moved to connectSignals()
+
+    // Note: updateProviderUI() and updateVoicesForLanguage() will be called from connectSignals()
 }
 
+void SettingsWindow::connectSignals()
+{
+    qDebug() << "SettingsWindow: Connecting all signals after full initialization";
+
+    // === Button Connections ===
+    if (resetBtn) {
+        connect(resetBtn, &QPushButton::clicked, this, &SettingsWindow::onResetClicked);
+    }
+    if (closeBtn) {
+        connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
+    }
+
+    // === General Tab Signals ===
+    if (ocrLanguageCombo) {
+        connect(ocrLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString& language) {
+            if (ttsEngine && inputVoiceCombo && outputVoiceCombo) {
+                updateVoicesForLanguage();
+            }
+            // Auto-sync translation source language with OCR input language (unless auto-detect is enabled)
+            if (sourceLanguageCombo && autoDetectSourceCheck && !autoDetectSourceCheck->isChecked()) {
+                sourceLanguageCombo->setCurrentText(language);
+            }
+        });
+    }
+
+    if (targetLanguageCombo) {
+        connect(targetLanguageCombo, &QComboBox::currentTextChanged, this, [this](const QString& language) {
+            if (ttsEngine && inputVoiceCombo && outputVoiceCombo) {
+                updateVoicesForLanguage();
+            }
+            qDebug() << "Target language changed to:" << language << "- this will be used for translation";
+        });
+    }
+
+    if (screenshotDimmingSlider && screenshotDimmingValue && screenshotPreview) {
+        connect(screenshotDimmingSlider, &QSlider::valueChanged, this, [this](int value) {
+            int percentage = (value * 100) / 255;
+            screenshotDimmingValue->setText(QString("%1%").arg(percentage));
+            updateScreenshotPreview();
+        });
+    }
+
+    if (screenshotShortcutEdit) {
+        connect(screenshotShortcutEdit, &QKeySequenceEdit::keySequenceChanged, this, [this](const QKeySequence &keySequence) {
+            // Save immediately when changed
+            QSettings settings;
+            QString shortcutString = keySequence.toString();
+            // On macOS, Qt uses "Ctrl" to represent Cmd, but we need "Meta" for Carbon API
+            #ifdef Q_OS_MACOS
+            shortcutString.replace("Ctrl", "Meta");
+            #endif
+            settings.setValue("shortcuts/screenshot", shortcutString);
+            qDebug() << "Screenshot shortcut changed to:" << shortcutString;
+            if (shortcutManager) shortcutManager->reloadShortcuts();
+            if (systemTray) systemTray->updateShortcutLabels();
+        });
+    }
+
+    if (toggleShortcutEdit) {
+        connect(toggleShortcutEdit, &QKeySequenceEdit::keySequenceChanged, this, [this](const QKeySequence &keySequence) {
+            // Save immediately when changed
+            QSettings settings;
+            QString shortcutString = keySequence.toString();
+            // On macOS, Qt uses "Ctrl" to represent Cmd, but we need "Meta" for Carbon API
+            #ifdef Q_OS_MACOS
+            shortcutString.replace("Ctrl", "Meta");
+            #endif
+            settings.setValue("shortcuts/toggle", shortcutString);
+            qDebug() << "Toggle shortcut changed to:" << shortcutString;
+            if (shortcutManager) shortcutManager->reloadShortcuts();
+            if (systemTray) systemTray->updateShortcutLabels();
+        });
+    }
+
+    // === OCR Tab Signals ===
+    if (ocrEngineCombo) {
+        connect(ocrEngineCombo, &QComboBox::currentTextChanged, this, &SettingsWindow::onOcrEngineChanged);
+    }
+
+    // === Translation Tab Signals ===
+    if (translationEngineCombo) {
+        connect(translationEngineCombo, &QComboBox::currentTextChanged, this, &SettingsWindow::onTranslationEngineChanged);
+    }
+
+    // === Appearance Tab Signals ===
+    if (themeCombo) {
+        connect(themeCombo, &QComboBox::currentTextChanged, this, [this](const QString &text) {
+            // Preview theme instantly
+            ThemeManager::instance().applyTheme(ThemeManager::fromString(text));
+        });
+    }
+
+    if (widgetWidthSlider && widgetWidthLabel) {
+        connect(widgetWidthSlider, &QSlider::valueChanged, this, [this](int width) {
+            widgetWidthLabel->setText(QString("%1 px").arg(width));
+
+            // Save immediately
+            QSettings settings;
+            settings.setValue("appearance/widgetWidth", width);
+
+            // Update the actual floating widget size in real-time
+            FloatingWidget *floatingWidget = qobject_cast<FloatingWidget*>(parent());
+            if (floatingWidget) {
+                int height = static_cast<int>(width * 0.43); // 140x60 ratio = 0.43
+                floatingWidget->setFixedSize(width, height);
+            }
+        });
+    }
+
+    // === TTS Tab Signals ===
+    if (ttsProviderCombo) {
+        connect(ttsProviderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+            if (ttsProviderCombo) {
+                QString providerId = ttsProviderCombo->currentData().toString();
+                updateProviderUI(providerId);
+            }
+        });
+    }
+
+    if (testInputBtn) {
+        connect(testInputBtn, &QPushButton::clicked, this, [this]() {
+            if (!ttsEngine || !ttsEnabledCheck || !ttsEnabledCheck->isChecked()) return;
+            if (!inputVoiceCombo) return;
+
+            QString voice = inputVoiceCombo->currentText().trimmed();
+            if (voice.isEmpty()) return;
+
+            // Use OCR language from General settings for input voice
+            QString languageName = ocrLanguageCombo ? ocrLanguageCombo->currentText() : "English";
+            QLocale locale = languageNameToLocale(languageName);
+            QString testText = getTestTextForLanguage(languageName, true);
+
+            ttsEngine->setInputVoice(voice);
+            ttsEngine->speak(testText, true, locale);
+        });
+    }
+
+    if (testTTSBtn) {
+        connect(testTTSBtn, &QPushButton::clicked, this, &SettingsWindow::onTestTTSClicked);
+    }
+
+    // === Initialize TTS after all connections are set ===
+    if (ttsEngine && ttsProviderCombo) {
+        QString providerId = ttsEngine->providerId();
+        updateProviderUI(providerId);
+        if (inputVoiceCombo && outputVoiceCombo) {
+            updateVoicesForLanguage();
+        }
+    }
+
+    qDebug() << "SettingsWindow: All signals connected successfully";
+}
 
 void SettingsWindow::onVoiceChanged()
 {
@@ -1111,11 +1227,21 @@ void SettingsWindow::onTestTTSClicked()
 
 void SettingsWindow::updateProviderUI(const QString& providerId)
 {
+    qDebug() << "SettingsWindow::updateProviderUI() called with providerId:" << providerId;
+
+    if (!ttsEngine) {
+        qDebug() << "SettingsWindow: Cannot update provider UI - ttsEngine is null";
+        return;
+    }
+
     // Update contextual hint based on provider
     if (providerInfoLabel) {
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
         if (providerId == QStringLiteral("system")) {
             providerInfoLabel->setText("Download voices: Settings → Accessibility → Spoken Content");
-        } else if (providerId == QStringLiteral("google-web")) {
+        } else
+#endif
+        if (providerId == QStringLiteral("google-web")) {
             providerInfoLabel->setText("Works out of the box, no installation required");
         } else if (providerId == QStringLiteral("edge-free")) {
             providerInfoLabel->setText("Install: pip install edge-tts");
@@ -1123,15 +1249,32 @@ void SettingsWindow::updateProviderUI(const QString& providerId)
     }
 
     // Update TTS engine provider
-    if (ttsEngine) {
-        ttsEngine->setProviderId(providerId);
+    ttsEngine->setProviderId(providerId);
+
+    // Only update voices if UI is ready
+    if (inputVoiceCombo && outputVoiceCombo) {
         updateVoicesForLanguage();
+    } else {
+        qDebug() << "SettingsWindow: Skipping updateVoicesForLanguage() - voice combos not initialized yet";
     }
 }
 
 void SettingsWindow::updateVoicesForLanguage()
 {
+    qDebug() << "SettingsWindow::updateVoicesForLanguage() called";
+
     if (!ttsEngine) {
+        qDebug() << "SettingsWindow: Cannot update voices - ttsEngine is null";
+        return;
+    }
+
+    if (!inputVoiceCombo || !outputVoiceCombo) {
+        qDebug() << "SettingsWindow: Cannot update voices - voice combo boxes not initialized yet";
+        return;
+    }
+
+    if (!ocrLanguageCombo || !targetLanguageCombo) {
+        qDebug() << "SettingsWindow: Cannot update voices - language combo boxes not initialized yet";
         return;
     }
 

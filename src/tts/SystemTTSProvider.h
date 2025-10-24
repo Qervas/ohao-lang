@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
+
 #include "TTSProvider.h"
 #include <QTextToSpeech>
 #include <QVoice>
@@ -7,12 +9,12 @@
 
 /**
  * System TTS Provider - Uses Qt's QTextToSpeech
- * 
+ *
  * This provider uses the native system TTS engine:
  * - macOS: Uses AVSpeechSynthesizer with downloaded system voices
  * - Windows: Uses SAPI
  * - Linux: Uses speech-dispatcher
- * 
+ *
  * Benefits:
  * - No external dependencies
  * - Uses voices downloaded in System Settings
@@ -52,3 +54,5 @@ private:
     Config m_config;
     bool m_initialized;
 };
+
+#endif // QT_TEXTTOSPEECH_AVAILABLE

@@ -15,6 +15,13 @@
 #endif
 #endif
 
+#ifdef Q_OS_LINUX
+#include <X11/Xlib.h>
+#include <X11/keysym.h>
+#include <xcb/xcb.h>
+#include <xcb/xproto.h>
+#endif
+
 GlobalShortcutManager::GlobalShortcutManager(QObject *parent)
     : QObject(parent)
 {
@@ -37,28 +44,28 @@ void GlobalShortcutManager::registerShortcuts()
     unregisterShortcuts();
 
 #ifdef Q_OS_WIN
-    // Register Ctrl+Shift+S for screenshot
-    const UINT screenshotModifiers = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT;
-    const UINT screenshotKey = 0x53; // 'S'
+    // Register Ctrl+Alt+X for screenshot
+    const UINT screenshotModifiers = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
+    const UINT screenshotKey = 0x58; // 'X'
 
     if (RegisterHotKey(nullptr, screenshotHotkeyId, screenshotModifiers, screenshotKey)) {
         screenshotRegistered = true;
-        qInfo() << "Registered global screenshot shortcut Ctrl+Shift+S";
+        qInfo() << "Registered global screenshot shortcut Ctrl+Alt+X";
     } else {
         screenshotRegistered = false;
-        qWarning() << "Failed to register global shortcut Ctrl+Shift+S. Error:" << GetLastError();
+        qWarning() << "Failed to register global shortcut Ctrl+Alt+X. Error:" << GetLastError();
     }
 
-    // Register Ctrl+Shift+H for toggle visibility
-    const UINT toggleModifiers = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT;
+    // Register Ctrl+Alt+H for toggle visibility
+    const UINT toggleModifiers = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
     const UINT toggleKey = 0x48; // 'H'
 
     if (RegisterHotKey(nullptr, toggleHotkeyId, toggleModifiers, toggleKey)) {
         toggleRegistered = true;
-        qInfo() << "Registered global visibility toggle shortcut Ctrl+Shift+H";
+        qInfo() << "Registered global visibility toggle shortcut Ctrl+Alt+H";
     } else {
         toggleRegistered = false;
-        qWarning() << "Failed to register global shortcut Ctrl+Shift+H. Error:" << GetLastError();
+        qWarning() << "Failed to register global shortcut Ctrl+Alt+H. Error:" << GetLastError();
     }
 #elif defined(Q_OS_MACOS)
     // Load custom shortcuts from settings
@@ -218,13 +225,75 @@ void GlobalShortcutManager::registerShortcuts()
             }
         }
     }
+#elif defined(Q_OS_LINUX)
+    // Linux X11/XWayland support using XGrabKey
+    Display *dpy = XOpenDisplay(nullptr);
+    if (!dpy) {
+        qWarning() << "============================================================";
+        qWarning() << "Failed to open X11 display for global shortcuts";
+        qWarning() << "";
+        qWarning() << "On GNOME Wayland, please set up keyboard shortcuts manually:";
+        qWarning() << "1. Open Settings → Keyboard → View and Customize Shortcuts";
+        qWarning() << "2. Scroll to 'Custom Shortcuts' and click '+'";
+        qWarning() << "3. Add these shortcuts:";
+        qWarning() << "   Name: Ohao Screenshot";
+        qWarning() << "   Command:" << QCoreApplication::applicationFilePath() << "--screenshot";
+        qWarning() << "   Shortcut: Ctrl+Alt+X";
+        qWarning() << "";
+        qWarning() << "   Name: Ohao Toggle";
+        qWarning() << "   Command:" << QCoreApplication::applicationFilePath() << "--toggle";
+        qWarning() << "   Shortcut: Ctrl+Alt+H";
+        qWarning() << "============================================================";
+        return;
+    }
+
+    display = dpy;
+    Window root = DefaultRootWindow(dpy);
+
+    // Register Ctrl+Alt+X for screenshot
+    KeySym screenshotKeySym = XStringToKeysym("x");
+    screenshotKeycode = XKeysymToKeycode(dpy, screenshotKeySym);
+    screenshotModifiers = ControlMask | Mod1Mask;  // Mod1Mask is Alt
+
+    if (screenshotKeycode != 0) {
+        // Grab the key combination
+        XGrabKey(dpy, screenshotKeycode, screenshotModifiers, root, True, GrabModeAsync, GrabModeAsync);
+        // Also grab with NumLock and other lock modifiers
+        XGrabKey(dpy, screenshotKeycode, screenshotModifiers | Mod2Mask, root, True, GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, screenshotKeycode, screenshotModifiers | LockMask, root, True, GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, screenshotKeycode, screenshotModifiers | Mod2Mask | LockMask, root, True, GrabModeAsync, GrabModeAsync);
+
+        screenshotRegistered = true;
+        qInfo() << "Registered global screenshot shortcut Ctrl+Alt+X";
+    } else {
+        qWarning() << "Failed to get keycode for 'x' key";
+    }
+
+    // Register Ctrl+Alt+H for toggle visibility
+    KeySym toggleKeySym = XStringToKeysym("h");
+    toggleKeycode = XKeysymToKeycode(dpy, toggleKeySym);
+    toggleModifiers = ControlMask | Mod1Mask;  // Mod1Mask is Alt
+
+    if (toggleKeycode != 0) {
+        XGrabKey(dpy, toggleKeycode, toggleModifiers, root, True, GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, toggleKeycode, toggleModifiers | Mod2Mask, root, True, GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, toggleKeycode, toggleModifiers | LockMask, root, True, GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, toggleKeycode, toggleModifiers | Mod2Mask | LockMask, root, True, GrabModeAsync, GrabModeAsync);
+
+        toggleRegistered = true;
+        qInfo() << "Registered global toggle shortcut Ctrl+Alt+H";
+    } else {
+        qWarning() << "Failed to get keycode for 'h' key";
+    }
+
+    XSync(dpy, False);
+
+    if (!screenshotRegistered && !toggleRegistered) {
+        qWarning() << "Failed to register any global shortcuts";
+        qWarning() << "On Wayland, you may need to use your desktop environment's keyboard settings";
+    }
 #else
-    // For Linux, global shortcuts require special system permissions
-    // or desktop environment specific APIs
-    qWarning() << "Global shortcuts are currently only fully supported on Windows and macOS.";
-    qWarning() << "On Linux, please use your desktop environment's shortcut settings to bind:";
-    qWarning() << "  Ctrl+Shift+S -> Launch this application with --screenshot argument";
-    qWarning() << "  Ctrl+Shift+H -> Launch this application with --toggle argument";
+    qWarning() << "Global shortcuts are not supported on this platform";
 #endif
 }
 
@@ -256,16 +325,40 @@ void GlobalShortcutManager::unregisterShortcuts()
         DisposeEventHandlerUPP(eventHandlerUPP);
         eventHandlerUPP = nullptr;
     }
+#elif defined(Q_OS_LINUX)
+    if (display) {
+        Display *dpy = static_cast<Display*>(display);
+        Window root = DefaultRootWindow(dpy);
+
+        if (screenshotRegistered && screenshotKeycode != 0) {
+            XUngrabKey(dpy, screenshotKeycode, screenshotModifiers, root);
+            XUngrabKey(dpy, screenshotKeycode, screenshotModifiers | Mod2Mask, root);
+            XUngrabKey(dpy, screenshotKeycode, screenshotModifiers | LockMask, root);
+            XUngrabKey(dpy, screenshotKeycode, screenshotModifiers | Mod2Mask | LockMask, root);
+            screenshotRegistered = false;
+        }
+
+        if (toggleRegistered && toggleKeycode != 0) {
+            XUngrabKey(dpy, toggleKeycode, toggleModifiers, root);
+            XUngrabKey(dpy, toggleKeycode, toggleModifiers | Mod2Mask, root);
+            XUngrabKey(dpy, toggleKeycode, toggleModifiers | LockMask, root);
+            XUngrabKey(dpy, toggleKeycode, toggleModifiers | Mod2Mask | LockMask, root);
+            toggleRegistered = false;
+        }
+
+        XCloseDisplay(dpy);
+        display = nullptr;
+    }
 #endif
 }
 
 bool GlobalShortcutManager::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result)
 {
-#ifdef Q_OS_WIN
     if (!isEnabled) {
         return false;
     }
-    
+
+#ifdef Q_OS_WIN
     if (eventType == "windows_generic_MSG" || eventType == "windows_dispatcher_MSG") {
         MSG *msg = static_cast<MSG *>(message);
         if (msg->message == WM_HOTKEY) {
@@ -276,6 +369,34 @@ bool GlobalShortcutManager::nativeEventFilter(const QByteArray &eventType, void 
                 }
                 return true;
             } else if (msg->wParam == toggleHotkeyId) {
+                emit toggleVisibilityRequested();
+                if (result) {
+                    *result = 0;
+                }
+                return true;
+            }
+        }
+    }
+#elif defined(Q_OS_LINUX)
+    if (eventType == "xcb_generic_event_t") {
+        xcb_generic_event_t *ev = static_cast<xcb_generic_event_t *>(message);
+
+        if ((ev->response_type & ~0x80) == XCB_KEY_PRESS) {
+            xcb_key_press_event_t *keyEvent = reinterpret_cast<xcb_key_press_event_t*>(ev);
+
+            unsigned int cleanState = keyEvent->state & (ShiftMask | ControlMask | Mod1Mask | Mod4Mask);
+
+            // Check for screenshot shortcut (Ctrl+Shift+S)
+            if (keyEvent->detail == screenshotKeycode && cleanState == screenshotModifiers) {
+                emit screenshotRequested();
+                if (result) {
+                    *result = 0;
+                }
+                return true;
+            }
+
+            // Check for toggle shortcut (Ctrl+Shift+H)
+            if (keyEvent->detail == toggleKeycode && cleanState == toggleModifiers) {
                 emit toggleVisibilityRequested();
                 if (result) {
                     *result = 0;

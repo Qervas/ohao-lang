@@ -10,7 +10,7 @@
 #include <QMoveEvent>
 #include <QLocalServer>
 
-class SettingsWindow;
+class ModernSettingsWindow;
 class GlobalShortcutManager;
 class SystemTray;
 
@@ -26,7 +26,8 @@ public:
     void openSettings();
     void toggleVisibility();
     void activateWindow();
-    
+    void setAlwaysOnTop(bool onTop);
+
     void setSystemTray(SystemTray *tray);
 
 protected:
@@ -70,12 +71,10 @@ private:
     QTimer *savePosTimer = nullptr;
 
     // Settings window
-    SettingsWindow *settingsWindow = nullptr;
+    ModernSettingsWindow *settingsWindow = nullptr;
 
-    // Global shortcut manager (Windows and macOS)
-#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+    // Global shortcut manager
     GlobalShortcutManager *shortcutManager = nullptr;
-#endif
 
     bool screenshotInProgress = false;
     bool wasVisibleBeforeScreenshot = false;

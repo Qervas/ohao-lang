@@ -1,6 +1,8 @@
 #include "ModernTTSManager.h"
 #include "TTSProvider.h"
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
 #include "SystemTTSProvider.h"
+#endif
 #include "EdgeTTSProvider.h"
 #include "GoogleWebTTSProvider.h"
 #include "../ui/core/AppSettings.h"
@@ -401,8 +403,13 @@ std::unique_ptr<::TTSProvider> ModernTTSManager::createProvider(TTSProvider type
 {
     switch (type) {
         case TTSProvider::SystemTTS:
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
             qDebug() << "ModernTTSManager: Creating SystemTTS provider (native system voices)";
             return std::make_unique<SystemTTSProvider>();
+#else
+            qWarning() << "ModernTTSManager: SystemTTS provider not available (Qt TextToSpeech not found)";
+            return nullptr;
+#endif
         case TTSProvider::GoogleWeb:
             qDebug() << "ModernTTSManager: Creating GoogleWeb provider";
             return std::make_unique<GoogleWebTTSProvider>();
@@ -433,7 +440,11 @@ bool ModernTTSManager::isProviderAvailable(TTSProvider type) const
             qDebug() << "ModernTTSManager: GoogleWeb provider available:" << available;
             break;
         case TTSProvider::SystemTTS:
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
             available = true; // Always available as fallback
+#else
+            available = false; // Qt TextToSpeech not found
+#endif
             qDebug() << "ModernTTSManager: SystemTTS provider available:" << available;
             break;
         default:

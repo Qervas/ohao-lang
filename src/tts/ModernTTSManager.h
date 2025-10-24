@@ -6,15 +6,7 @@
 #include <QStringList>
 #include <QTimer>
 #include <memory>
-
-#ifndef QT_TEXTTOSPEECH_AVAILABLE
-class QTextToSpeech {
-public:
-    enum State { Ready, Speaking, Paused, Error };
-};
-#else
-#include <QTextToSpeech>
-#endif
+#include "TTSCommon.h"
 
 class TTSProvider;
 

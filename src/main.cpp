@@ -46,22 +46,46 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName("ohao");
     QCoreApplication::setOrganizationDomain("ohao.local");
 
+    // Parse command line arguments first (before single instance check)
+    QCommandLineParser parser;
+    parser.setApplicationDescription("Ohao Language Translator");
+    parser.addHelpOption();
+
+    QCommandLineOption screenshotOption("screenshot", "Take a screenshot");
+    parser.addOption(screenshotOption);
+
+    QCommandLineOption toggleOption("toggle", "Toggle widget visibility");
+    parser.addOption(toggleOption);
+
+    parser.process(app);
+
     // Single instance check using shared memory
     const QString uniqueKey = "ohao-lang-single-instance";
     QSharedMemory sharedMemory(uniqueKey);
-    
+
     // Try to attach first - if it succeeds, another instance might be running
     if (sharedMemory.attach()) {
         qDebug() << "Found existing shared memory, checking if instance is actually running...";
         sharedMemory.detach();
-        
+
         // Try to communicate with existing instance via local socket
         QLocalSocket socket;
         socket.connectToServer("ohao-lang-server");
         if (socket.waitForConnected(500)) {
-            // Existing instance is alive
-            qDebug() << "Existing instance is running, activating it...";
-            socket.write("activate");
+            // Existing instance is alive - send command if specified
+            qDebug() << "Existing instance is running...";
+
+            if (parser.isSet(screenshotOption)) {
+                qDebug() << "Sending screenshot command to existing instance";
+                socket.write("screenshot");
+            } else if (parser.isSet(toggleOption)) {
+                qDebug() << "Sending toggle command to existing instance";
+                socket.write("toggle");
+            } else {
+                qDebug() << "Activating existing instance";
+                socket.write("activate");
+            }
+
             socket.waitForBytesWritten(1000);
             socket.disconnectFromServer();
             return 0; // Exit silently
@@ -100,19 +124,6 @@ int main(int argc, char *argv[])
     } else {
         qDebug() << "Successfully created shared memory lock";
     }
-
-    // Parse command line arguments for Linux desktop shortcuts
-    QCommandLineParser parser;
-    parser.setApplicationDescription("Ohao Language Translator");
-    parser.addHelpOption();
-
-    QCommandLineOption screenshotOption("screenshot", "Take a screenshot");
-    parser.addOption(screenshotOption);
-
-    QCommandLineOption toggleOption("toggle", "Toggle widget visibility");
-    parser.addOption(toggleOption);
-
-    parser.process(app);
 
     // Apply theme early so all widgets inherit styles
     ThemeManager::instance().applyFromSettings();

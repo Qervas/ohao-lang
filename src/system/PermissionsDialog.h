@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef Q_OS_MACOS
+
 #include <QDialog>
 #include <QPushButton>
 #include <QLabel>
@@ -8,7 +10,7 @@
 
 /**
  * @brief Dialog shown on first launch to guide users through macOS permissions setup
- * 
+ *
  * This dialog helps users enable required permissions for:
  * - Screen Recording (for OCR screenshots)
  * - Accessibility (for global keyboard shortcuts)
@@ -63,3 +65,5 @@ private:
     bool screenRecordingGranted;
     bool accessibilityGranted;
 };
+
+#endif // Q_OS_MACOS

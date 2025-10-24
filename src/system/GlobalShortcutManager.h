@@ -44,7 +44,21 @@ private:
     EventHandlerRef eventHandlerRef = nullptr;
     bool screenshotRegistered = false;
     bool toggleRegistered = false;
-    
+
     static OSStatus hotKeyHandler(EventHandlerCallRef nextHandler, EventRef event, void *userData);
+#endif
+
+#ifdef Q_OS_LINUX
+    // X11 global shortcut support
+    void *display = nullptr;
+    unsigned int screenshotKeycode = 0;
+    unsigned int toggleKeycode = 0;
+    unsigned int screenshotModifiers = 0;
+    unsigned int toggleModifiers = 0;
+    bool screenshotRegistered = false;
+    bool toggleRegistered = false;
+
+    void startX11Monitoring();
+    void stopX11Monitoring();
 #endif
 };

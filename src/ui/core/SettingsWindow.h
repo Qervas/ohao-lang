@@ -62,6 +62,7 @@ private:
     void setupTranslationTab();
     void setupAppearanceTab();
     void setupTTSTab();
+    void connectSignals();      // Connect all signals after UI is fully initialized
     void applyModernStyling();
     void loadSettings();
     void saveSettings();
@@ -129,6 +130,7 @@ private:
     QLabel *inputVoiceLabel { nullptr };
     QLabel *outputVoiceLabel { nullptr };
     QLineEdit *testTextEdit { nullptr };
+    QPushButton *testInputBtn { nullptr };
     QPushButton *testTTSBtn { nullptr };
     QPushButton *stopTTSBtn { nullptr };
     QTextEdit *ttsStatusText { nullptr };
@@ -142,6 +144,7 @@ private:
 
     // Buttons
     QPushButton *resetBtn;
+    QPushButton *closeBtn;
 
     // Animation
     QPropertyAnimation *showAnimation;

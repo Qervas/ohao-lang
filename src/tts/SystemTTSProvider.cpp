@@ -1,4 +1,7 @@
 #include "SystemTTSProvider.h"
+
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
+
 #include <QDebug>
 
 SystemTTSProvider::SystemTTSProvider(QObject* parent)
@@ -320,3 +323,5 @@ void SystemTTSProvider::onStateChanged(QTextToSpeech::State state)
             break;
     }
 }
+
+#endif // QT_TEXTTOSPEECH_AVAILABLE

@@ -129,6 +129,18 @@ if(APPLE)
     endif()
 endif()
 
+# Link X11 libraries on Linux for global shortcuts
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+    if(X11_FOUND)
+        target_link_libraries(ohao-lang PRIVATE ${X11_LIBRARIES} ${X11_Xext_LIB})
+        target_include_directories(ohao-lang PRIVATE ${X11_INCLUDE_DIR})
+        message(STATUS "X11 libraries found - global shortcuts enabled")
+    else()
+        message(WARNING "X11 libraries not found - global shortcuts will be disabled")
+    endif()
+endif()
+
 # Deploy Qt runtime on Windows so the .exe can run standalone
 if (WIN32)
     # Try to locate windeployqt based on the detected/defined Qt path

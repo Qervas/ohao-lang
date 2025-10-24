@@ -1,6 +1,8 @@
 #include "TTSEngine.h"
 
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
 #include "SystemTTSProvider.h"
+#endif
 #include "GoogleWebTTSProvider.h"
 #include "EdgeTTSProvider.h"
 
@@ -28,7 +30,13 @@ void TTSEngine::ensureProvider()
 
     std::unique_ptr<TTSProvider> providerInstance;
     if (m_providerId == QStringLiteral("system")) {
+#ifdef QT_TEXTTOSPEECH_AVAILABLE
         providerInstance = std::make_unique<SystemTTSProvider>();
+#else
+        qWarning() << "TTSEngine: System TTS provider not available (Qt TextToSpeech not found), falling back to GoogleWeb";
+        providerInstance = std::make_unique<GoogleWebTTSProvider>();
+        m_providerId = QStringLiteral("google-web");
+#endif
     } else if (m_providerId == QStringLiteral("edge-free")) {
         providerInstance = std::make_unique<EdgeTTSProvider>();
     } else {
