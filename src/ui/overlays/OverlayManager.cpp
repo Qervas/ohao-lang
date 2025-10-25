@@ -204,52 +204,39 @@ bool OverlayManager::areOverlaysVisible() const
 
 void OverlayManager::callTTSForResult(const OCRResult& result)
 {
-    qDebug() << "OverlayManager calling TTS for OCR result";
-
-    // Determine which text and language to speak based on user preference
     QString textToSpeak;
     QString languageCode;
 
-    // Get user preference from settings
+    // Get user preference from settings (reload to ensure fresh)
+    AppSettings::instance().reload();
     bool speakTranslation = AppSettings::instance().getTTSConfig().speakTranslation;
 
     // If user wants translation AND we have a translation, speak it
     if (speakTranslation && result.hasTranslation && !result.translatedText.isEmpty() && result.translatedText != result.text) {
         textToSpeak = result.translatedText;
         languageCode = result.targetLanguage;
-        qDebug() << "Speaking TRANSLATED text in target language:" << languageCode << "(user preference: speak translation)";
     } else {
         // Otherwise speak original text in source language
         textToSpeak = result.text;
         languageCode = result.language;
         if (languageCode.isEmpty()) {
-            // Fallback to centralized settings
             languageCode = AppSettings::instance().getTranslationConfig().sourceLanguage;
         }
-        qDebug() << "Speaking ORIGINAL text in source language:" << languageCode << "(user preference:" << (speakTranslation ? "speak translation but none available" : "speak original") << ")";
     }
 
     // Ensure we have a language code, not a display name
-    QString originalLanguageCode = languageCode;
     languageCode = LanguageManager::instance().languageCodeFromDisplayName(languageCode);
-
-    if (languageCode != originalLanguageCode) {
-        qDebug() << "Converted display name to language code:" << originalLanguageCode << "->" << languageCode;
-    }
 
     // Convert language code to QLocale
     QLocale targetLocale = LanguageManager::instance().localeFromLanguageCode(languageCode);
 
-    qDebug() << "=== OverlayManager TTS Using ModernTTSManager ===";
-    qDebug() << "Text to speak:" << textToSpeak.left(100);
-    qDebug() << "Language code:" << languageCode;
-    qDebug() << "Target locale:" << targetLocale.name();
+    // Check if text is empty
+    if (textToSpeak.isEmpty()) {
+        return;
+    }
 
     // Use ModernTTSManager (same as test button in settings)
     ModernTTSManager::instance().speak(textToSpeak, targetLocale);
-
-    qDebug() << "TTS speak() call completed";
-    qDebug() << "=== OverlayManager TTS END ===";
 }
 
 void OverlayManager::onTTSFinished()

@@ -102,15 +102,12 @@ void ModernTTSManager::speak(const QString& text, const QString& languageCode)
 
 void ModernTTSManager::speak(const QString& text, const QLocale& locale)
 {
-    qDebug() << "=== speak(text, locale) called ===";
-    qDebug() << "Input locale:" << locale.name();
-    qDebug() << "m_defaultOptions.preferredVoiceId:" << m_defaultOptions.preferredVoiceId;
-    qDebug() << "m_defaultOptions.preferredProvider:" << static_cast<int>(m_defaultOptions.preferredProvider);
+    // Reload settings to get latest provider and voice selection
+    loadSettings();
 
     TTSOptions options = m_defaultOptions;
     options.locale = locale;
 
-    qDebug() << "Created options with locale:" << options.locale.name() << "and preferredVoiceId:" << options.preferredVoiceId;
     speak(text, options);
 }
 
