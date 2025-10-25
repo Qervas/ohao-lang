@@ -98,6 +98,7 @@ private:
     QLabel *providerInfoLabel = nullptr;
     QComboBox *voiceCombo = nullptr;
     QPushButton *testVoiceBtn = nullptr;
+    QCheckBox *ttsSpeakTranslationCheck = nullptr;
 
     // Settings storage
     QSettings settings;
