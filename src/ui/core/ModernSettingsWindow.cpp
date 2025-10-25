@@ -291,9 +291,8 @@ QWidget* ModernSettingsWindow::createOCRPage()
     ocrEngineCombo = new QComboBox();
 #ifdef Q_OS_MACOS
     ocrEngineCombo->addItems({"Apple Vision (Recommended)", "Tesseract"});
-#elif defined(Q_OS_WIN)
-    ocrEngineCombo->addItems({"Windows OCR (Recommended)", "Tesseract"});
 #else
+    // Windows and Linux both use Tesseract
     ocrEngineCombo->addItems({"Tesseract"});
 #endif
     connect(ocrEngineCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -872,9 +871,8 @@ void ModernSettingsWindow::loadSettings()
         QString savedEngine = settings.value("ocr/engine", "").toString();
 #ifdef Q_OS_MACOS
         QString display = savedEngine.contains("Apple") ? "Apple Vision (Recommended)" : "Tesseract";
-#elif defined(Q_OS_WIN)
-        QString display = savedEngine.contains("Windows") ? "Windows OCR (Recommended)" : "Tesseract";
 #else
+        // Windows and Linux: Always use Tesseract
         QString display = "Tesseract";
 #endif
         ocrEngineCombo->setCurrentText(display);
@@ -969,7 +967,6 @@ void ModernSettingsWindow::saveSettings()
         QString text = ocrEngineCombo->currentText();
         QString internalName;
         if (text.contains("Apple")) internalName = "AppleVision";
-        else if (text.contains("Windows")) internalName = "WindowsOCR";
         else internalName = "Tesseract";
         settings.setValue("ocr/engine", internalName);
     }

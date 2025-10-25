@@ -71,14 +71,9 @@ void OverlayManager::performOCR(const QPixmap& image, const QRect& selectionRect
     // Set OCR engine type
     if (ocrConfig.engine == "AppleVision") {
         m_ocrEngine->setEngine(OCREngine::AppleVision);
-    } else if (ocrConfig.engine == "Tesseract") {
+    } else {
+        // Default to Tesseract for all other cases (including legacy "WindowsOCR", "EasyOCR", "PaddleOCR")
         m_ocrEngine->setEngine(OCREngine::Tesseract);
-    } else if (ocrConfig.engine == "EasyOCR") {
-        m_ocrEngine->setEngine(OCREngine::EasyOCR);
-    } else if (ocrConfig.engine == "PaddleOCR") {
-        m_ocrEngine->setEngine(OCREngine::PaddleOCR);
-    } else if (ocrConfig.engine == "WindowsOCR" || ocrConfig.engine == "Windows OCR") {
-        m_ocrEngine->setEngine(OCREngine::WindowsOCR);
     }
 
     // Configure OCR settings
