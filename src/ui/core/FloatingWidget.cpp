@@ -4,6 +4,7 @@
 #include "ScreenCapture.h"
 #include "ModernSettingsWindow.h"
 #include "ThemeManager.h"
+#include "ThemeColors.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QHBoxLayout>
@@ -36,16 +37,23 @@ FloatingWidget::FloatingWidget(QWidget *parent)
     // Connect to theme changes for runtime updates
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme theme) {
         qDebug() << "FloatingWidget: Received theme change signal, new theme:" << ThemeManager::toString(theme);
-        // Update palette from application palette (set by ThemeManager)
-        setPalette(QApplication::palette());
 
-        // Update child widgets' palettes
-        if (screenshotBtn) screenshotBtn->setPalette(QApplication::palette());
-        if (settingsBtn) settingsBtn->setPalette(QApplication::palette());
+        // Force immediate complete repaint with new theme colors
+        repaint();  // Use repaint() instead of update() for immediate refresh
 
-        qDebug() << "FloatingWidget: Palette updated. Window color:" << palette().window().color().name();
-        // Force repaint with new colors
-        update();
+        // Force buttons to update their styles
+        if (screenshotBtn) {
+            screenshotBtn->style()->unpolish(screenshotBtn);
+            screenshotBtn->style()->polish(screenshotBtn);
+            screenshotBtn->repaint();
+        }
+        if (settingsBtn) {
+            settingsBtn->style()->unpolish(settingsBtn);
+            settingsBtn->style()->polish(settingsBtn);
+            settingsBtn->repaint();
+        }
+
+        qDebug() << "FloatingWidget: Theme repainted to" << ThemeManager::toString(theme);
     });
 
     // Initialize global shortcut manager (all platforms)
@@ -100,8 +108,7 @@ void FloatingWidget::setupUI()
 {
     // Make widget frameless
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window | Qt::WindowStaysOnTopHint);
-    setAttribute(Qt::WA_TranslucentBackground);
-    setAttribute(Qt::WA_StyledBackground, true);
+    setAttribute(Qt::WA_StyledBackground, true);  // Enable stylesheet styling
     setObjectName("floatingWidget");
 
     // Enable mouse tracking for better drag experience
@@ -206,33 +213,8 @@ void FloatingWidget::applyModernStyle()
 
 void FloatingWidget::paintEvent(QPaintEvent *event)
 {
-    Q_UNUSED(event)
-    QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    QRect r = rect();
-    int radius = 18;
-
-    QColor base = palette().window().color();
-    if (base.alpha() == 255) base.setAlpha(200); // ensure translucency
-    bool hl = property("highlight").toString() == QStringLiteral("true");
-    QColor fill = base;
-    if (hl) {
-        fill = fill.lighter(115);
-        fill.setAlpha(qMin(255, fill.alpha() + 25));
-    }
-
-    QPainterPath path;
-    path.addRoundedRect(r.adjusted(0,0,-1,-1), radius, radius);
-    p.fillPath(path, fill);
-    if (hl) {
-        // Use theme highlight color for border
-        QColor borderColor = palette().highlight().color();
-        borderColor.setAlpha(90);
-        QPen pen(borderColor);
-        pen.setWidth(2);
-        p.setPen(pen);
-        p.drawPath(path);
-    }
+    // Let stylesheet handle everything - no custom painting
+    QWidget::paintEvent(event);
 }
 
 void FloatingWidget::enterEvent(QEnterEvent *event)

@@ -86,32 +86,32 @@ namespace ThemeColors {
     namespace Cyberpunk {
         // Base colors
         const QColor Window(10, 12, 20);
-        const QColor WindowText(255, 255, 255);
+        const QColor WindowText(200, 220, 255);  // Softer blue-white for better readability
         const QColor Base(8, 10, 18);
         const QColor AlternateBase(14, 16, 26);
-        const QColor Text(230, 255, 252);
-        const QColor Button(14, 16, 26);
-        const QColor ButtonText(255, 255, 255);
-        const QColor Highlight(0, 255, 208);
+        const QColor Text(200, 220, 255);  // Match WindowText for consistency
+        const QColor Button(18, 20, 32);
+        const QColor ButtonText(200, 220, 255);
+        const QColor Highlight(0, 255, 208);  // Teal accent
         const QColor HighlightedText(10, 12, 20);
 
         // Component-specific colors
         const QColor FloatingWidgetBg(14, 16, 26, 225);
-        const QColor FloatingWidgetBorder(255, 0, 128, 115);
-        const QColor FloatingWidgetHighlight(0, 255, 208);
-        const QColor ButtonHover(255, 0, 128, 46);
-        const QColor ButtonPressed(0, 255, 208, 64);
+        const QColor FloatingWidgetBorder(0, 180, 255, 150);  // Blue instead of harsh magenta
+        const QColor FloatingWidgetHighlight(0, 255, 208);  // Teal for highlights
+        const QColor ButtonHover(0, 180, 255, 60);  // Blue hover
+        const QColor ButtonPressed(0, 255, 208, 80);  // Teal press
 
         // Screenshot toolbar colors
         const QColor ScreenshotToolbarBg(14, 16, 26, 235);
-        const QColor ScreenshotToolbarBorder(255, 0, 128, 102);
+        const QColor ScreenshotToolbarBorder(0, 180, 255, 120);  // Blue border
         const QColor ScreenshotButtonBg(18, 20, 32, 200);
-        const QColor ScreenshotButtonHover(255, 0, 128, 80);
-        const QColor ScreenshotButtonPressed(0, 255, 208, 90);
+        const QColor ScreenshotButtonHover(0, 180, 255, 80);  // Blue hover
+        const QColor ScreenshotButtonPressed(0, 255, 208, 90);  // Teal press
 
         // Accent colors
         const QColor Teal(0, 255, 208);
-        const QColor Magenta(255, 0, 128);
+        const QColor Blue(0, 180, 255);  // Primary accent - readable blue
 
         // Status colors
         const QColor Success(0, 255, 208);

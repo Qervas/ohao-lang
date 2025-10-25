@@ -98,26 +98,43 @@ void ThemeManager::applyLight() {
 
     // Build stylesheet using ThemeColors
     QString style = QString(R"(
-        /* Floating widget */
-        #floatingWidget { background:rgba(%1,%2,%3,%4); border:1px solid rgba(%5,%6,%7,%8); border-radius:18px; }
-        #floatingWidget[highlight="true"] { border: 2px solid rgba(%9,%10,%11,%12); }
-        #floatingWidget QPushButton#floatingButton { background:transparent; border:none; font-size:18px; font-weight:600; color:%13; }
-        #floatingWidget QPushButton#floatingButton:hover { background:rgba(%14,%15,%16,%17); border-radius:12px; }
-        #floatingWidget QPushButton#floatingButton:pressed { background:rgba(%18,%19,%20,%21); }
+        /* Floating widget - clean stylesheet-based design */
+        #floatingWidget {
+            background-color:rgba(%1,%2,%3,%4);
+            border:1px solid rgba(%5,%6,%7,%8);
+            border-radius:18px;
+        }
+        #floatingWidget[highlight="true"] {
+            border:2px solid rgba(%9,%10,%11,%12);
+        }
+        #floatingWidget QPushButton#floatingButton {
+            background:transparent;
+            border:none;
+            font-size:18px;
+            font-weight:600;
+            color:%13;
+        }
+        #floatingWidget QPushButton#floatingButton:hover {
+            background:rgba(%14,%15,%16,%17);
+            border-radius:12px;
+        }
+        #floatingWidget QPushButton#floatingButton:pressed {
+            background:rgba(%18,%19,%20,%21);
+        }
         /* Validation */
         QComboBox[valid="true"], QLineEdit[valid="true"] { border:1px solid %22; }
         QComboBox[valid="false"], QLineEdit[valid="false"] { border:1px solid %23; }
         QGroupBox { padding-top:18px; margin-top:12px; border:1px solid rgba(%5,%6,%7,38); border-radius:8px; }
         QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left:12px; top:4px; padding:2px 6px; background:transparent; font-weight:600; }
     )")
-    .arg(FloatingWidgetBg.red()).arg(FloatingWidgetBg.green()).arg(FloatingWidgetBg.blue()).arg(FloatingWidgetBg.alpha())
-    .arg(FloatingWidgetBorder.red()).arg(FloatingWidgetBorder.green()).arg(FloatingWidgetBorder.blue()).arg(FloatingWidgetBorder.alpha())
-    .arg(FloatingWidgetHighlight.red()).arg(FloatingWidgetHighlight.green()).arg(FloatingWidgetHighlight.blue()).arg(FloatingWidgetHighlight.alpha())
-    .arg(WindowText.name())
-    .arg(ButtonHover.red()).arg(ButtonHover.green()).arg(ButtonHover.blue()).arg(ButtonHover.alpha())
-    .arg(ButtonPressed.red()).arg(ButtonPressed.green()).arg(ButtonPressed.blue()).arg(ButtonPressed.alpha())
-    .arg(Success.name())
-    .arg(Error.name());
+    .arg(FloatingWidgetBg.red()).arg(FloatingWidgetBg.green()).arg(FloatingWidgetBg.blue()).arg(FloatingWidgetBg.alpha()) // 1-4
+    .arg(FloatingWidgetBorder.red()).arg(FloatingWidgetBorder.green()).arg(FloatingWidgetBorder.blue()).arg(FloatingWidgetBorder.alpha()) // 5-8
+    .arg(FloatingWidgetHighlight.red()).arg(FloatingWidgetHighlight.green()).arg(FloatingWidgetHighlight.blue()).arg(FloatingWidgetHighlight.alpha()) // 9-12
+    .arg(WindowText.name())                      // 13
+    .arg(ButtonHover.red()).arg(ButtonHover.green()).arg(ButtonHover.blue()).arg(ButtonHover.alpha()) // 14-17
+    .arg(ButtonPressed.red()).arg(ButtonPressed.green()).arg(ButtonPressed.blue()).arg(ButtonPressed.alpha()) // 18-21
+    .arg(Success.name())                         // 22
+    .arg(Error.name());                          // 23
 
     setAppPaletteAndStyle(pal, style);
 }
@@ -166,12 +183,29 @@ void ThemeManager::applyDark() {
         QLabel[status="success"] { color:%12; }
         QLabel[status="error"] { color:%13; }
         QLabel[status="progress"] { color:%5; }
-        /* Floating widget */
-        #floatingWidget { background:rgba(%14,%15,%16,%17); border:1px solid rgba(%18,%19,%20,%21); border-radius:18px; }
-        #floatingWidget[highlight="true"] { border-color:%5; }
-        #floatingWidget QPushButton#floatingButton { background:transparent; border:none; font-size:18px; font-weight:600; color:%1; }
-        #floatingWidget QPushButton#floatingButton:hover { background:rgba(%22,%23,%24,%25); border-radius:12px; }
-        #floatingWidget QPushButton#floatingButton:pressed { background:rgba(%26,%27,%28,%29); }
+        /* Floating widget - clean stylesheet-based design */
+        #floatingWidget {
+            background-color:rgba(%14,%15,%16,%17);
+            border:1px solid rgba(%18,%19,%20,%21);
+            border-radius:18px;
+        }
+        #floatingWidget[highlight="true"] {
+            border-color:%5;
+        }
+        #floatingWidget QPushButton#floatingButton {
+            background:transparent;
+            border:none;
+            font-size:18px;
+            font-weight:600;
+            color:%1;
+        }
+        #floatingWidget QPushButton#floatingButton:hover {
+            background:rgba(%22,%23,%24,%25);
+            border-radius:12px;
+        }
+        #floatingWidget QPushButton#floatingButton:pressed {
+            background:rgba(%26,%27,%28,%29);
+        }
         /* Validation */
         QComboBox[valid="true"], QLineEdit[valid="true"] { border:1px solid %12; }
         QComboBox[valid="false"], QLineEdit[valid="false"] { border:1px solid %13; }
@@ -243,12 +277,29 @@ void ThemeManager::applyCyberpunk() {
         QLabel[status="success"] { color:%23; }
         QLabel[status="error"] { color:%22; }
         QLabel[status="progress"] { color:%8; }
-        /* Floating widget */
-        #floatingWidget { background:rgba(%24,%25,%26,%27); border:1px solid rgba(%28,%29,%30,%31); border-radius:18px; }
-        #floatingWidget[highlight="true"] { border-color:%4; }
-        #floatingWidget QPushButton#floatingButton { background:transparent; border:none; font-size:20px; font-weight:600; color:%4; }
-        #floatingWidget QPushButton#floatingButton:hover { background:rgba(%32,%33,%34,%35); border-radius:12px; }
-        #floatingWidget QPushButton#floatingButton:pressed { background:rgba(%36,%37,%38,%39); }
+        /* Floating widget - clean stylesheet-based design */
+        #floatingWidget {
+            background-color:rgba(%24,%25,%26,%27);
+            border:1px solid rgba(%28,%29,%30,%31);
+            border-radius:18px;
+        }
+        #floatingWidget[highlight="true"] {
+            border-color:%4;
+        }
+        #floatingWidget QPushButton#floatingButton {
+            background:transparent;
+            border:none;
+            font-size:20px;
+            font-weight:600;
+            color:%4;
+        }
+        #floatingWidget QPushButton#floatingButton:hover {
+            background:rgba(%32,%33,%34,%35);
+            border-radius:12px;
+        }
+        #floatingWidget QPushButton#floatingButton:pressed {
+            background:rgba(%36,%37,%38,%39);
+        }
         /* Validation */
         QComboBox[valid="true"], QLineEdit[valid="true"] { border:1px solid %23; }
         QComboBox[valid="false"], QLineEdit[valid="false"] { border:1px solid %22; }
@@ -259,8 +310,8 @@ void ThemeManager::applyCyberpunk() {
     .arg(Teal.name())                            // 4 - Cyberpunk teal accent
     .arg(Button.name())                          // 5
     .arg(WindowText.name())                      // 6
-    .arg(Magenta.name())                         // 7 - Cyberpunk magenta accent (with alpha in original)
-    .arg(Magenta.name())                         // 8 - Cyberpunk magenta
+    .arg(Blue.name())                            // 7 - Cyberpunk blue accent
+    .arg(Blue.name())                            // 8 - Cyberpunk blue
     .arg(AlternateBase.name())                   // 9
     .arg(ScreenshotToolbarBg.red()).arg(ScreenshotToolbarBg.green()).arg(ScreenshotToolbarBg.blue()).arg(ScreenshotToolbarBg.alpha()) // 10-13
     .arg(ButtonHover.red()).arg(ButtonHover.green()).arg(ButtonHover.blue()).arg(ButtonHover.alpha()) // 14-17
