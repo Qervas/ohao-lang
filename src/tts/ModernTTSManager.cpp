@@ -12,6 +12,9 @@
 #include <QAudioDevice>
 #include <QMediaDevices>
 #include <QRegularExpression>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <algorithm>
 
 ModernTTSManager* ModernTTSManager::s_instance = nullptr;
@@ -99,8 +102,15 @@ void ModernTTSManager::speak(const QString& text, const QString& languageCode)
 
 void ModernTTSManager::speak(const QString& text, const QLocale& locale)
 {
+    qDebug() << "=== speak(text, locale) called ===";
+    qDebug() << "Input locale:" << locale.name();
+    qDebug() << "m_defaultOptions.preferredVoiceId:" << m_defaultOptions.preferredVoiceId;
+    qDebug() << "m_defaultOptions.preferredProvider:" << static_cast<int>(m_defaultOptions.preferredProvider);
+
     TTSOptions options = m_defaultOptions;
     options.locale = locale;
+
+    qDebug() << "Created options with locale:" << options.locale.name() << "and preferredVoiceId:" << options.preferredVoiceId;
     speak(text, options);
 }
 
@@ -156,18 +166,42 @@ void ModernTTSManager::speakWithVoice(const QString& text, const ModernTTSManage
 
 ModernTTSManager::VoiceInfo ModernTTSManager::selectBestVoice(const QLocale& locale, const TTSOptions& options) const
 {
-    qDebug() << "ModernTTSManager: Selecting best voice for" << locale.name();
-    qDebug() << "Preferred voice ID from settings:" << options.preferredVoiceId;
+    qDebug() << "=== selectBestVoice() ENTRY ===";
+    qDebug() << "Requested locale:" << locale.name();
+    qDebug() << "Preferred voice ID:" << options.preferredVoiceId;
+    qDebug() << "Preferred provider:" << static_cast<int>(options.preferredProvider);
+    qDebug() << "Total available voices:" << m_availableVoices.size();
 
     // First priority: if user has explicitly selected a voice, try to use it
     if (!options.preferredVoiceId.isEmpty()) {
+        qDebug() << "Searching for user's preferred voice:" << options.preferredVoiceId;
+
+        int matchCount = 0;
         for (const ModernTTSManager::VoiceInfo& voice : m_availableVoices) {
-            if (voice.id == options.preferredVoiceId && voice.available) {
-                qDebug() << "ModernTTSManager: Using user's preferred voice:" << voice.name << "ID:" << voice.id;
-                return voice;
+            if (voice.id == options.preferredVoiceId) {
+                matchCount++;
+                qDebug() << "  Found matching voice ID:" << voice.id << "Name:" << voice.name
+                         << "Available:" << voice.available << "Provider:" << static_cast<int>(voice.provider);
+                if (voice.available) {
+                    qDebug() << "✅ ModernTTSManager: Using user's preferred voice:" << voice.name;
+                    return voice;
+                } else {
+                    qDebug() << "⚠️ Voice found but NOT available!";
+                }
             }
         }
-        qDebug() << "ModernTTSManager: User's preferred voice" << options.preferredVoiceId << "not available, falling back to auto-selection";
+
+        if (matchCount == 0) {
+            qDebug() << "❌ User's preferred voice" << options.preferredVoiceId << "NOT FOUND in available voices list!";
+            qDebug() << "   Available voice IDs:";
+            for (int i = 0; i < qMin(10, m_availableVoices.size()); i++) {
+                qDebug() << "   -" << m_availableVoices[i].id << "(" << m_availableVoices[i].name << ")";
+            }
+        } else {
+            qDebug() << "⚠️ Preferred voice found but not available, falling back to auto-selection";
+        }
+    } else {
+        qDebug() << "No preferred voice ID set, using auto-selection";
     }
 
     // Get voices for the requested language
@@ -639,13 +673,49 @@ void ModernTTSManager::testCurrentConfiguration()
 
 void ModernTTSManager::testVoice(const ModernTTSManager::VoiceInfo& voice)
 {
-    QString testText = "Hello, this is a voice test.";
+    // Load test sentence from JSON file based on voice locale
+    QString testText = "Hello, this is a voice test."; // Default fallback
+
+    // Try to load from resources/test_sentences.json
+    QString jsonPath = QCoreApplication::applicationDirPath() + "/resources/test_sentences.json";
+    QFile jsonFile(jsonPath);
+
+    if (jsonFile.open(QIODevice::ReadOnly)) {
+        QByteArray jsonData = jsonFile.readAll();
+        jsonFile.close();
+
+        QJsonDocument doc = QJsonDocument::fromJson(jsonData);
+        if (doc.isObject()) {
+            QJsonObject sentences = doc.object();
+
+            // Try exact locale match first (e.g., "de_DE")
+            QString localeKey = voice.locale.name();
+            if (sentences.contains(localeKey)) {
+                testText = sentences[localeKey].toString();
+                qDebug() << "ModernTTSManager: Using test sentence for locale" << localeKey;
+            }
+            // Try language-only match (e.g., "de")
+            else {
+                QString langKey = voice.locale.name().left(2);
+                // Find first locale starting with language code
+                for (auto it = sentences.constBegin(); it != sentences.constEnd(); ++it) {
+                    if (it.key().startsWith(langKey + "_")) {
+                        testText = it.value().toString();
+                        qDebug() << "ModernTTSManager: Using test sentence for language" << langKey << "from" << it.key();
+                        break;
+                    }
+                }
+            }
+        }
+    } else {
+        qDebug() << "ModernTTSManager: Could not load test_sentences.json from" << jsonPath;
+    }
 
     // Override locale for test
     TTSOptions options = m_defaultOptions;
     options.locale = voice.locale;
 
-    qDebug() << "ModernTTSManager: Testing voice:" << voice.name;
+    qDebug() << "ModernTTSManager: Testing voice:" << voice.name << "with text:" << testText;
     speakWithVoice(testText, voice, options);
 }
 

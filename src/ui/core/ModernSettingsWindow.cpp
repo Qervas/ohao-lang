@@ -1,4 +1,5 @@
 #include "ModernSettingsWindow.h"
+#include "AppSettings.h"
 #include "TTSEngine.h"
 #include "TTSManager.h"
 #include "ModernTTSManager.h"
@@ -987,21 +988,45 @@ void ModernSettingsWindow::saveSettings()
         settings.setValue("appearance/widgetWidth", widgetWidthSlider->value());
     }
 
-    // TTS
+    // TTS - Save to both new QSettings AND AppSettings for compatibility
     if (ttsEnabledCheck) {
         settings.setValue("tts/enabled", ttsEnabledCheck->isChecked());
     }
+
+    // Update AppSettings so ModernTTSManager can load the settings
+    AppSettings::TTSConfig ttsConfig = AppSettings::instance().getTTSConfig();
+
     if (ttsProviderCombo) {
-        settings.setValue("tts/provider", ttsProviderCombo->currentData().toString());
+        QString providerStr = ttsProviderCombo->currentData().toString();
+        settings.setValue("tts/provider", providerStr);
+
+        // Map to old engine name for AppSettings
+        if (providerStr == "edge-free") {
+            ttsConfig.engine = "Microsoft Edge TTS";
+        } else if (providerStr == "google-web") {
+            ttsConfig.engine = "Google Web TTS";
+        } else if (providerStr == "system") {
+            ttsConfig.engine = "System";
+        }
     }
+
     if (voiceCombo && voiceCombo->isEnabled() && voiceCombo->currentIndex() >= 0) {
         auto voiceData = voiceCombo->currentData();
         if (voiceData.canConvert<ModernTTSManager::VoiceInfo>()) {
             auto voice = voiceData.value<ModernTTSManager::VoiceInfo>();
             settings.setValue("tts/voiceId", voice.id);
             settings.setValue("tts/voiceName", voice.name);
+            ttsConfig.voice = voice.id;  // Update AppSettings too
         }
     }
+
+    // Save volume and speed from ModernTTSManager defaults
+    auto ttsOptions = ModernTTSManager::instance().getDefaultOptions();
+    ttsConfig.volume = ttsOptions.volume;
+    ttsConfig.speed = ttsOptions.rate;
+
+    AppSettings::instance().setTTSConfig(ttsConfig);
+    qDebug() << "ModernSettingsWindow: Saved TTS config - Engine:" << ttsConfig.engine << "Voice:" << ttsConfig.voice;
 
     settings.sync();
 }

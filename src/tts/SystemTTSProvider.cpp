@@ -68,14 +68,19 @@ void SystemTTSProvider::speak(const QString& text, const QLocale& locale, double
 
     qDebug() << "SystemTTSProvider: Speaking text:" << text.left(50);
     qDebug() << "SystemTTSProvider: Config voice:" << m_config.voice;
-    
+
     // Apply volume, rate, and pitch
+    // Qt's rate range: -1.0 (slow) to 1.0 (fast), with 0.0 = normal
+    // Our rate range: 0.5 (slow) to 1.5 (fast), with 1.0 = normal
+    // Conversion: qtRate = (rate - 1.0), clamped to [-1.0, 1.0]
+    double qtRate = qBound(-1.0, rate - 1.0, 1.0);
+
     m_engine->setVolume(volume);
-    m_engine->setRate(rate);
+    m_engine->setRate(qtRate);
     m_engine->setPitch(pitch);
 
     qDebug() << "SystemTTSProvider: Applied settings - Volume:" << m_engine->volume()
-             << "Rate:" << m_engine->rate() << "Pitch:" << m_engine->pitch();
+             << "Rate (input:" << rate << "-> Qt:" << qtRate << ")" << "Pitch:" << m_engine->pitch();
     
     // Re-apply the voice from config to ensure it's set correctly
     // This is necessary because the voice state might have been changed elsewhere

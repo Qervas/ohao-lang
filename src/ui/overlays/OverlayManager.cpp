@@ -211,13 +211,6 @@ void OverlayManager::callTTSForResult(const OCRResult& result)
 {
     qDebug() << "OverlayManager calling TTS for OCR result";
 
-    // Use the same working TTS engine as settings
-    auto* ttsEngine = TTSManager::instance().ttsEngine();
-    if (!ttsEngine) {
-        qDebug() << "TTS Engine not available from TTSManager";
-        return;
-    }
-
     // Get the language from OCR result or use default
     QString languageCode = result.language;
     if (languageCode.isEmpty()) {
@@ -233,25 +226,19 @@ void OverlayManager::callTTSForResult(const OCRResult& result)
         qDebug() << "Converted display name to language code:" << originalLanguageCode << "->" << languageCode;
     }
 
-    qDebug() << "=== OverlayManager TTS Using Working Engine ===";
+    // Convert language code to QLocale
+    QLocale targetLocale = LanguageManager::instance().localeFromLanguageCode(languageCode);
+
+    qDebug() << "=== OverlayManager TTS Using ModernTTSManager ===";
     qDebug() << "Text to speak:" << result.text.left(100);
     qDebug() << "Language code:" << languageCode;
-    qDebug() << "TTS Engine provider:" << ttsEngine->providerName();
-
-    // Convert language code to QLocale using LanguageManager (same as settings)
-    QLocale targetLocale = LanguageManager::instance().localeFromLanguageCode(languageCode);
     qDebug() << "Target locale:" << targetLocale.name();
 
-    // Configure TTS engine from current settings (same as settings test)
-    ttsEngine->configureFromCurrentSettings();
-    ttsEngine->setVolume(1.0);  // Full volume like settings test
+    // Use ModernTTSManager (same as test button in settings)
+    ModernTTSManager::instance().speak(result.text, targetLocale);
 
-    // Use the same TTS call as the working settings test
-    qDebug() << "Calling ttsEngine->speak() with same logic as settings test";
-    ttsEngine->speak(result.text, true, targetLocale);  // true = isInputText (OCR result)
-
-    qDebug() << "TTS speak() call completed using working engine";
-    qDebug() << "=== OverlayManager TTS Using Working Engine END ===";
+    qDebug() << "TTS speak() call completed";
+    qDebug() << "=== OverlayManager TTS END ===";
 }
 
 void OverlayManager::onTTSFinished()
