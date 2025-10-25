@@ -169,6 +169,7 @@ AppSettings::TTSConfig AppSettings::getTTSConfig() const
         // Default TTS output language to translation target language
         QString targetLang = getTranslationConfig().targetLanguage;
         m_cachedTTSConfig.outputLanguage = m_settings->value("tts/outputLanguage", targetLang).toString();
+        m_cachedTTSConfig.speakTranslation = m_settings->value("tts/speakTranslation", false).toBool();
         m_ttsCacheValid = true;
     }
     return m_cachedTTSConfig;
@@ -182,6 +183,7 @@ void AppSettings::setTTSConfig(const TTSConfig& config)
     m_settings->setValue("tts/volume", config.volume);
     m_settings->setValue("tts/inputLanguage", config.inputLanguage);
     m_settings->setValue("tts/outputLanguage", config.outputLanguage);
+    m_settings->setValue("tts/speakTranslation", config.speakTranslation);
 
     m_cachedTTSConfig = config;
     m_ttsCacheValid = true;

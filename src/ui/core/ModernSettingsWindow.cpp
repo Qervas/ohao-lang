@@ -548,6 +548,31 @@ QWidget* ModernSettingsWindow::createVoicePage()
     voicesLayout->addRow("Voice:", voiceWidget);
 
     layout->addWidget(voicesGroup);
+
+    // Speech Language group - iOS-style toggle
+    QGroupBox *speechGroup = new QGroupBox("Speech Language");
+    speechGroup->setObjectName("settingsGroup");
+    QVBoxLayout *speechLayout = new QVBoxLayout(speechGroup);
+    speechLayout->setSpacing(8);
+    speechLayout->setContentsMargins(0, 0, 0, 0);
+
+    ttsSpeakTranslationCheck = new QCheckBox("Speak Translated Text (Output Language)");
+    ttsSpeakTranslationCheck->setChecked(false);  // Default: speak original/input language
+    ttsSpeakTranslationCheck->setToolTip("When enabled: TTS speaks the translated text in the target language\nWhen disabled: TTS speaks the original text in the source language");
+    connect(ttsSpeakTranslationCheck, &QCheckBox::toggled,
+            this, [this](bool checked) {
+                // Update voice list to show voices for appropriate language
+                updateVoiceList();
+                onSettingChanged();
+            });
+    speechLayout->addWidget(ttsSpeakTranslationCheck);
+
+    QLabel *speechInfo = new QLabel("Choose whether TTS speaks the original text or the translation");
+    speechInfo->setWordWrap(true);
+    speechInfo->setStyleSheet("color: #86868B; font-size: 11px; padding-left: 24px;");
+    speechLayout->addWidget(speechInfo);
+
+    layout->addWidget(speechGroup);
     layout->addStretch();
 
     // Populate voices for the current provider
@@ -921,6 +946,9 @@ void ModernSettingsWindow::loadSettings()
             ttsProviderCombo->setCurrentIndex(providerIndex);
         }
     }
+    if (ttsSpeakTranslationCheck) {
+        ttsSpeakTranslationCheck->setChecked(settings.value("tts/speakTranslation", false).toBool());
+    }
     // Voice will be restored by updateVoiceList() using the saved voice name
 
     qDebug() << "ModernSettingsWindow: Settings loaded successfully";
@@ -928,12 +956,24 @@ void ModernSettingsWindow::loadSettings()
 
 void ModernSettingsWindow::saveSettings()
 {
-    // General - Languages
+    // General - Languages - Save to both QSettings AND AppSettings
     if (ocrLanguageCombo) {
-        settings.setValue("ocr/language", ocrLanguageCombo->currentText());
+        QString ocrLang = ocrLanguageCombo->currentText();
+        settings.setValue("ocr/language", ocrLang);
+
+        // Update AppSettings OCR config
+        auto ocrConfig = AppSettings::instance().getOCRConfig();
+        ocrConfig.language = ocrLang;
+        AppSettings::instance().setOCRConfig(ocrConfig);
     }
     if (targetLanguageCombo) {
-        settings.setValue("translation/targetLanguage", targetLanguageCombo->currentText());
+        QString targetLang = targetLanguageCombo->currentText();
+        settings.setValue("translation/targetLanguage", targetLang);
+
+        // Update AppSettings Translation config
+        auto translationConfig = AppSettings::instance().getTranslationConfig();
+        translationConfig.targetLanguage = targetLang;
+        AppSettings::instance().setTranslationConfig(translationConfig);
     }
 
     // General - Screenshot
@@ -1030,6 +1070,12 @@ void ModernSettingsWindow::saveSettings()
     ttsConfig.volume = ttsOptions.volume;
     ttsConfig.speed = ttsOptions.rate;
 
+    // Save speak translation setting
+    if (ttsSpeakTranslationCheck) {
+        ttsConfig.speakTranslation = ttsSpeakTranslationCheck->isChecked();
+        settings.setValue("tts/speakTranslation", ttsConfig.speakTranslation);
+    }
+
     AppSettings::instance().setTTSConfig(ttsConfig);
     qDebug() << "ModernSettingsWindow: Saved TTS config - Engine:" << ttsConfig.engine << "Voice:" << ttsConfig.voice;
 
@@ -1125,7 +1171,7 @@ void ModernSettingsWindow::updateGnomeShortcuts()
 
 void ModernSettingsWindow::updateVoiceList()
 {
-    if (!voiceCombo || !ttsProviderCombo || !ocrLanguageCombo) {
+    if (!voiceCombo || !ttsProviderCombo || !ocrLanguageCombo || !targetLanguageCombo) {
         return;
     }
 
@@ -1142,27 +1188,38 @@ void ModernSettingsWindow::updateVoiceList()
         selectedProvider = ModernTTSManager::TTSProvider::SystemTTS;
     }
 
-    // Get selected OCR language and map to QLocale
-    QString ocrLang = ocrLanguageCombo->currentText();
+    // Determine which language to use based on toggle
+    QString languageToUse;
+    if (ttsSpeakTranslationCheck && ttsSpeakTranslationCheck->isChecked()) {
+        // Speak translation - use target/output language
+        languageToUse = targetLanguageCombo->currentText();
+        qDebug() << "Voice list: Using OUTPUT language (translation):" << languageToUse;
+    } else {
+        // Speak original - use OCR/input language
+        languageToUse = ocrLanguageCombo->currentText();
+        qDebug() << "Voice list: Using INPUT language (original):" << languageToUse;
+    }
+
+    // Map language to QLocale
     QLocale::Language targetLang = QLocale::English;  // default
 
-    if (ocrLang.contains("Chinese (Simplified)")) targetLang = QLocale::Chinese;
-    else if (ocrLang.contains("Chinese (Traditional)")) targetLang = QLocale::Chinese;
-    else if (ocrLang.contains("Japanese")) targetLang = QLocale::Japanese;
-    else if (ocrLang.contains("Korean")) targetLang = QLocale::Korean;
-    else if (ocrLang.contains("Spanish")) targetLang = QLocale::Spanish;
-    else if (ocrLang.contains("French")) targetLang = QLocale::French;
-    else if (ocrLang.contains("German")) targetLang = QLocale::German;
-    else if (ocrLang.contains("Russian")) targetLang = QLocale::Russian;
-    else if (ocrLang.contains("Portuguese")) targetLang = QLocale::Portuguese;
-    else if (ocrLang.contains("Italian")) targetLang = QLocale::Italian;
-    else if (ocrLang.contains("Dutch")) targetLang = QLocale::Dutch;
-    else if (ocrLang.contains("Polish")) targetLang = QLocale::Polish;
-    else if (ocrLang.contains("Swedish")) targetLang = QLocale::Swedish;
-    else if (ocrLang.contains("Arabic")) targetLang = QLocale::Arabic;
-    else if (ocrLang.contains("Hindi")) targetLang = QLocale::Hindi;
-    else if (ocrLang.contains("Thai")) targetLang = QLocale::Thai;
-    else if (ocrLang.contains("Vietnamese")) targetLang = QLocale::Vietnamese;
+    if (languageToUse.contains("Chinese (Simplified)")) targetLang = QLocale::Chinese;
+    else if (languageToUse.contains("Chinese (Traditional)")) targetLang = QLocale::Chinese;
+    else if (languageToUse.contains("Japanese")) targetLang = QLocale::Japanese;
+    else if (languageToUse.contains("Korean")) targetLang = QLocale::Korean;
+    else if (languageToUse.contains("Spanish")) targetLang = QLocale::Spanish;
+    else if (languageToUse.contains("French")) targetLang = QLocale::French;
+    else if (languageToUse.contains("German")) targetLang = QLocale::German;
+    else if (languageToUse.contains("Russian")) targetLang = QLocale::Russian;
+    else if (languageToUse.contains("Portuguese")) targetLang = QLocale::Portuguese;
+    else if (languageToUse.contains("Italian")) targetLang = QLocale::Italian;
+    else if (languageToUse.contains("Dutch")) targetLang = QLocale::Dutch;
+    else if (languageToUse.contains("Polish")) targetLang = QLocale::Polish;
+    else if (languageToUse.contains("Swedish")) targetLang = QLocale::Swedish;
+    else if (languageToUse.contains("Arabic")) targetLang = QLocale::Arabic;
+    else if (languageToUse.contains("Hindi")) targetLang = QLocale::Hindi;
+    else if (languageToUse.contains("Thai")) targetLang = QLocale::Thai;
+    else if (languageToUse.contains("Vietnamese")) targetLang = QLocale::Vietnamese;
 
     // Save current selection (prefer saved voice ID from settings)
     QString savedVoiceId = settings.value("tts/voiceId", "").toString();
@@ -1203,7 +1260,7 @@ void ModernSettingsWindow::updateVoiceList()
             providerName = "System";
         }
 
-        QString msg = QString("No %1 voices for %2").arg(providerName).arg(ocrLang);
+        QString msg = QString("No %1 voices for %2").arg(providerName).arg(languageToUse);
         voiceCombo->addItem(msg);
         voiceCombo->setEnabled(false);
         if (testVoiceBtn) {

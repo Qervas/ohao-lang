@@ -63,6 +63,7 @@ public:
         float volume = 1.0f;
         QString inputLanguage = "Auto-Detect";
         QString outputLanguage = "English";
+        bool speakTranslation = false;  // false = speak original (default), true = speak translation
     };
 
     TTSConfig getTTSConfig() const;
