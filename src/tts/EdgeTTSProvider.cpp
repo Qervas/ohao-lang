@@ -18,12 +18,50 @@ static QDateTime s_cacheTimestamp;
 static QMutex s_cacheMutex;
 static const int CACHE_HOURS = 24; // Cache voices for 24 hours
 
+// Static availability check - persists across instances
+static bool s_edgeTtsChecked = false;
+static bool s_edgeTtsAvailable = false;
+static QString s_edgeTtsExecutable;  // Cache the executable path too
+
 EdgeTTSProvider::EdgeTTSProvider(QObject* parent)
     : TTSProvider(parent)
 {
     m_player = new QMediaPlayer(this);
     m_audio = new QAudioOutput(this);
     m_player->setAudioOutput(m_audio);
+
+    // Try to auto-detect edge-tts command (check only once, cache result)
+    if (!s_edgeTtsChecked) {
+        QProcess testProcess;
+        testProcess.start("edge-tts", QStringList() << "--list-voices");
+        if (testProcess.waitForFinished(5000)) {
+            QString output = testProcess.readAllStandardOutput();
+            // If we get voice list output, edge-tts is installed
+            if (!output.isEmpty() && output.contains("Name")) {
+                s_edgeTtsAvailable = true;
+                s_edgeTtsExecutable = "edge-tts";
+                qDebug() << "EdgeTTSProvider: Auto-detected edge-tts command";
+            } else {
+                s_edgeTtsAvailable = false;
+                s_edgeTtsExecutable = "";
+                qDebug() << "EdgeTTSProvider: edge-tts command not found in PATH";
+            }
+        } else {
+            s_edgeTtsAvailable = false;
+            s_edgeTtsExecutable = "";
+            qDebug() << "EdgeTTSProvider: edge-tts command not responding";
+        }
+        s_edgeTtsChecked = true;
+    }
+
+    // Use cached results
+    m_edgeTtsAvailable = s_edgeTtsAvailable;
+    m_executable = s_edgeTtsExecutable;
+    if (m_edgeTtsAvailable) {
+        qDebug() << "EdgeTTSProvider: Using cached availability, executable set to:" << m_executable;
+    } else {
+        qDebug() << "EdgeTTSProvider: Using cached availability, edge-tts NOT available";
+    }
 }
 
 EdgeTTSProvider::~EdgeTTSProvider()
@@ -202,7 +240,12 @@ QStringList EdgeTTSProvider::suggestedVoicesFor(const QLocale& locale) const
 void EdgeTTSProvider::applyConfig(const Config& config)
 {
     m_voice = config.voice.trimmed();
-    m_executable = config.extra.value(QStringLiteral("exePath")).toString().trimmed();
+    // Only override executable if a custom path is provided
+    QString customPath = config.extra.value(QStringLiteral("exePath")).toString().trimmed();
+    if (!customPath.isEmpty()) {
+        m_executable = customPath;
+    }
+    // Otherwise keep the auto-detected executable from constructor
 }
 
 void EdgeTTSProvider::speak(const QString& text,
@@ -215,8 +258,11 @@ void EdgeTTSProvider::speak(const QString& text,
         return;
     }
 
-    if (m_executable.isEmpty()) {
-        emit errorOccurred(tr("Set the edge-tts executable first."));
+    qDebug() << "EdgeTTSProvider::speak() - m_executable:" << m_executable << "m_edgeTtsAvailable:" << m_edgeTtsAvailable;
+
+    if (m_executable.isEmpty() || !m_edgeTtsAvailable) {
+        qDebug() << "EdgeTTSProvider::speak() - FAILING availability check!";
+        emit errorOccurred(tr("Edge TTS not installed. Install with: pip install edge-tts"));
         return;
     }
 
@@ -267,20 +313,26 @@ void EdgeTTSProvider::launchEdgeTTS(const QString& text,
               << QStringLiteral("--text") << text
               << QStringLiteral("--write-media") << m_tmpMediaPath;
 
-    // Map normalized pitch/rate settings to edge-tts arguments (percentage string).
-    const int ratePercent = static_cast<int>(rate * 100.0);
-    const int pitchPercent = static_cast<int>(pitch * 100.0);
+    // Map normalized pitch/rate/volume settings to edge-tts arguments
+    // edge-tts expects: --rate "+50%", --pitch "+10Hz", --volume "+50%"
+    // rate: 1.0 = +0%, 1.5 = +50%, 0.5 = -50%
+    const int ratePercent = static_cast<int>((rate - 1.0) * 100.0);
+    // pitch: 0.0 = +0Hz, can be positive or negative Hz offset
+    const int pitchHz = static_cast<int>(pitch);
+    // volume: 0.8 = +0% (normalized), 1.0 = +25%, 0.5 = -37%
+    // Map 0.0-1.0 volume to -100% to +100%
+    const int volumePercent = static_cast<int>((volume - 0.8) / 0.8 * 100.0);
 
-    if (!qFuzzyIsNull(rate)) {
-        arguments << QStringLiteral("--rate") << QString::number(ratePercent) + QStringLiteral("%");
-    }
-    if (!qFuzzyIsNull(pitch)) {
-        arguments << QStringLiteral("--pitch") << QString::number(pitchPercent) + QStringLiteral("%");
-    }
-    if (!qFuzzyCompare(volume, 1.0)) {
-        const int gain = static_cast<int>((volume - 1.0) * 20.0);
-        arguments << QStringLiteral("--volume") << (gain >= 0 ? QStringLiteral("+") + QString::number(gain) : QString::number(gain)) + QStringLiteral("dB");
-    }
+    // Always include rate, pitch, volume (edge-tts requires them)
+    QString rateStr = (ratePercent >= 0 ? "+" : "") + QString::number(ratePercent) + "%";
+    QString pitchStr = (pitchHz >= 0 ? "+" : "") + QString::number(pitchHz) + "Hz";
+    QString volumeStr = (volumePercent >= 0 ? "+" : "") + QString::number(volumePercent) + "%";
+
+    arguments << QStringLiteral("--rate") << rateStr
+              << QStringLiteral("--pitch") << pitchStr
+              << QStringLiteral("--volume") << volumeStr;
+
+    qDebug() << "EdgeTTSProvider: Running command:" << m_executable << arguments.join(" ");
 
     m_process = new QProcess(this);
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),

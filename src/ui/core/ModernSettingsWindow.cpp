@@ -1,6 +1,8 @@
 #include "ModernSettingsWindow.h"
+#include "AppSettings.h"
 #include "TTSEngine.h"
 #include "TTSManager.h"
+#include "ModernTTSManager.h"
 #include "GlobalShortcutManager.h"
 #include "SystemTray.h"
 #include "ThemeManager.h"
@@ -36,9 +38,9 @@ ModernSettingsWindow::ModernSettingsWindow(QWidget *parent)
     isInitializing = false;
 
     // Connect to theme changes for runtime updates
-    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme) {
-        QString currentTheme = settings.value("appearance/theme", "Light").toString();
-        applyTheme(currentTheme);
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme theme) {
+        QString themeName = ThemeManager::toString(theme);
+        applyTheme(themeName);
     });
 
     qDebug() << "ModernSettingsWindow: Initialization complete!";
@@ -151,7 +153,10 @@ QWidget* ModernSettingsWindow::createGeneralPage()
                                 "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic",
                                 "Hindi", "Thai", "Vietnamese"});
     connect(ocrLanguageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &ModernSettingsWindow::onSettingChanged);
+            this, [this]() {
+                updateVoiceList();  // Update voices when OCR language changes
+                onSettingChanged();
+            });
     langLayout->addRow("OCR Language:", ocrLanguageCombo);
 
     targetLanguageCombo = new QComboBox();
@@ -391,7 +396,7 @@ QWidget* ModernSettingsWindow::createAppearancePage()
     themeLayout->setContentsMargins(0, 0, 0, 0);
 
     themeCombo = new QComboBox();
-    themeCombo->addItems({"Light", "Dark"});
+    themeCombo->addItems({"Auto (System)", "Light", "Dark", "Cyberpunk"});
     connect(themeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         if (!isInitializing && themeCombo) {
             QString selectedTheme = themeCombo->currentText();
@@ -481,13 +486,27 @@ QWidget* ModernSettingsWindow::createVoicePage()
     providerLayout->setContentsMargins(0, 0, 0, 0);
 
     ttsProviderCombo = new QComboBox();
+    ttsProviderCombo->addItem("Microsoft Edge TTS (Recommended - Fast & High Quality)", QStringLiteral("edge-free"));
 #ifdef QT_TEXTTOSPEECH_AVAILABLE
-    ttsProviderCombo->addItem("System Voices (Recommended)", QStringLiteral("system"));
+    ttsProviderCombo->addItem("System Voices (Offline)", QStringLiteral("system"));
 #endif
-    ttsProviderCombo->addItem("Google Web TTS", QStringLiteral("google-web"));
-    ttsProviderCombo->addItem("Microsoft Edge TTS", QStringLiteral("edge-free"));
+    ttsProviderCombo->addItem("Google Web TTS (Fast but Basic)", QStringLiteral("google-web"));
     connect(ttsProviderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &ModernSettingsWindow::onSettingChanged);
+            this, [this]() {
+                // Show loading message
+                if (voiceCombo) {
+                    voiceCombo->clear();
+                    voiceCombo->addItem("Loading voices...");
+                    voiceCombo->setEnabled(false);
+                }
+
+                // Process events to show the loading message
+                QCoreApplication::processEvents();
+
+                // Update voice list (this might take time for detection)
+                updateVoiceList();
+                onSettingChanged();
+            });
     providerLayout->addRow("Provider:", ttsProviderCombo);
 
     providerInfoLabel = new QLabel();
@@ -497,63 +516,60 @@ QWidget* ModernSettingsWindow::createVoicePage()
 
     layout->addWidget(providerGroup);
 
-    // Voices group
-    QGroupBox *voicesGroup = new QGroupBox("Voices");
+    // Voice group - single voice selector
+    QGroupBox *voicesGroup = new QGroupBox("Voice");
     voicesGroup->setObjectName("settingsGroup");
     QFormLayout *voicesLayout = new QFormLayout(voicesGroup);
     voicesLayout->setSpacing(12);
     voicesLayout->setContentsMargins(0, 0, 0, 0);
 
-    // Input voice
-    QWidget *inputWidget = new QWidget();
-    QHBoxLayout *inputLayout = new QHBoxLayout(inputWidget);
-    inputLayout->setContentsMargins(0, 0, 0, 0);
+    // Single voice selector with test button
+    QWidget *voiceWidget = new QWidget();
+    QHBoxLayout *voiceLayout = new QHBoxLayout(voiceWidget);
+    voiceLayout->setContentsMargins(0, 0, 0, 0);
 
-    inputVoiceCombo = new QComboBox();
-    inputVoiceCombo->setEditable(true);
-    inputVoiceCombo->setPlaceholderText("Select voice for input text");
-    connect(inputVoiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+    voiceCombo = new QComboBox();
+    voiceCombo->setEditable(false);
+    connect(voiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ModernSettingsWindow::onSettingChanged);
-    inputLayout->addWidget(inputVoiceCombo, 1);
+    voiceLayout->addWidget(voiceCombo, 1);
 
-    testInputBtn = new QPushButton("Test");
-    testInputBtn->setFixedWidth(60);
-    inputLayout->addWidget(testInputBtn);
+    testVoiceBtn = new QPushButton("Test");
+    testVoiceBtn->setFixedWidth(60);
+    testVoiceBtn->setEnabled(voiceCombo->count() > 0);
+    connect(testVoiceBtn, &QPushButton::clicked, this, [this]() {
+        if (voiceCombo->currentIndex() >= 0) {
+            auto voiceInfo = voiceCombo->currentData().value<ModernTTSManager::VoiceInfo>();
+            qDebug() << "Testing voice:" << voiceInfo.name;
+            ModernTTSManager::instance().testVoice(voiceInfo);
+        }
+    });
+    voiceLayout->addWidget(testVoiceBtn);
 
-    voicesLayout->addRow("Input Voice:", inputWidget);
-
-    // Output voice
-    QWidget *outputWidget = new QWidget();
-    QHBoxLayout *outputLayout = new QHBoxLayout(outputWidget);
-    outputLayout->setContentsMargins(0, 0, 0, 0);
-
-    outputVoiceCombo = new QComboBox();
-    outputVoiceCombo->setEditable(true);
-    outputVoiceCombo->setPlaceholderText("Select voice for output text");
-    connect(outputVoiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &ModernSettingsWindow::onSettingChanged);
-    outputLayout->addWidget(outputVoiceCombo, 1);
-
-    testOutputBtn = new QPushButton("Test");
-    testOutputBtn->setFixedWidth(60);
-    outputLayout->addWidget(testOutputBtn);
-
-    voicesLayout->addRow("Output Voice:", outputWidget);
+    voicesLayout->addRow("Voice:", voiceWidget);
 
     layout->addWidget(voicesGroup);
     layout->addStretch();
+
+    // Populate voices for the current provider
+    updateVoiceList();
+
     return page;
 }
 
 void ModernSettingsWindow::applyMacOSStyle()
 {
     // Initial style will be applied by applyTheme
-    QString currentTheme = settings.value("appearance/theme", "Light").toString();
-    applyTheme(currentTheme);
+    // Use the CURRENT theme from ThemeManager (not settings, to handle Auto properly)
+    ThemeManager::Theme currentTheme = ThemeManager::instance().getCurrentTheme();
+    QString themeName = ThemeManager::toString(currentTheme);
+    applyTheme(themeName);
 }
 
 void ModernSettingsWindow::applyTheme(const QString &themeName)
 {
+    qDebug() << "ModernSettingsWindow::applyTheme called with theme:" << themeName;
+
     // Use centralized theme colors
     ThemeColors::ThemeColorSet colors = ThemeColors::getColorSet(themeName);
 
@@ -568,6 +584,8 @@ void ModernSettingsWindow::applyTheme(const QString &themeName)
     QString secondaryText = colors.windowText.lighter(150).name();
     QString sliderGroove = colors.floatingWidgetBorder.name();
     QString highlightColor = colors.highlight.name();
+
+    qDebug() << "ModernSettingsWindow colors: bg=" << bgColor << "text=" << textColor << "highlight=" << highlightColor;
 
     QString style = QString(R"(
         QDialog {
@@ -878,13 +896,15 @@ void ModernSettingsWindow::loadSettings()
 
     // Appearance
     if (themeCombo) {
-        QString savedTheme = settings.value("appearance/theme", "Light").toString();
-        // Map old theme names to new simplified ones
-        if (savedTheme.contains("Auto") || savedTheme.contains("System")) {
-            savedTheme = "Light";
-        } else if (savedTheme.contains("Dark") || savedTheme.contains("High Contrast") || savedTheme.contains("Cyberpunk")) {
-            savedTheme = "Dark";
+        // Get theme from AppSettings (which ThemeManager uses)
+        QString savedTheme = AppSettings::instance().theme();
+
+        // Map AppSettings theme names to combo box items
+        if (savedTheme == "Auto") {
+            savedTheme = "Auto (System)";
         }
+
+        qDebug() << "ModernSettingsWindow: Loading theme setting:" << savedTheme;
         themeCombo->setCurrentText(savedTheme);
     }
     if (widgetWidthSlider) {
@@ -896,6 +916,14 @@ void ModernSettingsWindow::loadSettings()
     if (ttsEnabledCheck) {
         ttsEnabledCheck->setChecked(settings.value("tts/enabled", true).toBool());
     }
+    if (ttsProviderCombo) {
+        QString savedProvider = settings.value("tts/provider", "edge-free").toString();
+        int providerIndex = ttsProviderCombo->findData(savedProvider);
+        if (providerIndex >= 0) {
+            ttsProviderCombo->setCurrentIndex(providerIndex);
+        }
+    }
+    // Voice will be restored by updateVoiceList() using the saved voice name
 
     qDebug() << "ModernSettingsWindow: Settings loaded successfully";
 }
@@ -968,10 +996,45 @@ void ModernSettingsWindow::saveSettings()
         settings.setValue("appearance/widgetWidth", widgetWidthSlider->value());
     }
 
-    // TTS
+    // TTS - Save to both new QSettings AND AppSettings for compatibility
     if (ttsEnabledCheck) {
         settings.setValue("tts/enabled", ttsEnabledCheck->isChecked());
     }
+
+    // Update AppSettings so ModernTTSManager can load the settings
+    AppSettings::TTSConfig ttsConfig = AppSettings::instance().getTTSConfig();
+
+    if (ttsProviderCombo) {
+        QString providerStr = ttsProviderCombo->currentData().toString();
+        settings.setValue("tts/provider", providerStr);
+
+        // Map to old engine name for AppSettings
+        if (providerStr == "edge-free") {
+            ttsConfig.engine = "Microsoft Edge TTS";
+        } else if (providerStr == "google-web") {
+            ttsConfig.engine = "Google Web TTS";
+        } else if (providerStr == "system") {
+            ttsConfig.engine = "System";
+        }
+    }
+
+    if (voiceCombo && voiceCombo->isEnabled() && voiceCombo->currentIndex() >= 0) {
+        auto voiceData = voiceCombo->currentData();
+        if (voiceData.canConvert<ModernTTSManager::VoiceInfo>()) {
+            auto voice = voiceData.value<ModernTTSManager::VoiceInfo>();
+            settings.setValue("tts/voiceId", voice.id);
+            settings.setValue("tts/voiceName", voice.name);
+            ttsConfig.voice = voice.id;  // Update AppSettings too
+        }
+    }
+
+    // Save volume and speed from ModernTTSManager defaults
+    auto ttsOptions = ModernTTSManager::instance().getDefaultOptions();
+    ttsConfig.volume = ttsOptions.volume;
+    ttsConfig.speed = ttsOptions.rate;
+
+    AppSettings::instance().setTTSConfig(ttsConfig);
+    qDebug() << "ModernSettingsWindow: Saved TTS config - Engine:" << ttsConfig.engine << "Voice:" << ttsConfig.voice;
 
     settings.sync();
 }
@@ -1061,4 +1124,104 @@ void ModernSettingsWindow::updateGnomeShortcuts()
             "You may need to configure them manually in GNOME Settings.");
     }
 #endif
+}
+
+void ModernSettingsWindow::updateVoiceList()
+{
+    if (!voiceCombo || !ttsProviderCombo || !ocrLanguageCombo) {
+        return;
+    }
+
+    // Get selected provider
+    QString providerStr = ttsProviderCombo->currentData().toString();
+
+    // Map provider string to enum
+    ModernTTSManager::TTSProvider selectedProvider = ModernTTSManager::TTSProvider::EdgeTTS;  // default to Edge TTS
+    if (providerStr == "google-web") {
+        selectedProvider = ModernTTSManager::TTSProvider::GoogleWeb;
+    } else if (providerStr == "edge-free") {
+        selectedProvider = ModernTTSManager::TTSProvider::EdgeTTS;
+    } else if (providerStr == "system") {
+        selectedProvider = ModernTTSManager::TTSProvider::SystemTTS;
+    }
+
+    // Get selected OCR language and map to QLocale
+    QString ocrLang = ocrLanguageCombo->currentText();
+    QLocale::Language targetLang = QLocale::English;  // default
+
+    if (ocrLang.contains("Chinese (Simplified)")) targetLang = QLocale::Chinese;
+    else if (ocrLang.contains("Chinese (Traditional)")) targetLang = QLocale::Chinese;
+    else if (ocrLang.contains("Japanese")) targetLang = QLocale::Japanese;
+    else if (ocrLang.contains("Korean")) targetLang = QLocale::Korean;
+    else if (ocrLang.contains("Spanish")) targetLang = QLocale::Spanish;
+    else if (ocrLang.contains("French")) targetLang = QLocale::French;
+    else if (ocrLang.contains("German")) targetLang = QLocale::German;
+    else if (ocrLang.contains("Russian")) targetLang = QLocale::Russian;
+    else if (ocrLang.contains("Portuguese")) targetLang = QLocale::Portuguese;
+    else if (ocrLang.contains("Italian")) targetLang = QLocale::Italian;
+    else if (ocrLang.contains("Dutch")) targetLang = QLocale::Dutch;
+    else if (ocrLang.contains("Polish")) targetLang = QLocale::Polish;
+    else if (ocrLang.contains("Swedish")) targetLang = QLocale::Swedish;
+    else if (ocrLang.contains("Arabic")) targetLang = QLocale::Arabic;
+    else if (ocrLang.contains("Hindi")) targetLang = QLocale::Hindi;
+    else if (ocrLang.contains("Thai")) targetLang = QLocale::Thai;
+    else if (ocrLang.contains("Vietnamese")) targetLang = QLocale::Vietnamese;
+
+    // Save current selection (prefer saved voice ID from settings)
+    QString savedVoiceId = settings.value("tts/voiceId", "").toString();
+    QString currentVoiceName;
+    if (voiceCombo->currentIndex() >= 0) {
+        currentVoiceName = voiceCombo->currentText();
+    }
+
+    // Clear and repopulate
+    voiceCombo->clear();
+
+    // Get all voices and filter by provider AND language
+    auto allVoices = ModernTTSManager::instance().availableVoices();
+    int addedCount = 0;
+    int restoreIndex = -1;
+
+    for (const auto& voice : allVoices) {
+        // Filter by provider and language
+        if (voice.provider == selectedProvider && voice.locale.language() == targetLang) {
+            voiceCombo->addItem(voice.name, QVariant::fromValue(voice));
+            // Try to restore by ID first (more reliable), then by name
+            if (!savedVoiceId.isEmpty() && voice.id == savedVoiceId) {
+                restoreIndex = addedCount;
+            } else if (savedVoiceId.isEmpty() && voice.name == currentVoiceName) {
+                restoreIndex = addedCount;
+            }
+            addedCount++;
+        }
+    }
+
+    if (addedCount == 0) {
+        QString providerName;
+        if (providerStr == "edge-free") {
+            providerName = "Edge TTS";
+        } else if (providerStr == "google-web") {
+            providerName = "Google";
+        } else {
+            providerName = "System";
+        }
+
+        QString msg = QString("No %1 voices for %2").arg(providerName).arg(ocrLang);
+        voiceCombo->addItem(msg);
+        voiceCombo->setEnabled(false);
+        if (testVoiceBtn) {
+            testVoiceBtn->setEnabled(false);
+        }
+    } else {
+        voiceCombo->setEnabled(true);
+        if (testVoiceBtn) {
+            testVoiceBtn->setEnabled(true);
+        }
+        // Restore previous selection if it exists, otherwise select first
+        if (restoreIndex >= 0) {
+            voiceCombo->setCurrentIndex(restoreIndex);
+        } else if (addedCount > 0) {
+            voiceCombo->setCurrentIndex(0);  // Auto-select first voice
+        }
+    }
 }

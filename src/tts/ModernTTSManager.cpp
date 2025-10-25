@@ -12,6 +12,9 @@
 #include <QAudioDevice>
 #include <QMediaDevices>
 #include <QRegularExpression>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <algorithm>
 
 ModernTTSManager* ModernTTSManager::s_instance = nullptr;
@@ -99,8 +102,15 @@ void ModernTTSManager::speak(const QString& text, const QString& languageCode)
 
 void ModernTTSManager::speak(const QString& text, const QLocale& locale)
 {
+    qDebug() << "=== speak(text, locale) called ===";
+    qDebug() << "Input locale:" << locale.name();
+    qDebug() << "m_defaultOptions.preferredVoiceId:" << m_defaultOptions.preferredVoiceId;
+    qDebug() << "m_defaultOptions.preferredProvider:" << static_cast<int>(m_defaultOptions.preferredProvider);
+
     TTSOptions options = m_defaultOptions;
     options.locale = locale;
+
+    qDebug() << "Created options with locale:" << options.locale.name() << "and preferredVoiceId:" << options.preferredVoiceId;
     speak(text, options);
 }
 
@@ -156,7 +166,43 @@ void ModernTTSManager::speakWithVoice(const QString& text, const ModernTTSManage
 
 ModernTTSManager::VoiceInfo ModernTTSManager::selectBestVoice(const QLocale& locale, const TTSOptions& options) const
 {
-    qDebug() << "ModernTTSManager: Selecting best voice for" << locale.name();
+    qDebug() << "=== selectBestVoice() ENTRY ===";
+    qDebug() << "Requested locale:" << locale.name();
+    qDebug() << "Preferred voice ID:" << options.preferredVoiceId;
+    qDebug() << "Preferred provider:" << static_cast<int>(options.preferredProvider);
+    qDebug() << "Total available voices:" << m_availableVoices.size();
+
+    // First priority: if user has explicitly selected a voice, try to use it
+    if (!options.preferredVoiceId.isEmpty()) {
+        qDebug() << "Searching for user's preferred voice:" << options.preferredVoiceId;
+
+        int matchCount = 0;
+        for (const ModernTTSManager::VoiceInfo& voice : m_availableVoices) {
+            if (voice.id == options.preferredVoiceId) {
+                matchCount++;
+                qDebug() << "  Found matching voice ID:" << voice.id << "Name:" << voice.name
+                         << "Available:" << voice.available << "Provider:" << static_cast<int>(voice.provider);
+                if (voice.available) {
+                    qDebug() << "✅ ModernTTSManager: Using user's preferred voice:" << voice.name;
+                    return voice;
+                } else {
+                    qDebug() << "⚠️ Voice found but NOT available!";
+                }
+            }
+        }
+
+        if (matchCount == 0) {
+            qDebug() << "❌ User's preferred voice" << options.preferredVoiceId << "NOT FOUND in available voices list!";
+            qDebug() << "   Available voice IDs:";
+            for (int i = 0; i < qMin(10, m_availableVoices.size()); i++) {
+                qDebug() << "   -" << m_availableVoices[i].id << "(" << m_availableVoices[i].name << ")";
+            }
+        } else {
+            qDebug() << "⚠️ Preferred voice found but not available, falling back to auto-selection";
+        }
+    } else {
+        qDebug() << "No preferred voice ID set, using auto-selection";
+    }
 
     // Get voices for the requested language
     QList<ModernTTSManager::VoiceInfo> candidates = voicesForLanguage(locale);
@@ -200,7 +246,8 @@ ModernTTSManager::VoiceInfo ModernTTSManager::selectBestVoice(const QLocale& loc
     });
 
     ModernTTSManager::VoiceInfo selected = candidates.first();
-    qDebug() << "ModernTTSManager: Selected voice:" << selected.name
+    qDebug() << "ModernTTSManager: Auto-selected voice:" << selected.name
+             << "ID:" << selected.id
              << "quality:" << static_cast<int>(selected.quality)
              << "provider:" << static_cast<int>(selected.provider);
 
@@ -242,8 +289,8 @@ void ModernTTSManager::initializeProviders()
     // Check availability of each provider
     m_providerAvailability[TTSProvider::EdgeTTS] = isProviderAvailable(TTSProvider::EdgeTTS);
     m_providerAvailability[TTSProvider::GoogleWeb] = isProviderAvailable(TTSProvider::GoogleWeb);
-    m_providerAvailability[TTSProvider::AzureCognitive] = isProviderAvailable(TTSProvider::AzureCognitive);
     m_providerAvailability[TTSProvider::SystemTTS] = isProviderAvailable(TTSProvider::SystemTTS);
+    // m_providerAvailability[TTSProvider::AzureCognitive] = isProviderAvailable(TTSProvider::AzureCognitive);
 
     // Initialize the default provider
     TTSProvider preferredProvider = m_defaultOptions.preferredProvider;
@@ -320,6 +367,10 @@ void ModernTTSManager::scanAvailableVoices()
 
         for (const QLocale& locale : majorLocales) {
             QStringList voices = provider->suggestedVoicesFor(locale);
+            if (!voices.isEmpty()) {
+                qDebug() << "  Found" << voices.size() << "voices for" << locale.name()
+                         << "(" << locale.language() << ") from provider" << static_cast<int>(providerType);
+            }
             for (const QString& voiceId : voices) {
                 ModernTTSManager::VoiceInfo voice;
                 voice.id = voiceId;
@@ -329,6 +380,7 @@ void ModernTTSManager::scanAvailableVoices()
                 voice.provider = providerType;
                 voice.available = true;
                 m_availableVoices.append(voice);
+                qDebug() << "    Added voice:" << voice.name << "for locale" << locale.name();
             }
         }
     }
@@ -430,18 +482,20 @@ bool ModernTTSManager::isProviderAvailable(TTSProvider type) const
 {
     bool available = false;
     switch (type) {
-        case TTSProvider::EdgeTTS:
-            // Check if edge-tts executable is available
-            available = true; // Simplified for now
+        case TTSProvider::EdgeTTS: {
+            // Check if edge-tts is actually available by creating a test instance
+            auto testProvider = std::make_unique<EdgeTTSProvider>();
+            available = testProvider->isEdgeTTSAvailable();
             qDebug() << "ModernTTSManager: EdgeTTS provider available:" << available;
             break;
+        }
         case TTSProvider::GoogleWeb:
-            available = true; // Usually available
+            available = true; // Always available (web-based)
             qDebug() << "ModernTTSManager: GoogleWeb provider available:" << available;
             break;
         case TTSProvider::SystemTTS:
 #ifdef QT_TEXTTOSPEECH_AVAILABLE
-            available = true; // Always available as fallback
+            available = true; // Always available when Qt TextToSpeech is found
 #else
             available = false; // Qt TextToSpeech not found
 #endif
@@ -577,6 +631,13 @@ void ModernTTSManager::loadSettings()
     // Convert old settings to new format
     m_defaultOptions.volume = ttsConfig.volume;
     m_defaultOptions.rate = ttsConfig.speed;
+    m_defaultOptions.preferredVoiceId = ttsConfig.voice;  // Store the user's selected voice ID
+
+    // Sanity check: if volume is suspiciously low, reset to 0.8
+    if (m_defaultOptions.volume < 0.1) {
+        qDebug() << "ModernTTSManager: Volume too low (" << m_defaultOptions.volume << "), resetting to 0.8";
+        m_defaultOptions.volume = 0.8;
+    }
 
     // Map old provider names to new enum
     if (ttsConfig.engine.contains("Edge") || ttsConfig.engine.contains("edge")) {
@@ -590,7 +651,8 @@ void ModernTTSManager::loadSettings()
         qDebug() << "ModernTTSManager: Selected SystemTTS provider (fallback for:" << ttsConfig.engine << ")";
     }
 
-    qDebug() << "ModernTTSManager: Loaded settings - Provider:" << static_cast<int>(m_defaultOptions.preferredProvider);
+    qDebug() << "ModernTTSManager: Loaded settings - Provider:" << static_cast<int>(m_defaultOptions.preferredProvider)
+             << "Voice ID:" << m_defaultOptions.preferredVoiceId;
 }
 
 void ModernTTSManager::saveSettings()
@@ -611,13 +673,49 @@ void ModernTTSManager::testCurrentConfiguration()
 
 void ModernTTSManager::testVoice(const ModernTTSManager::VoiceInfo& voice)
 {
-    QString testText = "Hello, this is a voice test.";
+    // Load test sentence from JSON file based on voice locale
+    QString testText = "Hello, this is a voice test."; // Default fallback
+
+    // Try to load from resources/test_sentences.json
+    QString jsonPath = QCoreApplication::applicationDirPath() + "/resources/test_sentences.json";
+    QFile jsonFile(jsonPath);
+
+    if (jsonFile.open(QIODevice::ReadOnly)) {
+        QByteArray jsonData = jsonFile.readAll();
+        jsonFile.close();
+
+        QJsonDocument doc = QJsonDocument::fromJson(jsonData);
+        if (doc.isObject()) {
+            QJsonObject sentences = doc.object();
+
+            // Try exact locale match first (e.g., "de_DE")
+            QString localeKey = voice.locale.name();
+            if (sentences.contains(localeKey)) {
+                testText = sentences[localeKey].toString();
+                qDebug() << "ModernTTSManager: Using test sentence for locale" << localeKey;
+            }
+            // Try language-only match (e.g., "de")
+            else {
+                QString langKey = voice.locale.name().left(2);
+                // Find first locale starting with language code
+                for (auto it = sentences.constBegin(); it != sentences.constEnd(); ++it) {
+                    if (it.key().startsWith(langKey + "_")) {
+                        testText = it.value().toString();
+                        qDebug() << "ModernTTSManager: Using test sentence for language" << langKey << "from" << it.key();
+                        break;
+                    }
+                }
+            }
+        }
+    } else {
+        qDebug() << "ModernTTSManager: Could not load test_sentences.json from" << jsonPath;
+    }
 
     // Override locale for test
     TTSOptions options = m_defaultOptions;
     options.locale = voice.locale;
 
-    qDebug() << "ModernTTSManager: Testing voice:" << voice.name;
+    qDebug() << "ModernTTSManager: Testing voice:" << voice.name << "with text:" << testText;
     speakWithVoice(testText, voice, options);
 }
 

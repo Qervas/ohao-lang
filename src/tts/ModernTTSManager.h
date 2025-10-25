@@ -52,16 +52,18 @@ public:
         QLocale locale;
         VoiceQuality preferredQuality;
         TTSProvider preferredProvider;
+        QString preferredVoiceId;  // Specific voice ID selected by user
         double volume;
         double rate;
         double pitch;
         bool enableFallback;
-        
+
         TTSOptions()
             : locale(QLocale::system())
             , preferredQuality(VoiceQuality::Neural)
             , preferredProvider(TTSProvider::SystemTTS)
-            , volume(1.0)
+            , preferredVoiceId("")
+            , volume(0.8)
             , rate(1.0)
             , pitch(0.0)
             , enableFallback(true)
