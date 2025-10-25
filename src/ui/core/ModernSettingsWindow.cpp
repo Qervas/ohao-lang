@@ -1,6 +1,7 @@
 #include "ModernSettingsWindow.h"
 #include "TTSEngine.h"
 #include "TTSManager.h"
+#include "ModernTTSManager.h"
 #include "GlobalShortcutManager.h"
 #include "SystemTray.h"
 #include "ThemeManager.h"
@@ -487,7 +488,10 @@ QWidget* ModernSettingsWindow::createVoicePage()
     ttsProviderCombo->addItem("Google Web TTS", QStringLiteral("google-web"));
     ttsProviderCombo->addItem("Microsoft Edge TTS", QStringLiteral("edge-free"));
     connect(ttsProviderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &ModernSettingsWindow::onSettingChanged);
+            this, [this]() {
+                updateVoiceList();
+                onSettingChanged();
+            });
     providerLayout->addRow("Provider:", ttsProviderCombo);
 
     providerInfoLabel = new QLabel();
@@ -497,51 +501,44 @@ QWidget* ModernSettingsWindow::createVoicePage()
 
     layout->addWidget(providerGroup);
 
-    // Voices group
-    QGroupBox *voicesGroup = new QGroupBox("Voices");
+    // Voice group - single voice selector
+    QGroupBox *voicesGroup = new QGroupBox("Voice");
     voicesGroup->setObjectName("settingsGroup");
     QFormLayout *voicesLayout = new QFormLayout(voicesGroup);
     voicesLayout->setSpacing(12);
     voicesLayout->setContentsMargins(0, 0, 0, 0);
 
-    // Input voice
-    QWidget *inputWidget = new QWidget();
-    QHBoxLayout *inputLayout = new QHBoxLayout(inputWidget);
-    inputLayout->setContentsMargins(0, 0, 0, 0);
+    // Single voice selector with test button
+    QWidget *voiceWidget = new QWidget();
+    QHBoxLayout *voiceLayout = new QHBoxLayout(voiceWidget);
+    voiceLayout->setContentsMargins(0, 0, 0, 0);
 
-    inputVoiceCombo = new QComboBox();
-    inputVoiceCombo->setEditable(true);
-    inputVoiceCombo->setPlaceholderText("Select voice for input text");
-    connect(inputVoiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+    voiceCombo = new QComboBox();
+    voiceCombo->setEditable(false);
+    connect(voiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ModernSettingsWindow::onSettingChanged);
-    inputLayout->addWidget(inputVoiceCombo, 1);
+    voiceLayout->addWidget(voiceCombo, 1);
 
-    testInputBtn = new QPushButton("Test");
-    testInputBtn->setFixedWidth(60);
-    inputLayout->addWidget(testInputBtn);
+    testVoiceBtn = new QPushButton("Test");
+    testVoiceBtn->setFixedWidth(60);
+    testVoiceBtn->setEnabled(voiceCombo->count() > 0);
+    connect(testVoiceBtn, &QPushButton::clicked, this, [this]() {
+        if (voiceCombo->currentIndex() >= 0) {
+            auto voiceInfo = voiceCombo->currentData().value<ModernTTSManager::VoiceInfo>();
+            qDebug() << "Testing voice:" << voiceInfo.name;
+            ModernTTSManager::instance().testVoice(voiceInfo);
+        }
+    });
+    voiceLayout->addWidget(testVoiceBtn);
 
-    voicesLayout->addRow("Input Voice:", inputWidget);
-
-    // Output voice
-    QWidget *outputWidget = new QWidget();
-    QHBoxLayout *outputLayout = new QHBoxLayout(outputWidget);
-    outputLayout->setContentsMargins(0, 0, 0, 0);
-
-    outputVoiceCombo = new QComboBox();
-    outputVoiceCombo->setEditable(true);
-    outputVoiceCombo->setPlaceholderText("Select voice for output text");
-    connect(outputVoiceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &ModernSettingsWindow::onSettingChanged);
-    outputLayout->addWidget(outputVoiceCombo, 1);
-
-    testOutputBtn = new QPushButton("Test");
-    testOutputBtn->setFixedWidth(60);
-    outputLayout->addWidget(testOutputBtn);
-
-    voicesLayout->addRow("Output Voice:", outputWidget);
+    voicesLayout->addRow("Voice:", voiceWidget);
 
     layout->addWidget(voicesGroup);
     layout->addStretch();
+
+    // Populate voices for the current provider
+    updateVoiceList();
+
     return page;
 }
 
@@ -1061,4 +1058,63 @@ void ModernSettingsWindow::updateGnomeShortcuts()
             "You may need to configure them manually in GNOME Settings.");
     }
 #endif
+}
+
+void ModernSettingsWindow::updateVoiceList()
+{
+    if (!voiceCombo || !ttsProviderCombo) {
+        return;
+    }
+
+    // Get selected provider
+    QString providerStr = ttsProviderCombo->currentData().toString();
+
+    // Map provider string to enum
+    ModernTTSManager::TTSProvider selectedProvider = ModernTTSManager::TTSProvider::SystemTTS;
+    if (providerStr == "google-web") {
+        selectedProvider = ModernTTSManager::TTSProvider::GoogleWeb;
+    } else if (providerStr == "edge-free") {
+        selectedProvider = ModernTTSManager::TTSProvider::EdgeTTS;
+    }
+
+    // Save current selection
+    QString currentVoiceName;
+    if (voiceCombo->currentIndex() >= 0) {
+        currentVoiceName = voiceCombo->currentText();
+    }
+
+    // Clear and repopulate
+    voiceCombo->clear();
+
+    // Get all voices and filter by provider
+    auto allVoices = ModernTTSManager::instance().availableVoices();
+    int addedCount = 0;
+    int restoreIndex = -1;
+
+    for (const auto& voice : allVoices) {
+        if (voice.provider == selectedProvider) {
+            voiceCombo->addItem(voice.name, QVariant::fromValue(voice));
+            if (voice.name == currentVoiceName) {
+                restoreIndex = addedCount;
+            }
+            addedCount++;
+        }
+    }
+
+    if (addedCount == 0) {
+        voiceCombo->addItem("No voices available for this provider");
+        voiceCombo->setEnabled(false);
+        if (testVoiceBtn) {
+            testVoiceBtn->setEnabled(false);
+        }
+    } else {
+        voiceCombo->setEnabled(true);
+        if (testVoiceBtn) {
+            testVoiceBtn->setEnabled(true);
+        }
+        // Restore previous selection if it exists in new provider
+        if (restoreIndex >= 0) {
+            voiceCombo->setCurrentIndex(restoreIndex);
+        }
+    }
 }

@@ -56,6 +56,7 @@ private:
     void loadSettings();
     void saveSettings();
     void updateGnomeShortcuts();
+    void updateVoiceList();
 
     // Page creators
     QWidget* createGeneralPage();
@@ -95,10 +96,8 @@ private:
     QCheckBox *ttsEnabledCheck = nullptr;
     QComboBox *ttsProviderCombo = nullptr;
     QLabel *providerInfoLabel = nullptr;
-    QComboBox *inputVoiceCombo = nullptr;
-    QComboBox *outputVoiceCombo = nullptr;
-    QPushButton *testInputBtn = nullptr;
-    QPushButton *testOutputBtn = nullptr;
+    QComboBox *voiceCombo = nullptr;
+    QPushButton *testVoiceBtn = nullptr;
 
     // Settings storage
     QSettings settings;
