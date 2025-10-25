@@ -11,6 +11,7 @@
 #include <QUrlQuery>
 #include <QRegularExpression>
 #include <QtMath>
+#include <functional>
 
 OCREngine::OCREngine(QObject *parent)
     : QObject(parent)
@@ -191,13 +192,9 @@ void OCREngine::performAppleVisionOCR(const QPixmap &image)
 void OCREngine::performTesseractOCR(const QPixmap &image)
 {
     if (!isTesseractAvailable()) {
-#ifdef Q_OS_WIN
-        QString bundledPath = QCoreApplication::applicationDirPath() + "/tesseract/tesseract.exe";
-#else
-        QString bundledPath = QCoreApplication::applicationDirPath() + "/tesseract";
-#endif
-        QString errorMsg = QString("Tesseract OCR not found!\n\nSearched locations:\n- System PATH\n- Bundled: %1\n\nPlease reinstall the application.").arg(bundledPath);
-        qDebug() << "Tesseract not available. Bundled path:" << bundledPath << "Exists:" << QFile::exists(bundledPath);
+        QString appDir = QCoreApplication::applicationDirPath();
+        QString errorMsg = QString("Tesseract OCR not found!\n\nSearched locations:\n- Current directory: %1\n- Subdirectories (recursive)\n- System PATH\n\nPlease reinstall the application.").arg(appDir);
+        qDebug() << "Tesseract not available. Application directory:" << appDir;
         emit ocrError(errorMsg);
         return;
     }
@@ -211,10 +208,6 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         // Common Windows install locations (fallback)
         candidateDirs << QDir::fromNativeSeparators("C:/Program Files/Tesseract-OCR/tessdata");
         candidateDirs << QDir::fromNativeSeparators("C:/Program Files (x86)/Tesseract-OCR/tessdata");
-        // Scoop (user-specific) pattern
-        QString home = QDir::homePath();
-        candidateDirs << home + "/scoop/apps/tesseract/current/tessdata";
-        candidateDirs << home + "/scoop/persist/tesseract/tessdata";
 #endif
 
         for (const QString &dirPath : candidateDirs) {
@@ -273,11 +266,8 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
         // Bundled tessdata (first priority - included in release package)
         probe << QCoreApplication::applicationDirPath() + "/tesseract/tessdata";
 #ifdef Q_OS_WIN
-        QString home = QDir::homePath();
         probe << "C:/Program Files/Tesseract-OCR/tessdata";
         probe << "C:/Program Files (x86)/Tesseract-OCR/tessdata";
-        probe << home + "/scoop/apps/tesseract/current/tessdata";
-        probe << home + "/scoop/persist/tesseract/tessdata";
 #endif
         for (const QString &p : probe) {
             if (QDir(p).exists(p + "/eng.traineddata")) { tessdataDir = p; break; }
@@ -321,17 +311,13 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &OCREngine::onTesseractFinished);
 
-    // Determine which Tesseract to use (bundled or system)
-    QString tesseractExe = "tesseract"; // Default to system PATH
-#ifdef Q_OS_WIN
-    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract/tesseract.exe";
-#else
-    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract";
-#endif
-    if (QFile::exists(bundledTesseract)) {
-        tesseractExe = bundledTesseract;
-        qDebug() << "Using bundled Tesseract:" << tesseractExe;
+    // Find Tesseract executable using our robust search (current dir, subdirs, PATH)
+    QString tesseractExe = findTesseractExecutable();
+    if (tesseractExe.isEmpty()) {
+        emit ocrError("Tesseract executable not found");
+        return;
     }
+    qDebug() << "Using Tesseract:" << tesseractExe;
 
     // Propagate TESSDATA_PREFIX if set after our detection
     if (!qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
@@ -529,27 +515,74 @@ bool OCREngine::isAppleVisionAvailable()
 #endif
 }
 
-bool OCREngine::isTesseractAvailable()
+QString OCREngine::findTesseractExecutable()
 {
-    // First, check for bundled Tesseract in application directory
+    // Helper function to recursively search for tesseract executable
+    // Returns empty string if not found
+
 #ifdef Q_OS_WIN
-    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract/tesseract.exe";
+    QString exeName = "tesseract.exe";
 #else
-    QString bundledTesseract = QCoreApplication::applicationDirPath() + "/tesseract";
+    QString exeName = "tesseract";
 #endif
-    if (QFile::exists(bundledTesseract)) {
-        QProcess process;
-        process.start(bundledTesseract, QStringList() << "--version");
-        if (process.waitForFinished(3000) && process.exitCode() == 0) {
-            qDebug() << "Found bundled Tesseract:" << bundledTesseract;
-            return true;
+
+    // Helper lambda for recursive directory search with depth limit
+    std::function<QString(const QString&, int)> searchDirectory = [&](const QString& dirPath, int maxDepth) -> QString {
+        if (maxDepth <= 0) return QString();
+
+        QDir dir(dirPath);
+        if (!dir.exists()) return QString();
+
+        // Check current directory for tesseract executable
+        QString candidatePath = dir.filePath(exeName);
+        if (QFile::exists(candidatePath)) {
+            // Verify it's a valid executable by running --version
+            QProcess process;
+            process.start(candidatePath, QStringList() << "--version");
+            if (process.waitForFinished(3000) && process.exitCode() == 0) {
+                qDebug() << "Found Tesseract at:" << candidatePath;
+                return candidatePath;
+            }
         }
+
+        // Recursively search subdirectories
+        QStringList subdirs = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QString& subdir : subdirs) {
+            QString found = searchDirectory(dir.filePath(subdir), maxDepth - 1);
+            if (!found.isEmpty()) {
+                return found;
+            }
+        }
+
+        return QString();
+    };
+
+    // Search order as requested by user:
+    // 1. Current directory (applicationDirPath)
+    // 2. Current subdirectories recursively (depth 3)
+    QString appDir = QCoreApplication::applicationDirPath();
+    qDebug() << "Searching for Tesseract in application directory:" << appDir;
+    QString found = searchDirectory(appDir, 3);
+    if (!found.isEmpty()) {
+        return found;
     }
 
-    // Fall back to system-installed Tesseract in PATH
+    // 3. System PATH - check if "tesseract" command works
     QProcess process;
     process.start("tesseract", QStringList() << "--version");
-    return process.waitForFinished(3000) && process.exitCode() == 0;
+    if (process.waitForFinished(3000) && process.exitCode() == 0) {
+        qDebug() << "Found Tesseract in system PATH";
+        return "tesseract"; // Return command name for PATH-based execution
+    }
+
+    qDebug() << "Tesseract not found in application directory, subdirectories, or system PATH";
+    return QString(); // Not found
+}
+
+bool OCREngine::isTesseractAvailable()
+{
+    QString tesseractPath = findTesseractExecutable();
+    return !tesseractPath.isEmpty();
 }
 
 void OCREngine::startTranslation(const QString &text)

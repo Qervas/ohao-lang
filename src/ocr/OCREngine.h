@@ -106,6 +106,9 @@ private:
     // Helper to stop any running process safely
     void stopRunningProcess();
 
+    // Helper to find Tesseract executable recursively
+    static QString findTesseractExecutable();
+
     // Language-specific character correction
     QString correctLanguageSpecificCharacters(const QString &text, const QString &language);
 
