@@ -168,6 +168,13 @@ if (WIN32)
     else()
         message(WARNING "windeployqt.exe not found. The built .exe may not run outside the build tree without Qt DLLs in PATH.")
     endif()
+
+    # Copy resources folder to build directory
+    add_custom_command(TARGET ohao-lang POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/resources"
+                "$<TARGET_FILE_DIR:ohao-lang>/resources"
+        COMMENT "Copying resources folder to build directory")
 endif()
 
 # Deploy Qt runtime on macOS and create DMG
@@ -191,6 +198,13 @@ if(APPLE)
     else()
         message(WARNING "App icon not found at ${ICON_FILE}")
     endif()
+
+    # Copy resources folder to bundle
+    add_custom_command(TARGET ohao-lang POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/resources"
+                "$<TARGET_BUNDLE_DIR:ohao-lang>/Contents/Resources/resources"
+        COMMENT "Copying resources folder to macOS bundle")
 
     # Find macdeployqt
     get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
@@ -225,4 +239,13 @@ if(APPLE)
     else()
         message(WARNING "macdeployqt not found. The app bundle may not run on other systems without Qt installed.")
     endif()
+endif()
+
+# Copy resources for Linux
+if(UNIX AND NOT APPLE)
+    add_custom_command(TARGET ohao-lang POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/resources"
+                "$<TARGET_FILE_DIR:ohao-lang>/resources"
+        COMMENT "Copying resources folder to build directory")
 endif()

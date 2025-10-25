@@ -1,5 +1,6 @@
 ﻿#include "QuickTranslationOverlay.h"
 #include "../core/ThemeManager.h"
+#include "../core/ThemeColors.h"
 #include "../core/AppSettings.h"
 #include <QPainter>
 #include <QPainterPath>
@@ -84,12 +85,20 @@ void QuickTranslationOverlay::setFontScaling(float factor)
 
 void QuickTranslationOverlay::updateThemeColors()
 {
-    // Use centralized theming system from AppSettings
-    m_backgroundColor = AppSettings::instance().getThemeColor("background");
+    // Use centralized theming system from ThemeManager directly
+    ThemeManager::Theme currentTheme = ThemeManager::instance().getCurrentTheme();
+    QString themeName = ThemeManager::toString(currentTheme);
+
+    qDebug() << "QuickTranslationOverlay: Current theme from ThemeManager:" << themeName;
+
+    // Get colors directly from ThemeColors based on current theme
+    ThemeColors::ThemeColorSet colors = ThemeColors::getColorSet(themeName);
+
+    m_backgroundColor = colors.window;
     m_backgroundColor.setAlpha(240); // Semi-transparent
 
-    m_textColor = AppSettings::instance().getThemeColor("text");
-    m_borderColor = AppSettings::instance().getThemeColor("border");
+    m_textColor = colors.windowText;
+    m_borderColor = colors.floatingWidgetBorder;
 
     // Shadow color - darker for light themes, lighter for dark themes
     if (m_backgroundColor.lightness() > 128) {
@@ -99,7 +108,8 @@ void QuickTranslationOverlay::updateThemeColors()
     }
 
     qDebug() << "QuickTranslationOverlay theme colors updated:"
-             << "bg=" << m_backgroundColor.name()
+             << "theme=" << themeName
+             << "bg=" << m_backgroundColor.name() << "alpha=" << m_backgroundColor.alpha()
              << "text=" << m_textColor.name()
              << "border=" << m_borderColor.name();
 }

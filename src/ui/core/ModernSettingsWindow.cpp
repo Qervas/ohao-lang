@@ -896,7 +896,15 @@ void ModernSettingsWindow::loadSettings()
 
     // Appearance
     if (themeCombo) {
-        QString savedTheme = settings.value("appearance/theme", "Auto (System)").toString();
+        // Get theme from AppSettings (which ThemeManager uses)
+        QString savedTheme = AppSettings::instance().theme();
+
+        // Map AppSettings theme names to combo box items
+        if (savedTheme == "Auto") {
+            savedTheme = "Auto (System)";
+        }
+
+        qDebug() << "ModernSettingsWindow: Loading theme setting:" << savedTheme;
         themeCombo->setCurrentText(savedTheme);
     }
     if (widgetWidthSlider) {
