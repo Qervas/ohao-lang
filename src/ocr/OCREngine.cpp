@@ -1491,6 +1491,11 @@ std::shared_ptr<SpellChecker> OCREngine::getSpellChecker(const QString& language
     else if (language == "Dutch") langCode = "nl_NL";
     else if (language == "Polish") langCode = "pl_PL";
     else if (language == "Russian") langCode = "ru_RU";
+    else if (language == "Vietnamese") langCode = "vi_VN";
+    else if (language == "Ukrainian") langCode = "uk_UA";
+    else if (language == "Danish") langCode = "da_DK";
+    else if (language == "Norwegian") langCode = "nb_NO";
+    else if (language == "Turkish") langCode = "tr_TR";
     else return nullptr; // No spellchecker for this language
 
     // Check cache
