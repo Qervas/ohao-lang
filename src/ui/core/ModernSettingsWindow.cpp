@@ -152,7 +152,10 @@ QWidget* ModernSettingsWindow::createGeneralPage()
                                 "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic",
                                 "Hindi", "Thai", "Vietnamese"});
     connect(ocrLanguageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &ModernSettingsWindow::onSettingChanged);
+            this, [this]() {
+                updateVoiceList();  // Update voices when OCR language changes
+                onSettingChanged();
+            });
     langLayout->addRow("OCR Language:", ocrLanguageCombo);
 
     targetLanguageCombo = new QComboBox();
@@ -482,13 +485,24 @@ QWidget* ModernSettingsWindow::createVoicePage()
     providerLayout->setContentsMargins(0, 0, 0, 0);
 
     ttsProviderCombo = new QComboBox();
+    ttsProviderCombo->addItem("Microsoft Edge TTS (Recommended - Fast & High Quality)", QStringLiteral("edge-free"));
 #ifdef QT_TEXTTOSPEECH_AVAILABLE
-    ttsProviderCombo->addItem("System Voices (Recommended)", QStringLiteral("system"));
+    ttsProviderCombo->addItem("System Voices (Offline)", QStringLiteral("system"));
 #endif
-    ttsProviderCombo->addItem("Google Web TTS", QStringLiteral("google-web"));
-    ttsProviderCombo->addItem("Microsoft Edge TTS", QStringLiteral("edge-free"));
+    ttsProviderCombo->addItem("Google Web TTS (Fast but Basic)", QStringLiteral("google-web"));
     connect(ttsProviderCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this]() {
+                // Show loading message
+                if (voiceCombo) {
+                    voiceCombo->clear();
+                    voiceCombo->addItem("Loading voices...");
+                    voiceCombo->setEnabled(false);
+                }
+
+                // Process events to show the loading message
+                QCoreApplication::processEvents();
+
+                // Update voice list (this might take time for detection)
                 updateVoiceList();
                 onSettingChanged();
             });
@@ -893,6 +907,14 @@ void ModernSettingsWindow::loadSettings()
     if (ttsEnabledCheck) {
         ttsEnabledCheck->setChecked(settings.value("tts/enabled", true).toBool());
     }
+    if (ttsProviderCombo) {
+        QString savedProvider = settings.value("tts/provider", "edge-free").toString();
+        int providerIndex = ttsProviderCombo->findData(savedProvider);
+        if (providerIndex >= 0) {
+            ttsProviderCombo->setCurrentIndex(providerIndex);
+        }
+    }
+    // Voice will be restored by updateVoiceList() using the saved voice name
 
     qDebug() << "ModernSettingsWindow: Settings loaded successfully";
 }
@@ -968,6 +990,17 @@ void ModernSettingsWindow::saveSettings()
     // TTS
     if (ttsEnabledCheck) {
         settings.setValue("tts/enabled", ttsEnabledCheck->isChecked());
+    }
+    if (ttsProviderCombo) {
+        settings.setValue("tts/provider", ttsProviderCombo->currentData().toString());
+    }
+    if (voiceCombo && voiceCombo->isEnabled() && voiceCombo->currentIndex() >= 0) {
+        auto voiceData = voiceCombo->currentData();
+        if (voiceData.canConvert<ModernTTSManager::VoiceInfo>()) {
+            auto voice = voiceData.value<ModernTTSManager::VoiceInfo>();
+            settings.setValue("tts/voiceId", voice.id);
+            settings.setValue("tts/voiceName", voice.name);
+        }
     }
 
     settings.sync();
@@ -1062,7 +1095,7 @@ void ModernSettingsWindow::updateGnomeShortcuts()
 
 void ModernSettingsWindow::updateVoiceList()
 {
-    if (!voiceCombo || !ttsProviderCombo) {
+    if (!voiceCombo || !ttsProviderCombo || !ocrLanguageCombo) {
         return;
     }
 
@@ -1070,14 +1103,39 @@ void ModernSettingsWindow::updateVoiceList()
     QString providerStr = ttsProviderCombo->currentData().toString();
 
     // Map provider string to enum
-    ModernTTSManager::TTSProvider selectedProvider = ModernTTSManager::TTSProvider::SystemTTS;
+    ModernTTSManager::TTSProvider selectedProvider = ModernTTSManager::TTSProvider::EdgeTTS;  // default to Edge TTS
     if (providerStr == "google-web") {
         selectedProvider = ModernTTSManager::TTSProvider::GoogleWeb;
     } else if (providerStr == "edge-free") {
         selectedProvider = ModernTTSManager::TTSProvider::EdgeTTS;
+    } else if (providerStr == "system") {
+        selectedProvider = ModernTTSManager::TTSProvider::SystemTTS;
     }
 
-    // Save current selection
+    // Get selected OCR language and map to QLocale
+    QString ocrLang = ocrLanguageCombo->currentText();
+    QLocale::Language targetLang = QLocale::English;  // default
+
+    if (ocrLang.contains("Chinese (Simplified)")) targetLang = QLocale::Chinese;
+    else if (ocrLang.contains("Chinese (Traditional)")) targetLang = QLocale::Chinese;
+    else if (ocrLang.contains("Japanese")) targetLang = QLocale::Japanese;
+    else if (ocrLang.contains("Korean")) targetLang = QLocale::Korean;
+    else if (ocrLang.contains("Spanish")) targetLang = QLocale::Spanish;
+    else if (ocrLang.contains("French")) targetLang = QLocale::French;
+    else if (ocrLang.contains("German")) targetLang = QLocale::German;
+    else if (ocrLang.contains("Russian")) targetLang = QLocale::Russian;
+    else if (ocrLang.contains("Portuguese")) targetLang = QLocale::Portuguese;
+    else if (ocrLang.contains("Italian")) targetLang = QLocale::Italian;
+    else if (ocrLang.contains("Dutch")) targetLang = QLocale::Dutch;
+    else if (ocrLang.contains("Polish")) targetLang = QLocale::Polish;
+    else if (ocrLang.contains("Swedish")) targetLang = QLocale::Swedish;
+    else if (ocrLang.contains("Arabic")) targetLang = QLocale::Arabic;
+    else if (ocrLang.contains("Hindi")) targetLang = QLocale::Hindi;
+    else if (ocrLang.contains("Thai")) targetLang = QLocale::Thai;
+    else if (ocrLang.contains("Vietnamese")) targetLang = QLocale::Vietnamese;
+
+    // Save current selection (prefer saved voice ID from settings)
+    QString savedVoiceId = settings.value("tts/voiceId", "").toString();
     QString currentVoiceName;
     if (voiceCombo->currentIndex() >= 0) {
         currentVoiceName = voiceCombo->currentText();
@@ -1086,15 +1144,19 @@ void ModernSettingsWindow::updateVoiceList()
     // Clear and repopulate
     voiceCombo->clear();
 
-    // Get all voices and filter by provider
+    // Get all voices and filter by provider AND language
     auto allVoices = ModernTTSManager::instance().availableVoices();
     int addedCount = 0;
     int restoreIndex = -1;
 
     for (const auto& voice : allVoices) {
-        if (voice.provider == selectedProvider) {
+        // Filter by provider and language
+        if (voice.provider == selectedProvider && voice.locale.language() == targetLang) {
             voiceCombo->addItem(voice.name, QVariant::fromValue(voice));
-            if (voice.name == currentVoiceName) {
+            // Try to restore by ID first (more reliable), then by name
+            if (!savedVoiceId.isEmpty() && voice.id == savedVoiceId) {
+                restoreIndex = addedCount;
+            } else if (savedVoiceId.isEmpty() && voice.name == currentVoiceName) {
                 restoreIndex = addedCount;
             }
             addedCount++;
@@ -1102,7 +1164,17 @@ void ModernSettingsWindow::updateVoiceList()
     }
 
     if (addedCount == 0) {
-        voiceCombo->addItem("No voices available for this provider");
+        QString providerName;
+        if (providerStr == "edge-free") {
+            providerName = "Edge TTS";
+        } else if (providerStr == "google-web") {
+            providerName = "Google";
+        } else {
+            providerName = "System";
+        }
+
+        QString msg = QString("No %1 voices for %2").arg(providerName).arg(ocrLang);
+        voiceCombo->addItem(msg);
         voiceCombo->setEnabled(false);
         if (testVoiceBtn) {
             testVoiceBtn->setEnabled(false);
@@ -1112,9 +1184,11 @@ void ModernSettingsWindow::updateVoiceList()
         if (testVoiceBtn) {
             testVoiceBtn->setEnabled(true);
         }
-        // Restore previous selection if it exists in new provider
+        // Restore previous selection if it exists, otherwise select first
         if (restoreIndex >= 0) {
             voiceCombo->setCurrentIndex(restoreIndex);
+        } else if (addedCount > 0) {
+            voiceCombo->setCurrentIndex(0);  // Auto-select first voice
         }
     }
 }

@@ -76,54 +76,42 @@ QStringList GoogleWebTTSProvider::suggestedVoicesFor(const QLocale& locale) cons
         return list;
     };
 
+    // Note: Google Translate TTS doesn't support voice selection - only one default voice per language
     switch (locale.language()) {
     case QLocale::English:
-        if (locale.territory() == QLocale::India)
-            return makeList({"English (IN) - Female", "English (IN) - Male", "English (IN) - News"});
-        if (locale.territory() == QLocale::Australia)
-            return makeList({"English (AU) - Warm"});
-        return makeList({
-            "English (US) - Female",
-            "English (US) - Male",
-            "English (US) - Narrator",
-            "English (UK) - Female",
-            "English (UK) - Male",
-            "English (CA) - Friendly"
-        });
+        return makeList({"English (Google Translate)"});
     case QLocale::Japanese:
-        return makeList({"日本語 - 女性", "日本語 - 男性"});
+        return makeList({"日本語 (Google Translate)"});
     case QLocale::Chinese:
         if (locale.script() == QLocale::TraditionalChineseScript || locale.territory() == QLocale::Taiwan)
-            return makeList({"中文 (繁體) - 女聲", "中文 (繁體) - 男聲"});
-        return makeList({"中文 (简体) - 女声", "中文 (简体) - 男声", "中文 (普通话) - 新闻"});
+            return makeList({"中文繁體 (Google Translate)"});
+        return makeList({"中文简体 (Google Translate)"});
     case QLocale::Korean:
-        return makeList({"한국어 - 여성", "한국어 - 남성"});
+        return makeList({"한국어 (Google Translate)"});
     case QLocale::Spanish:
-        return makeList({"Español (ES) - Femenino", "Español (ES) - Masculino", "Español (MX) - Femenino"});
+        return makeList({"Español (Google Translate)"});
     case QLocale::French:
-        return makeList({"Français (FR) - Femme", "Français (FR) - Homme", "Français (CA) - Femme"});
+        return makeList({"Français (Google Translate)"});
     case QLocale::German:
-        return makeList({"Deutsch - Weiblich", "Deutsch - Männlich"});
+        return makeList({"Deutsch (Google Translate)"});
     case QLocale::Italian:
-        return makeList({"Italiano - Femmina", "Italiano - Maschio"});
+        return makeList({"Italiano (Google Translate)"});
     case QLocale::Portuguese:
-        if (locale.territory() == QLocale::Brazil)
-            return makeList({"Português (BR) - Feminino", "Português (BR) - Masculino"});
-        return makeList({"Português (PT) - Feminino", "Português (PT) - Masculino"});
+        return makeList({"Português (Google Translate)"});
     case QLocale::Russian:
-        return makeList({"Русский - Женский", "Русский - Мужской"});
+        return makeList({"Русский (Google Translate)"});
     case QLocale::Arabic:
-        return makeList({"العربية - أنثى", "العربية - ذكر"});
+        return makeList({"العربية (Google Translate)"});
     case QLocale::Hindi:
-        return makeList({"हिन्दी - महिला", "हिन्दी - पुरुष"});
+        return makeList({"हिन्दी (Google Translate)"});
     case QLocale::Thai:
-        return makeList({"ไทย - หญิง", "ไทย - ชาย"});
+        return makeList({"ไทย (Google Translate)"});
     case QLocale::Swedish:
-        return makeList({"Svenska - Kvinna", "Svenska - Man", "Svenska - Nyheter"});
+        return makeList({"Svenska (Google Translate)"});
     case QLocale::Vietnamese:
-        return makeList({"Tiếng Việt - Nữ", "Tiếng Việt - Nam"});
+        return makeList({"Tiếng Việt (Google Translate)"});
     default:
-        return makeList({"English (US) - Female", "English (US) - Male"});
+        return makeList({"Default (Google Translate)"});
     }
 }
 

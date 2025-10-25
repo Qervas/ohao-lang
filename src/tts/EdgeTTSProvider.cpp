@@ -18,12 +18,50 @@ static QDateTime s_cacheTimestamp;
 static QMutex s_cacheMutex;
 static const int CACHE_HOURS = 24; // Cache voices for 24 hours
 
+// Static availability check - persists across instances
+static bool s_edgeTtsChecked = false;
+static bool s_edgeTtsAvailable = false;
+static QString s_edgeTtsExecutable;  // Cache the executable path too
+
 EdgeTTSProvider::EdgeTTSProvider(QObject* parent)
     : TTSProvider(parent)
 {
     m_player = new QMediaPlayer(this);
     m_audio = new QAudioOutput(this);
     m_player->setAudioOutput(m_audio);
+
+    // Try to auto-detect edge-tts command (check only once, cache result)
+    if (!s_edgeTtsChecked) {
+        QProcess testProcess;
+        testProcess.start("edge-tts", QStringList() << "--list-voices");
+        if (testProcess.waitForFinished(5000)) {
+            QString output = testProcess.readAllStandardOutput();
+            // If we get voice list output, edge-tts is installed
+            if (!output.isEmpty() && output.contains("Name")) {
+                s_edgeTtsAvailable = true;
+                s_edgeTtsExecutable = "edge-tts";
+                qDebug() << "EdgeTTSProvider: Auto-detected edge-tts command";
+            } else {
+                s_edgeTtsAvailable = false;
+                s_edgeTtsExecutable = "";
+                qDebug() << "EdgeTTSProvider: edge-tts command not found in PATH";
+            }
+        } else {
+            s_edgeTtsAvailable = false;
+            s_edgeTtsExecutable = "";
+            qDebug() << "EdgeTTSProvider: edge-tts command not responding";
+        }
+        s_edgeTtsChecked = true;
+    }
+
+    // Use cached results
+    m_edgeTtsAvailable = s_edgeTtsAvailable;
+    m_executable = s_edgeTtsExecutable;
+    if (m_edgeTtsAvailable) {
+        qDebug() << "EdgeTTSProvider: Using cached availability, executable set to:" << m_executable;
+    } else {
+        qDebug() << "EdgeTTSProvider: Using cached availability, edge-tts NOT available";
+    }
 }
 
 EdgeTTSProvider::~EdgeTTSProvider()
@@ -215,8 +253,11 @@ void EdgeTTSProvider::speak(const QString& text,
         return;
     }
 
-    if (m_executable.isEmpty()) {
-        emit errorOccurred(tr("Set the edge-tts executable first."));
+    qDebug() << "EdgeTTSProvider::speak() - m_executable:" << m_executable << "m_edgeTtsAvailable:" << m_edgeTtsAvailable;
+
+    if (m_executable.isEmpty() || !m_edgeTtsAvailable) {
+        qDebug() << "EdgeTTSProvider::speak() - FAILING availability check!";
+        emit errorOccurred(tr("Edge TTS not installed. Install with: pip install edge-tts"));
         return;
     }
 

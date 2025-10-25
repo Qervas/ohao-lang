@@ -29,6 +29,9 @@ public:
                double volume) override;
     void stop() override;
 
+    // Availability check
+    bool isEdgeTTSAvailable() const { return m_edgeTtsAvailable; }
+
     // Dynamic voice discovery with caching
     static QStringList getAllAvailableVoices(bool forceRefresh = false);
     static QStringList getVoicesForLanguage(const QString& languageCode, bool forceRefresh = false);
@@ -45,6 +48,7 @@ private:
     QString m_executable;
     QString m_voice;
     QString m_tmpMediaPath;
+    bool m_edgeTtsAvailable { false };
 
     QProcess* m_process { nullptr };
     QMediaPlayer* m_player { nullptr };

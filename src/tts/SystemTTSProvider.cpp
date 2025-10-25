@@ -73,6 +73,9 @@ void SystemTTSProvider::speak(const QString& text, const QLocale& locale, double
     m_engine->setVolume(volume);
     m_engine->setRate(rate);
     m_engine->setPitch(pitch);
+
+    qDebug() << "SystemTTSProvider: Applied settings - Volume:" << m_engine->volume()
+             << "Rate:" << m_engine->rate() << "Pitch:" << m_engine->pitch();
     
     // Re-apply the voice from config to ensure it's set correctly
     // This is necessary because the voice state might have been changed elsewhere
@@ -89,9 +92,13 @@ void SystemTTSProvider::speak(const QString& text, const QLocale& locale, double
     
     qDebug() << "SystemTTSProvider: Final voice:" << m_engine->voice().name();
     qDebug() << "SystemTTSProvider: Volume:" << volume << "Rate:" << rate << "Pitch:" << pitch;
-    
+    qDebug() << "SystemTTSProvider: About to call say() with text length:" << text.length();
+    qDebug() << "SystemTTSProvider: Engine state before say():" << m_engine->state();
+
     emit started();
     m_engine->say(text);
+
+    qDebug() << "SystemTTSProvider: say() called, engine state after:" << m_engine->state();
 }
 
 void SystemTTSProvider::stop()
