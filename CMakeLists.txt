@@ -108,6 +108,16 @@ else()
     message(WARNING "Qt6 TextToSpeech not found. TTS features will be disabled.")
 endif()
 
+# Hunspell library for spellchecking (post-OCR correction)
+if(EXISTS "${CMAKE_SOURCE_DIR}/third_party/hunspell/lib/hunspell.lib")
+    message(STATUS "Hunspell library found - enabling spellcheck")
+    target_include_directories(ohao-lang PRIVATE ${CMAKE_SOURCE_DIR}/third_party/hunspell/include)
+    target_link_libraries(ohao-lang PRIVATE ${CMAKE_SOURCE_DIR}/third_party/hunspell/lib/hunspell.lib)
+    target_compile_definitions(ohao-lang PRIVATE HUNSPELL_AVAILABLE HUNSPELL_STATIC)
+else()
+    message(WARNING "Hunspell library not found - spellcheck disabled")
+endif()
+
 # Link Apple frameworks on macOS for native OCR support and global shortcuts
 if(APPLE)
     find_library(VISION_FRAMEWORK Vision)

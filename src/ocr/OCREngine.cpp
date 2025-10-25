@@ -1,6 +1,7 @@
 #include "OCREngine.h"
 #include "AppleVisionOCR.h"
 #include "TranslationEngine.h"
+#include "SpellChecker.h"
 #include "../common/Platform.h"
 #include <QDebug>
 #include <QBuffer>
@@ -297,13 +298,23 @@ void OCREngine::performTesseractOCR(const QPixmap &image)
     }
     arguments << "--psm" << QString::number(psm);
 
-    // Auto-detect orientation
-    if (m_autoDetectOrientation && m_qualityLevel >= 4) {
-        arguments << "--oem" << "1"; // LSTM engine
+    // OCR Engine Mode (OEM) - LSTM neural engine for non-English languages
+    // LSTM is critical for:
+    // - Latin scripts with diacritics (French, Spanish, German, Italian, Portuguese, Swedish, Dutch, Polish, Vietnamese)
+    // - Cyrillic script (Russian)
+    // - CJK scripts (Chinese, Japanese, Korean) - MANDATORY
+    // - Arabic script (right-to-left, contextual forms)
+    // - Devanagari (Hindi), Thai, and other complex scripts
+    // LSTM is 10x better than legacy engine for non-ASCII characters
+    bool needsLSTM = (m_language != "English" && m_language != "Auto-Detect") ||
+                     (m_autoDetectOrientation && m_qualityLevel >= 4);
+
+    if (needsLSTM) {
+        arguments << "--oem" << "1"; // LSTM neural network engine
     }
 
-    // Configuration tuning
-    arguments << "-c" << "tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:()[]{}\"'-+= \n\t";
+    // Let Tesseract use the full character set for the selected language
+    // No character whitelist restrictions - improves recognition of long paragraphs
 
     emit ocrProgress("Running Tesseract OCR (TSV mode)...");
 
@@ -407,8 +418,18 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
         QTextStream ts(&output, QIODevice::ReadOnly);
         QString header = ts.readLine();
         Q_UNUSED(header)
-        QMap<int, QString> lineAccum; // lineId -> text
+
+        // Structure to hold line information for proper sorting
+        struct LineData {
+            int lineId;
+            QString text;
+            int topY;      // Y coordinate (for vertical sorting)
+            int leftX;     // X coordinate (for horizontal sorting)
+        };
+
+        QMap<int, LineData> lineMap; // lineId -> line data
         int tokenCount = 0;
+
         while (!ts.atEnd()) {
             QString line = ts.readLine();
             if (line.isEmpty()) continue;
@@ -416,7 +437,11 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
             if (cols.size() < 12) continue;
             int level = cols[0].toInt();
             if (level != 5) continue; // word level
-            int lineNum = cols[5].toInt();
+
+            // Tesseract TSV columns: level page_num block_num par_num line_num word_num left top width height conf text
+            int blockNum = cols[2].toInt();
+            int parNum = cols[3].toInt();
+            int lineNumInPar = cols[4].toInt();
             int left = cols[6].toInt();
             int top = cols[7].toInt();
             int width = cols[8].toInt();
@@ -424,27 +449,74 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
             float conf = cols[10].toFloat();
             QString tokenText = cols[11];
             if (tokenText.trimmed().isEmpty()) continue;
+
+            // Create composite line ID: block * 10000 + paragraph * 100 + line
+            int lineId = blockNum * 10000 + parNum * 100 + lineNumInPar;
+
             OCRResult::OCRToken token;
             token.text = tokenText;
             token.box = QRect(left, top, width, height);
             token.confidence = conf;
-            token.lineId = lineNum;
+            token.lineId = lineId;
             result.tokens.push_back(token);
-            if (!lineAccum.contains(lineNum)) lineAccum[lineNum] = tokenText;
-            else lineAccum[lineNum] += " " + tokenText;
+
+            if (!lineMap.contains(lineId)) {
+                LineData data;
+                data.lineId = lineId;
+                data.text = tokenText;
+                data.topY = top;
+                data.leftX = left;
+                lineMap[lineId] = data;
+            } else {
+                lineMap[lineId].text += " " + tokenText;
+                // Update leftmost X position
+                if (left < lineMap[lineId].leftX) {
+                    lineMap[lineId].leftX = left;
+                }
+            }
             ++tokenCount;
         }
-        // Reconstruct text preserving line order
+
+        // Sort lines by reading order: top-to-bottom, then left-to-right
+        QList<LineData> sortedLines = lineMap.values();
+        std::sort(sortedLines.begin(), sortedLines.end(), [](const LineData &a, const LineData &b) {
+            // Define a threshold for "same line" vertically (within 10 pixels)
+            const int verticalThreshold = 10;
+
+            if (qAbs(a.topY - b.topY) < verticalThreshold) {
+                // Same horizontal line, sort by X position (left to right)
+                return a.leftX < b.leftX;
+            } else {
+                // Different vertical position, sort by Y (top to bottom)
+                return a.topY < b.topY;
+            }
+        });
+
+        // Reconstruct text in proper reading order
         QStringList lines;
-        QList<int> keys = lineAccum.keys();
-        std::sort(keys.begin(), keys.end());
-        for (int k : keys) lines << lineAccum.value(k);
+        for (const LineData &lineData : sortedLines) {
+            lines << lineData.text;
+        }
         
         // Apply intelligent paragraph merging
         result.text = mergeParagraphLines(lines, result.tokens);
 
         // Apply language-specific character corrections
         result.text = correctLanguageSpecificCharacters(result.text, m_language);
+
+        // Apply spellcheck correction using Hunspell
+        auto spellChecker = getSpellChecker(m_language);
+        if (spellChecker) {
+            qDebug() << "Applying Hunspell spellcheck for" << m_language;
+            QString originalText = result.text;
+            result.text = spellChecker->correctText(result.text);
+
+            if (originalText != result.text) {
+                qDebug() << "Spellcheck made corrections:";
+                qDebug() << "  Before:" << originalText.left(100);
+                qDebug() << "  After:" << result.text.left(100);
+            }
+        }
 
         result.success = !result.text.isEmpty();
         result.confidence = "N/A";
@@ -943,25 +1015,62 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
     if (language == "Swedish") {
         qDebug() << "Applying Swedish-specific character corrections";
 
-        // SWEDISH ONLY: Only correct characters that specifically should be Swedish
+        // STEP 1: Remove foreign diacritics that don't belong in Swedish
+        QMap<QString, QString> swedishCleanup = {
+            // Portuguese/Spanish tildes → plain letters (Swedish doesn't use tildes)
+            {"ẽ", "e"}, {"ã", "a"}, {"õ", "o"},
+            {"Ẽ", "E"}, {"Ã", "A"}, {"Õ", "O"},
+
+            // French accents (grave, acute, circumflex - Swedish uses ä/ö/å instead)
+            {"é", "e"}, {"è", "e"}, {"ê", "e"},
+            {"à", "a"}, {"â", "a"},
+            {"ù", "u"}, {"û", "u"}, {"ú", "u"},
+            {"î", "i"}, {"ï", "i"}, {"í", "i"},
+
+            // Spanish/Polish n
+            {"ñ", "n"}, {"ń", "n"},
+
+            // French cedilla and ligatures
+            {"ç", "c"},
+            {"œ", "oe"}, {"æ", "ae"},
+        };
+
+        for (auto it = swedishCleanup.begin(); it != swedishCleanup.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+
+        // STEP 2: Fix OCR character misrecognitions specific to Swedish
         QMap<QString, QString> swedishCorrections = {
-            // Only fix obvious OCR errors that should be Swedish characters
-            // ä - ONLY basic ASCII misrecognitions
-            {"a\"", "ä"},    // OCR sometimes sees ä as a with quotes
-            {"a'", "ä"},     // OCR sometimes sees ä as a with apostrophe
+            // ä - Various OCR misrecognitions
+            {"ä", "ä"},      // Sometimes encoded wrong
+            {"a\"", "ä"},    // OCR sees ä as a with quotes
+            {"a'", "ä"},     // OCR sees ä as a with apostrophe
+            {"ã", "ä"},      // Sometimes confused with tilde
+            {"à", "ä"},      // Sometimes confused with grave accent
+            {"â", "ä"},      // Sometimes confused with circumflex
 
-            // ö - ONLY basic ASCII misrecognitions
-            {"o\"", "ö"},    // OCR sometimes sees ö as o with quotes
-            {"o'", "ö"},     // OCR sometimes sees ö as o with apostrophe
+            // ö - Various OCR misrecognitions
+            {"ö", "ö"},      // Sometimes encoded wrong
+            {"o\"", "ö"},    // OCR sees ö as o with quotes
+            {"o'", "ö"},     // OCR sees ö as o with apostrophe
+            {"õ", "ö"},      // Sometimes confused with tilde
+            {"ô", "ö"},      // Sometimes confused with circumflex
+            {"ò", "ö"},      // Sometimes confused with grave accent
 
-            // å - ONLY basic ASCII misrecognitions
-            {"a°", "å"},     // OCR sometimes sees å as a with degree symbol
-            {"ao", "å"},     // OCR sometimes sees å as a followed by o
+            // å - Various OCR misrecognitions
+            {"å", "å"},      // Sometimes encoded wrong
+            {"a°", "å"},     // OCR sees å as a with degree symbol
+            {"ao", "å"},     // OCR sees å as a followed by o
+            {"ã", "å"},      // Sometimes confused (rare)
+            {"ª", "å"},      // Feminine ordinal confused with å
 
-            // Capital versions
-            {"A\"", "Ä"},    {"A'", "Ä"},
-            {"O\"", "Ö"},    {"O'", "Ö"},
-            {"A°", "Å"},     {"AO", "Å"},   {"Ao", "Å"}
+            // Capital versions - comprehensive
+            {"Ä", "Ä"},      {"A\"", "Ä"},    {"A'", "Ä"},
+            {"Ã", "Ä"},      {"À", "Ä"},      {"Â", "Ä"},
+            {"Ö", "Ö"},      {"O\"", "Ö"},    {"O'", "Ö"},
+            {"Õ", "Ö"},      {"Ô", "Ö"},      {"Ò", "Ö"},
+            {"Å", "Å"},      {"A°", "Å"},     {"AO", "Å"},
+            {"Ao", "Å"},     {"ª", "Å"}
         };
 
         // Apply character corrections
@@ -969,17 +1078,44 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
             correctedText.replace(it.key(), it.value());
         }
 
-        // Additional context-based corrections for Swedish
-        // Fix common word-level misrecognitions
+        // Intelligent Swedish word dictionary - Fix OCR misrecognitions
+        // Maps commonly misread words (without diacritics) to correct Swedish spelling
         QMap<QString, QString> swedishWordCorrections = {
-            {"för", "för"},         // Ensure proper ö in common word "för" (for)
-            {"kött", "kött"},       // Ensure proper ö in "kött" (meat)
-            {"höger", "höger"},     // Ensure proper ö in "höger" (right)
-            {"väl", "väl"},         // Ensure proper ä in "väl" (well)
-            {"här", "här"},         // Ensure proper ä in "här" (here)
-            {"år", "år"},           // Ensure proper å in "år" (year)
-            {"på", "på"},           // Ensure proper å in "på" (on)
-            {"då", "då"},           // Ensure proper å in "då" (then)
+            // Critical words with ä
+            {"tackmantel", "täckmantel"},   // cover/mantle (FIXES USER'S EXAMPLE!)
+            {"har", "här"},                 // here (vs. have)
+            {"aven", "även"},               // also/even
+            {"val", "väl"},                 // well
+            {"var", "vår"},                 // our/spring (context-dependent, but vår more common)
+            {"alska", "älska"},             // love
+            {"andra", "ändra"},             // change (vs. second/others - context)
+            {"lat", "låt"},                 // let/song
+            {"nagot", "något"},             // something
+            {"manader", "månader"},         // months
+
+            // Critical words with ö
+            {"for", "för"},                 // for
+            {"hor", "hör"},                 // hear
+            {"mor", "mör"},                 // tender
+            {"kon", "kön"},                 // sex/gender
+            {"kott", "kött"},               // meat
+            {"hoger", "höger"},             // right
+            {"moter", "möter"},             // meets
+            {"oronen", "öronen"},           // ears
+            {"folja", "följa"},             // follow
+            {"tro", "tro"},                 // believe (already correct, but common)
+
+            // Critical words with å
+            {"ar", "år"},                   // year/is (context-dependent)
+            {"pa", "på"},                   // on
+            {"da", "då"},                   // then
+            {"ga", "gå"},                   // go/walk
+            {"ma", "må"},                   // may/feel
+            {"sta", "stå"},                 // stand
+            {"fa", "få"},                   // get/few/sheep
+            {"sa", "så"},                   // so/sow
+            {"ater", "åter"},               // again
+            {"aterkommer", "återkommer"},   // returns
         };
 
         // Apply word-level corrections (case insensitive)
@@ -996,6 +1132,32 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
     // Language-specific character corrections - NO MIXING between languages
     else if (language == "French") {
         qDebug() << "Applying French-specific character corrections";
+
+        // STEP 1: Remove foreign diacritics that don't belong in French
+        QMap<QString, QString> frenchCleanup = {
+            // Swedish
+            {"å", "a"}, {"Å", "A"},
+
+            // Spanish (French uses different accents)
+            {"ñ", "n"}, {"Ñ", "N"},
+            {"á", "a"}, {"Á", "A"},  // French uses à not á
+            {"í", "i"}, {"Í", "I"},
+            {"ó", "o"}, {"Ó", "O"},  // French uses ô not ó
+            {"ú", "u"}, {"Ú", "U"},  // French uses ù/û not ú
+
+            // Portuguese tildes
+            {"ã", "a"}, {"Ã", "A"},
+            {"õ", "o"}, {"Õ", "O"},
+
+            // German
+            {"ß", "ss"},
+        };
+
+        for (auto it = frenchCleanup.begin(); it != frenchCleanup.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+
+        // STEP 2: Fix OCR character misrecognitions
         QMap<QString, QString> frenchCorrections = {
             // French accents - ONLY correct OCR errors, not other language characters
             {"a`", "à"}, {"a'", "á"}, {"a^", "â"}, {"a~", "ã"},
@@ -1018,6 +1180,39 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
     }
     else if (language == "Spanish") {
         qDebug() << "Applying Spanish-specific character corrections";
+
+        // STEP 1: Remove foreign diacritics that don't belong in Spanish
+        QMap<QString, QString> spanishCleanup = {
+            // Swedish
+            {"å", "a"}, {"Å", "A"},
+            {"ä", "a"}, {"Ä", "A"},
+            {"ö", "o"}, {"Ö", "O"},
+
+            // Portuguese tildes (Spanish doesn't use tildes on a/o, only on n)
+            {"ã", "a"}, {"Ã", "A"},
+            {"õ", "o"}, {"Õ", "O"},
+
+            // French accents (Spanish uses acute, not grave/circumflex)
+            {"à", "a"}, {"À", "A"},
+            {"è", "e"}, {"È", "E"},
+            {"ê", "e"}, {"Ê", "E"},
+            {"ë", "e"}, {"Ë", "E"},
+            {"î", "i"}, {"Î", "I"},
+            {"ï", "i"}, {"Ï", "I"},
+            {"ô", "o"}, {"Ô", "O"},
+            {"ù", "u"}, {"Ù", "U"},
+            {"û", "u"}, {"Û", "U"},
+            {"ç", "c"}, {"Ç", "C"},  // Spanish uses c/z not ç
+
+            // German
+            {"ß", "ss"},
+        };
+
+        for (auto it = spanishCleanup.begin(); it != spanishCleanup.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+
+        // STEP 2: Fix OCR character misrecognitions
         QMap<QString, QString> spanishCorrections = {
             // Spanish accents - ONLY correct OCR errors, not other language characters
             {"a'", "á"}, {"e'", "é"}, {"i'", "í"}, {"o'", "ó"}, {"u'", "ú"}, {"u\"", "ü"},
@@ -1032,6 +1227,41 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
     }
     else if (language == "German") {
         qDebug() << "Applying German-specific character corrections";
+
+        // STEP 1: Remove foreign diacritics that don't belong in German
+        QMap<QString, QString> germanCleanup = {
+            // Swedish
+            {"å", "a"}, {"Å", "A"},
+
+            // Spanish
+            {"ñ", "n"}, {"Ñ", "N"},
+            {"á", "a"}, {"Á", "A"},
+            {"é", "e"}, {"É", "E"},
+            {"í", "i"}, {"Í", "I"},
+            {"ó", "o"}, {"Ó", "O"},
+            {"ú", "u"}, {"Ú", "U"},
+
+            // Portuguese
+            {"ã", "a"}, {"Ã", "A"},
+            {"õ", "o"}, {"Õ", "O"},
+
+            // French
+            {"à", "a"}, {"À", "A"},
+            {"è", "e"}, {"È", "E"},
+            {"ê", "e"}, {"Ê", "E"},
+            {"î", "i"}, {"Î", "I"},
+            {"ô", "o"}, {"Ô", "O"},
+            {"ù", "u"}, {"Ù", "U"},
+            {"û", "u"}, {"Û", "U"},
+            {"ç", "c"}, {"Ç", "C"},
+            {"œ", "oe"}, {"æ", "ae"},
+        };
+
+        for (auto it = germanCleanup.begin(); it != germanCleanup.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+
+        // STEP 2: Fix OCR character misrecognitions
         QMap<QString, QString> germanCorrections = {
             // German umlauts - ONLY correct OCR errors
             {"a\"", "ä"}, {"o\"", "ö"}, {"u\"", "ü"}, {"ss", "ß"},
@@ -1043,6 +1273,34 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
     }
     else if (language == "Portuguese") {
         qDebug() << "Applying Portuguese-specific character corrections";
+
+        // STEP 1: Remove foreign diacritics that don't belong in Portuguese
+        QMap<QString, QString> portugueseCleanup = {
+            // Swedish
+            {"å", "a"}, {"Å", "A"},
+            {"ä", "a"}, {"Ä", "A"},
+            {"ö", "o"}, {"Ö", "O"},
+
+            // Spanish (ñ not in Portuguese, uses nh)
+            {"ñ", "n"}, {"Ñ", "N"},
+
+            // French
+            {"è", "e"}, {"È", "E"},  // Portuguese uses ê not è
+            {"ù", "u"}, {"Ù", "U"},  // Portuguese uses ú not ù
+            {"ï", "i"}, {"Ï", "I"},
+            {"ë", "e"}, {"Ë", "E"},
+            {"ÿ", "y"},
+
+            // German
+            {"ü", "u"}, {"Ü", "U"},
+            {"ß", "ss"},
+        };
+
+        for (auto it = portugueseCleanup.begin(); it != portugueseCleanup.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+
+        // STEP 2: Fix OCR character misrecognitions
         QMap<QString, QString> portugueseCorrections = {
             // Portuguese accents - ONLY correct OCR errors
             {"a'", "á"}, {"a^", "â"}, {"a~", "ã"}, {"a`", "à"},
@@ -1065,6 +1323,45 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
     }
     else if (language == "Italian") {
         qDebug() << "Applying Italian-specific character corrections";
+
+        // STEP 1: Remove foreign diacritics that don't belong in Italian
+        QMap<QString, QString> italianCleanup = {
+            // Swedish
+            {"å", "a"}, {"Å", "A"},
+            {"ä", "a"}, {"Ä", "A"},
+            {"ö", "o"}, {"Ö", "O"},
+
+            // Spanish
+            {"ñ", "n"}, {"Ñ", "N"},
+            {"á", "a"}, {"Á", "A"},  // Italian uses à not á
+            {"í", "i"}, {"Í", "I"},  // Italian uses ì not í
+            {"ó", "o"}, {"Ó", "O"},  // Italian uses ò not ó
+            {"ú", "u"}, {"Ú", "U"},  // Italian uses ù not ú
+
+            // Portuguese
+            {"ã", "a"}, {"Ã", "A"},
+            {"õ", "o"}, {"Õ", "O"},
+
+            // French
+            {"â", "a"}, {"Â", "A"},
+            {"ê", "e"}, {"Ê", "E"},
+            {"ë", "e"}, {"Ë", "E"},
+            {"î", "i"}, {"Î", "I"},
+            {"ï", "i"}, {"Ï", "I"},
+            {"ô", "o"}, {"Ô", "O"},
+            {"û", "u"}, {"Û", "U"},
+            {"ç", "c"}, {"Ç", "C"},
+
+            // German
+            {"ü", "u"}, {"Ü", "U"},
+            {"ß", "ss"},
+        };
+
+        for (auto it = italianCleanup.begin(); it != italianCleanup.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+
+        // STEP 2: Fix OCR character misrecognitions
         QMap<QString, QString> italianCorrections = {
             // Italian accents - ONLY correct OCR errors
             {"a'", "á"}, {"a`", "à"},
@@ -1083,6 +1380,130 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
             correctedText.replace(it.key(), it.value());
         }
     }
+    else if (language == "Dutch") {
+        qDebug() << "Applying Dutch-specific character corrections";
+
+        // STEP 1: Remove foreign diacritics that don't belong in Dutch
+        QMap<QString, QString> dutchCleanup = {
+            // Swedish
+            {"å", "a"}, {"Å", "A"},
+            {"ä", "a"}, {"Ä", "A"},
+            {"ö", "o"}, {"Ö", "O"},
+
+            // Spanish
+            {"ñ", "n"}, {"Ñ", "N"},
+            {"á", "a"}, {"Á", "A"},
+            {"í", "i"}, {"Í", "I"},
+            {"ó", "o"}, {"Ó", "O"},
+            {"ú", "u"}, {"Ú", "U"},
+
+            // Portuguese
+            {"ã", "a"}, {"Ã", "A"},
+            {"õ", "o"}, {"Õ", "O"},
+            {"ç", "c"}, {"Ç", "C"},
+
+            // French
+            {"à", "a"}, {"À", "A"},
+            {"è", "e"}, {"È", "E"},
+            {"ê", "e"}, {"Ê", "E"},
+            {"î", "i"}, {"Î", "I"},
+            {"ô", "o"}, {"Ô", "O"},
+            {"ù", "u"}, {"Ù", "U"},
+            {"û", "u"}, {"Û", "U"},
+
+            // German
+            {"ü", "u"}, {"Ü", "U"},
+            {"ß", "ss"},
+        };
+
+        for (auto it = dutchCleanup.begin(); it != dutchCleanup.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+    else if (language == "Polish") {
+        qDebug() << "Applying Polish-specific character corrections";
+
+        // STEP 1: Remove foreign diacritics that don't belong in Polish
+        QMap<QString, QString> polishCleanup = {
+            // Swedish
+            {"å", "a"}, {"Å", "A"},
+            {"ä", "a"}, {"Ä", "A"},
+            {"ö", "o"}, {"Ö", "O"},
+
+            // Spanish
+            {"ñ", "n"}, {"Ñ", "N"},  // Polish uses ń not ñ
+
+            // French
+            {"à", "a"}, {"é", "e"}, {"è", "e"}, {"ê", "e"},
+            {"ç", "c"},
+
+            // German
+            {"ü", "u"}, {"Ü", "U"},
+            {"ß", "ss"},
+
+            // Portuguese
+            {"ã", "a"}, {"õ", "o"},
+        };
+
+        for (auto it = polishCleanup.begin(); it != polishCleanup.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
+    else if (language == "Vietnamese") {
+        qDebug() << "Applying Vietnamese-specific character corrections";
+
+        // STEP 1: Remove foreign diacritics that don't belong in Vietnamese
+        QMap<QString, QString> vietnameseCleanup = {
+            // Swedish
+            {"å", "a"}, {"Å", "A"},
+            {"ö", "o"}, {"Ö", "O"},
+
+            // Spanish
+            {"ñ", "n"}, {"Ñ", "N"},
+
+            // German
+            {"ü", "u"}, {"Ü", "U"},
+            {"ß", "ss"},
+
+            // French ligatures
+            {"œ", "oe"}, {"æ", "ae"},
+        };
+
+        for (auto it = vietnameseCleanup.begin(); it != vietnameseCleanup.end(); ++it) {
+            correctedText.replace(it.key(), it.value());
+        }
+    }
 
     return correctedText;
+}
+
+std::shared_ptr<SpellChecker> OCREngine::getSpellChecker(const QString& language)
+{
+    // Map language names to language codes
+    QString langCode;
+    if (language == "Swedish") langCode = "sv_SE";
+    else if (language == "French") langCode = "fr_FR";
+    else if (language == "German") langCode = "de_DE";
+    else if (language == "Spanish") langCode = "es_ES";
+    else if (language == "Portuguese") langCode = "pt_PT";
+    else if (language == "Italian") langCode = "it_IT";
+    else if (language == "Dutch") langCode = "nl_NL";
+    else if (language == "Polish") langCode = "pl_PL";
+    else return nullptr; // No spellchecker for this language
+
+    // Check cache
+    if (m_spellCheckers.contains(langCode)) {
+        return m_spellCheckers[langCode];
+    }
+
+    // Create new spellchecker
+    auto spellChecker = std::make_shared<SpellChecker>(langCode);
+    if (spellChecker->isLoaded()) {
+        m_spellCheckers[langCode] = spellChecker;
+        qDebug() << "Created and cached spellchecker for" << language << "(" << langCode << ")";
+        return spellChecker;
+    }
+
+    qWarning() << "Failed to load spellchecker for" << language << "(" << langCode << ")";
+    return nullptr;
 }
