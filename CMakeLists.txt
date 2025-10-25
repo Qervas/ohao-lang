@@ -89,6 +89,14 @@ if(ENABLE_CONSOLE AND WIN32)
     set_target_properties(ohao-lang PROPERTIES
         LINK_FLAGS "/SUBSYSTEM:CONSOLE"
     )
+else()
+    # Ensure Windows subsystem (no console) for release builds
+    if(WIN32)
+        set_target_properties(ohao-lang PROPERTIES
+            WIN32_EXECUTABLE TRUE
+            LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup"
+        )
+    endif()
 endif()
 
 target_link_libraries(ohao-lang PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui Qt6::DBus Qt6::Network Qt6::Multimedia)

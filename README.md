@@ -7,11 +7,11 @@
   [![Windows](https://img.shields.io/badge/Windows-10%2F11-blue?logo=windows)](https://github.com/Qervas/ohao-lang)
   [![Qt](https://img.shields.io/badge/Qt-6.9.2-green?logo=qt)](https://qt.io/)
   [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-  [![Release](https://img.shields.io/badge/Release-v1.0.2-red)](https://github.com/Qervas/ohao-lang/releases)
+  [![Release](https://img.shields.io/badge/Release-v1.0.3-red)](https://github.com/Qervas/ohao-lang/releases)
 
   **OCR and translation tool with Text-to-Speech**
 
-  [Download for macOS](https://github.com/Qervas/ohao-lang/releases/latest) • [Download for Windows](https://github.com/Qervas/ohao-lang/releases/tag/v1.0.1)
+  [Download for macOS (v1.0.2)](https://github.com/Qervas/ohao-lang/releases/tag/v1.0.2) • [Download for Windows (v1.0.3)](https://github.com/Qervas/ohao-lang/releases/tag/v1.0.3)
 </div>
 
 ---
@@ -30,9 +30,11 @@
 - Auto language detection
 
 ### 🗣️ Text-to-Speech
-- System voices (macOS/Windows)
-- Cloud voices (Edge TTS)
-- Multiple language support
+- **Edge TTS** - High-quality Microsoft voices (free, online)
+- **System TTS** - Built-in voices (offline, no setup)
+- **Google Web TTS** - Free online alternative
+- Language-specific test sentences for 38 languages
+- Voice persistence and per-language configuration
 
 ### ⚡ Features
 - Global shortcuts (customizable)
@@ -40,6 +42,16 @@
 - Cross-platform (macOS 12.0+, Windows 10/11)
 
 ## 📋 Changelog
+
+### v1.0.3 (2025-10-25) - **Windows Only**
+- **All-in-one package** - Includes Tesseract OCR + all dependencies
+- **Modern TTS System** - Edge TTS, System TTS, Google Web TTS
+- **Enhanced UX** - Language-specific test sentences (38 languages)
+- **Unified Themes** - Light, Dark, Auto (System)
+- **Bug Fixes** - Theme dropdown, overlay brightness, TTS voice selection
+- **Easy Setup** - One-click Edge-TTS installer script
+- See [CHANGELOG.md](CHANGELOG.md) for complete details
+- **Note:** macOS remains at v1.0.2
 
 ### v1.0.2 (2025-10-14)
 - First macOS release with Apple Vision OCR
@@ -67,9 +79,12 @@
 
 ### Windows
 
-1. Download from [v1.0.1 release](https://github.com/Qervas/ohao-lang/releases/tag/v1.0.1)
-2. Install Tesseract OCR (see below)
-3. Run the app
+1. Download [`OhaoLang-v1.0.3-Windows-x64.zip`](https://github.com/Qervas/ohao-lang/releases/tag/v1.0.3) (161 MB)
+2. Extract to any folder
+3. (Optional) Run `setup_edge_tts.bat` for premium voice quality
+4. Launch `ohao-lang.exe` - Done!
+
+**Everything included:** Tesseract OCR + all dependencies bundled in the package!
 
 ### Build from Source
 
@@ -89,17 +104,17 @@ cmake --build build --config Release
 
 ## 📋 Requirements
 
-**macOS:** 12.0+, 50MB disk space  
-**Windows:** 10/11, 150MB + Tesseract OCR
+**macOS:** 12.0+, 50MB disk space
+**Windows:** 10/11, 161MB (all-in-one package, no additional setup)
 
-### Tesseract Setup (Windows only)
+### Optional: Edge-TTS Setup (Windows)
 
-```powershell
-# Using Scoop
-scoop install tesseract
-```
+For best voice quality, run the included `setup_edge_tts.bat` which automatically:
+- Downloads Python 3.11 embeddable (if needed)
+- Installs Edge-TTS
+- Creates launcher scripts
 
-Or download from [tesseract-ocr](https://github.com/UB-Mannheim/tesseract/wiki)
+Or use the built-in System TTS - works immediately, no setup required!
 
 ## 🎮 Usage
 
