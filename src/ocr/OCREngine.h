@@ -48,11 +48,7 @@ class OCREngine : public QObject
 public:
     enum Engine {
         AppleVision,  // macOS native Vision framework (default on macOS)
-        Tesseract,
-        OnlineOCR,
-        EasyOCR,      // Python-based engines (rarely used)
-        PaddleOCR,
-        WindowsOCR
+        Tesseract     // Cross-platform Tesseract OCR
     };
 
     explicit OCREngine(QObject *parent = nullptr);
@@ -79,9 +75,6 @@ public:
     // Engine availability checks
     static bool isAppleVisionAvailable();
     static bool isTesseractAvailable();
-    static bool isEasyOCRAvailable();
-    static bool isPaddleOCRAvailable();
-    static bool isWindowsOCRAvailable();
 
     // Concurrency helpers
     bool isBusy() const { return m_process && m_process->state() != QProcess::NotRunning; }
@@ -95,22 +88,15 @@ signals:
 
 private slots:
     void onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatus);
-    void onPythonOCRFinished(int exitCode, QProcess::ExitStatus exitStatus);
-    void onNetworkReplyFinished();
     void onTranslationFinished(const struct TranslationResult &result);
     void onTranslationError(const QString &error);
 
 private:
     void performAppleVisionOCR(const QPixmap &image);
     void performTesseractOCR(const QPixmap &image);
-    void performEasyOCR(const QPixmap &image);
-    void performPaddleOCR(const QPixmap &image);
-    void performWindowsOCR(const QPixmap &image);
-    void performOnlineOCR(const QPixmap &image);
 
     QString preprocessImage(const QString &imagePath);
     QString getTesseractLanguageCode(const QString &language);
-    QString getPythonOCRScript(Engine engine);
     void startTranslation(const QString &text);
     QString mergeParagraphLines(const QStringList &lines, const QVector<OCRResult::OCRToken> &tokens);
 
