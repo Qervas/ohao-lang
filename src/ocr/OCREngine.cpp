@@ -299,7 +299,7 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
             result.errorMessage = "Tesseract process failed with exit code " + QString::number(exitCode);
         }
     } else {
-        QString output = m_process->readAllStandardOutput();
+        QString output = QString::fromUtf8(m_process->readAllStandardOutput());
         // Parse TSV directly from output
         QTextStream ts(&output, QIODevice::ReadOnly);
         QString header = ts.readLine();
@@ -387,7 +387,7 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
         // Apply intelligent paragraph merging
         result.text = mergeParagraphLines(lines, result.tokens);
 
-        // Apply language-specific character corrections - DISABLED to respect Tesseract output
+        // Keep raw Tesseract output; do not apply heuristic word fixes
         // result.text = correctLanguageSpecificCharacters(result.text, m_language);
 
         // Hunspell removed - was corrupting OCR results
@@ -412,7 +412,7 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
             if (!langCode.isEmpty()) { args << "-l" << langCode; }
             plain.start("tesseract", args);
             if (plain.waitForFinished(5000) && plain.exitCode()==0) {
-                QString txt = plain.readAllStandardOutput().trimmed();
+                QString txt = QString::fromUtf8(plain.readAllStandardOutput()).trimmed();
                 if (!txt.isEmpty()) {
                     // Apply paragraph merging to plain text as well
                     QStringList lines = txt.split('\n');
@@ -423,7 +423,7 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
                         result.text = txt;
                     }
 
-                    // Apply language-specific character corrections - DISABLED to respect OCR output
+                    // Keep raw Tesseract output in plain text fallback as well
                     // result.text = correctLanguageSpecificCharacters(result.text, m_language);
 
                     result.success = true;
@@ -966,6 +966,8 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
             {"lat", "låt"},                 // let/song
             {"nagot", "något"},             // something
             {"manader", "månader"},         // months
+            {"nasta", "nästa"},             // next
+            {"Nasta", "Nästa"},             // capitalized Next
 
             // Critical words with ö
             {"for", "för"},                 // for

@@ -278,13 +278,13 @@ void OverlayManager::onOCRFinished(const OCRResult& result)
 
 void OverlayManager::onOCRProgress(const QString& status)
 {
-    qDebug() << "OverlayManager OCR progress:" << status;
+    // showProgress() already logs the message, no need to duplicate
     showProgress(status);
 }
 
 void OverlayManager::onOCRError(const QString& error)
 {
-    qDebug() << "OverlayManager OCR error:" << error;
+    // showError() already logs the message, no need to duplicate
     showError(error);
 }
 

@@ -4,7 +4,9 @@ namespace TesseractConfig {
 
 QString getLanguageCode(const QString& displayName)
 {
-    return LanguageManager::instance().getTesseractCode(displayName);
+    // Use multi-language mode for Latin-based languages with diacritics
+    // This fixes åäö, éèê, üö recognition issues by combining with English
+    return LanguageManager::instance().getMultiLanguageTesseractCode(displayName);
 }
 
 QString getCharacterWhitelist(const QString& displayName)
@@ -26,6 +28,9 @@ int getPSMForQualityLevel(int qualityLevel)
 
 bool shouldUseLSTM(const QString& language, int qualityLevel, bool autoDetectOrientation)
 {
+    // Always use LSTM (OEM 1) for now
+    // Our traineddata files (from tessdata_fast/best) only support LSTM, not Legacy
+    // Legacy mode (OEM 0) requires traineddata from the main tessdata repository
     return (language != "English" && language != "Auto-Detect") ||
            (autoDetectOrientation && qualityLevel >= 4);
 }

@@ -96,7 +96,7 @@ void LanguageManager::initializeLanguageMap()
     m_displayNames["tr"] = "Türkçe";
     m_displayNames["he"] = "עברית";
 
-    qDebug() << "LanguageManager initialized with" << m_languageMap.size() << "language mappings";
+    // Removed debug log to reduce console noise
 }
 
 void LanguageManager::initializeLanguageDatabase()
@@ -110,7 +110,7 @@ void LanguageManager::initializeLanguageDatabase()
         {"English", "English", "en", "eng", "", false, false, QLocale::English, QLocale::LatinScript},
 
         // European Latin-based languages
-        {"Svenska", "Swedish", "sv", "swe", "åäöÅÄÖ", false, true, QLocale::Swedish, QLocale::LatinScript},
+        {"Svenska", "Swedish", "sv", "swe", "åäöÅÄÖ", false, false, QLocale::Swedish, QLocale::LatinScript},
         {"Français", "French", "fr", "fra", "éèêëàâùûïîôçÉÈÊËÀÂÙÛÏÎÔÇæœÆŒ", false, false, QLocale::French, QLocale::LatinScript},
         {"Deutsch", "German", "de", "deu", "äöüßÄÖÜ", false, false, QLocale::German, QLocale::LatinScript},
         {"Español", "Spanish", "es", "spa", "áéíóúñÁÉÍÓÚÑ¿¡üÜ", false, false, QLocale::Spanish, QLocale::LatinScript},
@@ -141,7 +141,7 @@ void LanguageManager::initializeLanguageDatabase()
         {"עברית", "Hebrew", "he", "heb", "", false, true, QLocale::Hebrew, QLocale::HebrewScript},
     };
 
-    qDebug() << "LanguageManager: Initialized language database with" << m_languages.size() << "languages";
+    // Removed debug log to reduce console noise
 }
 
 QLocale LanguageManager::localeFromLanguageCode(const QString& languageCode) const
@@ -290,12 +290,29 @@ LanguageManager::LanguageInfo LanguageManager::getInfo(const QString& languageCo
 
 LanguageManager::LanguageInfo LanguageManager::getInfoByDisplayName(const QString& displayName) const
 {
+    // Try exact match with display name (native name like "Svenska")
     for (const auto& lang : m_languages) {
         if (lang.displayName == displayName) {
             return lang;
         }
     }
 
+    // Try match with English name (like "Swedish")
+    for (const auto& lang : m_languages) {
+        if (lang.englishName == displayName) {
+            return lang;
+        }
+    }
+
+    // Try case-insensitive match
+    for (const auto& lang : m_languages) {
+        if (lang.displayName.compare(displayName, Qt::CaseInsensitive) == 0 ||
+            lang.englishName.compare(displayName, Qt::CaseInsensitive) == 0) {
+            return lang;
+        }
+    }
+
+    qDebug() << "WARNING: Language not found:" << displayName << "- falling back to English";
     // Fallback: return English
     return m_languages.first();
 }
@@ -320,6 +337,15 @@ QList<LanguageManager::LanguageInfo> LanguageManager::allLanguages() const
 QString LanguageManager::getTesseractCode(const QString& displayName) const
 {
     return getInfoByDisplayName(displayName).tesseractCode;
+}
+
+QString LanguageManager::getMultiLanguageTesseractCode(const QString& displayName) const
+{
+    LanguageInfo info = getInfoByDisplayName(displayName);
+
+    // Use single language only - multi-language mode (+eng) causes issues
+    // where Tesseract defaults to English characters instead of native diacritics
+    return info.tesseractCode;  // e.g., "swe", "fra", "deu", "eng", "chi_sim", "rus"
 }
 
 QString LanguageManager::getCharacterWhitelist(const QString& displayName) const

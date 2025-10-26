@@ -73,6 +73,7 @@ public:
 
     // OCR-specific helpers (convenience methods)
     QString getTesseractCode(const QString& displayName) const;
+    QString getMultiLanguageTesseractCode(const QString& displayName) const;  // NEW: Returns "swe+eng" for Swedish, etc.
     QString getCharacterWhitelist(const QString& displayName) const;
 
 private:

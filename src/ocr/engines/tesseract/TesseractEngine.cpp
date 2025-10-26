@@ -62,11 +62,10 @@ OCRResult TesseractEngine::performOCR(
         }
     }
 
-    // Build Tesseract arguments
+    // Build Tesseract arguments (plain text output for maximal compatibility)
     QStringList arguments;
     arguments << processedImagePath;  // Use preprocessed image
-    arguments << "stdout";  // Output to stdout
-    arguments << "tsv";     // TSV format
+    arguments << "stdout";  // Output to stdout (plain text)
 
     // Tessdata directory
     QString tessdataDir = findTessdataDirectory();
@@ -84,29 +83,35 @@ OCRResult TesseractEngine::performOCR(
     int psm = TesseractConfig::getPSMForQualityLevel(qualityLevel);
     arguments << "--psm" << QString::number(psm);
 
-    // LSTM
+    // OCR Engine Mode (OEM)
+    // Let Tesseract auto-detect the best mode (OEM 3) based on traineddata
+    // Only force LSTM (OEM 1) for non-English languages
     bool useLSTM = TesseractConfig::shouldUseLSTM(language, qualityLevel, autoDetectOrientation);
     if (useLSTM) {
-        arguments << "--oem" << "1";
+        arguments << "--oem" << "1";  // Force LSTM mode for better accuracy
     }
+    // Don't set OEM for English - let it auto-detect (OEM 3 default)
 
-    // Character whitelist - DISABLED to respect Tesseract's original output
-    // QString whitelist = TesseractConfig::getCharacterWhitelist(language);
-    // if (!whitelist.isEmpty()) {
-    //     arguments << "-c" << ("tessedit_char_whitelist=" + whitelist);
-    // }
+    // No whitelist or DAWG tweaks — let the language model output native diacritics
 
-    // Run Tesseract
-    QString tsvOutput = runTesseractProcess(arguments);
+    // Log the complete Tesseract command for debugging
+    qDebug() << "===== TESSERACT COMMAND =====";
+    qDebug() << "Language:" << language << "-> Code:" << langCode;
+    qDebug() << "Arguments:" << arguments.join(" ");
+    qDebug() << "============================";
 
-    if (tsvOutput.isEmpty()) {
+    // Run Tesseract (plain text)
+    QString textOutput = runTesseractProcess(arguments);
+
+    if (textOutput.isEmpty()) {
         result.errorMessage = "Tesseract returned empty output";
         QFile::remove(imagePath);
         return result;
     }
 
-    // Parse TSV
-    result = parseTSVOutput(tsvOutput, image.size());
+    // Plain text result
+    result.text = textOutput.trimmed();
+    result.success = !result.text.isEmpty();
     result.language = language;
 
     // Cleanup temp files
@@ -138,11 +143,37 @@ QString TesseractEngine::findTesseractExecutable()
 QString TesseractEngine::findTessdataDirectory()
 {
     QString appDir = QCoreApplication::applicationDirPath();
-    QString tessdataPath = appDir + "/tesseract/tessdata";
 
-    if (QFile::exists(tessdataPath + "/eng.traineddata")) {
-        return tessdataPath;
+    // 1) Bundled tessdata next to the app (preferred per request)
+    QString bundled = appDir + "/tesseract/tessdata";
+    if (QFile::exists(bundled + "/eng.traineddata")) {
+        qDebug() << "Using bundled tessdata:" << bundled;
+        return bundled;
     }
+
+    // 2) Allow TESSDATA_PREFIX override
+    if (!qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
+        QString prefix = QString::fromUtf8(qgetenv("TESSDATA_PREFIX"));
+        QString candidate = prefix.endsWith("/tessdata") || prefix.endsWith("\\tessdata")
+            ? prefix
+            : (prefix + "/tessdata");
+        if (QFile::exists(candidate + "/eng.traineddata")) {
+            qDebug() << "Using tessdata from TESSDATA_PREFIX:" << candidate;
+            return candidate;
+        }
+    }
+
+    // 3) Fall back to system installation (Scoop path)
+#ifdef Q_OS_WIN
+    QString home = QDir::homePath();
+    QString scoopTessdata = home + "/scoop/persist/tesseract/tessdata";
+    if (QFile::exists(scoopTessdata + "/eng.traineddata")) {
+        qDebug() << "Using Scoop tessdata:" << scoopTessdata;
+        return scoopTessdata;
+    }
+#endif
+
+    qDebug() << "WARNING: No tessdata directory found!";
     return QString();
 }
 
@@ -168,8 +199,17 @@ QString TesseractEngine::runTesseractProcess(const QStringList& arguments)
         return QString();
     }
 
-    QString output = process.readAllStandardOutput();
-    QString errorOutput = process.readAllStandardError();
+    // CRITICAL: Tesseract outputs UTF-8, must decode explicitly!
+    // readAllStandardOutput() returns QByteArray - we MUST use fromUtf8()
+    // Otherwise Windows default codec (Latin-1/Windows-1252) will corrupt åäö, éèê, etc.
+    QByteArray outputBytes = process.readAllStandardOutput();
+    QByteArray errorBytes = process.readAllStandardError();
+
+    QString output = QString::fromUtf8(outputBytes);
+    QString errorOutput = QString::fromUtf8(errorBytes);
+
+    qDebug() << "Tesseract raw output bytes (first 200):" << outputBytes.left(200).toHex();
+    qDebug() << "Tesseract UTF-8 decoded (first 200 chars):" << output.left(200);
 
     if (process.exitCode() != 0) {
         QMessageBox::critical(nullptr, "OCR Error",
@@ -242,6 +282,12 @@ OCRResult TesseractEngine::parseTSVOutput(const QString& tsvOutput, const QSize&
 
     result.text = textLines.join(" ");  // Join lines with single space
     result.success = !result.text.isEmpty();
+
+    qDebug() << "===== PARSE RESULT =====";
+    qDebug() << "Parsed text:" << result.text;
+    qDebug() << "Parsed text (UTF-8 bytes):" << result.text.toUtf8().toHex();
+    qDebug() << "Number of tokens:" << result.tokens.size();
+    qDebug() << "========================";
 
     return result;
 }
