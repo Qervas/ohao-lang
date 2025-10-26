@@ -76,6 +76,7 @@ endif()
 target_include_directories(ohao-lang PRIVATE
     src/
     src/ocr/
+    src/ocr/engines/
     src/translation/
     src/system/
     src/capture/
@@ -106,16 +107,6 @@ if(Qt6TextToSpeech_FOUND)
     target_compile_definitions(ohao-lang PRIVATE QT_TEXTTOSPEECH_AVAILABLE)
 else()
     message(WARNING "Qt6 TextToSpeech not found. TTS features will be disabled.")
-endif()
-
-# Hunspell library for spellchecking (post-OCR correction)
-if(EXISTS "${CMAKE_SOURCE_DIR}/third_party/hunspell/lib/hunspell.lib")
-    message(STATUS "Hunspell library found - enabling spellcheck")
-    target_include_directories(ohao-lang PRIVATE ${CMAKE_SOURCE_DIR}/third_party/hunspell/include)
-    target_link_libraries(ohao-lang PRIVATE ${CMAKE_SOURCE_DIR}/third_party/hunspell/lib/hunspell.lib)
-    target_compile_definitions(ohao-lang PRIVATE HUNSPELL_AVAILABLE HUNSPELL_STATIC)
-else()
-    message(WARNING "Hunspell library not found - spellcheck disabled")
 endif()
 
 # Link Apple frameworks on macOS for native OCR support and global shortcuts
@@ -193,6 +184,13 @@ if (WIN32)
                 "${CMAKE_SOURCE_DIR}/resources"
                 "$<TARGET_FILE_DIR:ohao-lang>/resources"
         COMMENT "Copying resources folder to build directory")
+
+    # Copy bundled Tesseract OCR to build directory
+    add_custom_command(TARGET ohao-lang POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/tesseract"
+                "$<TARGET_FILE_DIR:ohao-lang>/tesseract"
+        COMMENT "Bundling Tesseract OCR with executable")
 endif()
 
 # Deploy Qt runtime on macOS and create DMG

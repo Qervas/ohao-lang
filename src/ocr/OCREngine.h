@@ -22,7 +22,6 @@
 #include <memory>
 
 class TranslationEngine;
-class SpellChecker;
 
 struct OCRResult {
     QString text;
@@ -114,8 +113,6 @@ private:
     // Language-specific character correction
     QString correctLanguageSpecificCharacters(const QString &text, const QString &language);
 
-    // Spellchecker helpers
-    std::shared_ptr<SpellChecker> getSpellChecker(const QString& language);
 
     Engine m_engine = Tesseract;
     QString m_language; // No hardcoded default - loaded from settings
@@ -140,6 +137,4 @@ private:
     QSettings *m_settings = nullptr;
     QString m_lastProcessedImagePath; // for secondary TSV extraction
 
-    // Spellchecker cache (one per language)
-    QMap<QString, std::shared_ptr<SpellChecker>> m_spellCheckers;
 };

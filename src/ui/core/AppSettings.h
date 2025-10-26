@@ -64,6 +64,7 @@ public:
         QString inputLanguage = "Auto-Detect";
         QString outputLanguage = "English";
         bool speakTranslation = false;  // false = speak original (default), true = speak translation
+        bool wordByWordReading = false;  // Add extra space between words for slower reading
     };
 
     TTSConfig getTTSConfig() const;

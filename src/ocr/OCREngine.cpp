@@ -1,7 +1,7 @@
 #include "OCREngine.h"
 #include "AppleVisionOCR.h"
+#include "engines/tesseract/TesseractEngine.h"
 #include "TranslationEngine.h"
-#include "SpellChecker.h"
 #include "../common/Platform.h"
 #include <QDebug>
 #include <QBuffer>
@@ -167,10 +167,10 @@ void OCREngine::performAppleVisionOCR(const QPixmap &image)
     // Perform OCR using Apple Vision
     OCRResult result = AppleVisionOCR::performOCR(image, visionLanguage, level);
 
-    // Apply language-specific character corrections if OCR succeeded
-    if (result.success && !result.text.isEmpty()) {
-        result.text = correctLanguageSpecificCharacters(result.text, m_language);
-    }
+    // Apply language-specific character corrections if OCR succeeded - DISABLED to respect OCR output
+    // if (result.success && !result.text.isEmpty()) {
+    //     result.text = correctLanguageSpecificCharacters(result.text, m_language);
+    // }
 
     // Store the OCR result and start translation if auto-translate is enabled
     m_currentOCRResult = result;
@@ -192,157 +192,43 @@ void OCREngine::performAppleVisionOCR(const QPixmap &image)
 
 void OCREngine::performTesseractOCR(const QPixmap &image)
 {
-    if (!isTesseractAvailable()) {
-        QString appDir = QCoreApplication::applicationDirPath();
-        QString errorMsg = QString("Tesseract OCR not found!\n\nSearched locations:\n- Current directory: %1\n- Subdirectories (recursive)\n- System PATH\n\nPlease reinstall the application.").arg(appDir);
-        qDebug() << "Tesseract not available. Application directory:" << appDir;
+    // ========== MODULAR DELEGATION - Clean and Simple ==========
+    // All Tesseract logic lives in engines/tesseract/ module
+    // OCREngine just orchestrates: OCR → Spellcheck → Translation
+
+    emit ocrProgress("Starting Tesseract OCR...");
+
+    // Delegate to TesseractEngine module
+    m_currentOCRResult = TesseractEngine::performOCR(
+        image,
+        m_language,
+        m_qualityLevel,
+        m_preprocessing,
+        m_autoDetectOrientation
+    );
+
+    // Handle result
+    if (!m_currentOCRResult.success || m_currentOCRResult.text.isEmpty()) {
+        QString errorMsg = m_currentOCRResult.errorMessage;
+        if (errorMsg.isEmpty()) {
+            errorMsg = "OCR failed to extract text";
+        }
         emit ocrError(errorMsg);
         return;
     }
 
-    // Ensure TESSDATA_PREFIX is set so languages can load
-    if (qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
-        QStringList candidateDirs;
-        // Bundled tessdata (first priority - included in release package)
-        candidateDirs << QCoreApplication::applicationDirPath() + "/tesseract/tessdata";
-#ifdef Q_OS_WIN
-        // Common Windows install locations (fallback)
-        candidateDirs << QDir::fromNativeSeparators("C:/Program Files/Tesseract-OCR/tessdata");
-        candidateDirs << QDir::fromNativeSeparators("C:/Program Files (x86)/Tesseract-OCR/tessdata");
-#endif
+    // TEMPORARILY DISABLED: Apply Hunspell spellcheck correction (testing if it causes issues)
+    // auto spellChecker = getSpellChecker(m_language);
+    // if (spellChecker) {
+    //     qDebug() << "OCREngine: Applying Hunspell spellcheck for" << m_language;
+    //     m_currentOCRResult.text = spellChecker->correctText(m_currentOCRResult.text);
+    // }
 
-        for (const QString &dirPath : candidateDirs) {
-            if (QDir(dirPath).exists() && QFile::exists(dirPath + "/eng.traineddata")) {
-                // Set TESSDATA_PREFIX to the tessdata directory itself
-                qputenv("TESSDATA_PREFIX", dirPath.toUtf8());
-                emit ocrProgress(QString("Set TESSDATA_PREFIX to %1").arg(dirPath));
-                qDebug() << "Auto-detected tessdata at:" << dirPath << "Setting TESSDATA_PREFIX to:" << dirPath;
-                break;
-            }
-        }
-    }
-
-    // Save image to persistent temp file
-    if (!m_currentImagePath.isEmpty()) {
-        QFile::remove(m_currentImagePath);
-        m_currentImagePath.clear();
-    }
-
-    m_currentImagePath = m_tempDir + "/ocr_image_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".png";
-    if (!image.save(m_currentImagePath, "PNG")) {
-        emit ocrError("Failed to save image to temporary file");
-        return;
-    }
-    emit ocrProgress(QString("Saved temp image: %1 (%2x%3)")
-                     .arg(QFileInfo(m_currentImagePath).fileName())
-                     .arg(image.width()).arg(image.height()));
-
-    // Preprocess image if enabled
-    QString processedImagePath = m_currentImagePath;
-    if (m_preprocessing) {
-        emit ocrProgress("Preprocessing image...");
-        processedImagePath = preprocessImage(m_currentImagePath);
-    }
-    m_lastProcessedImagePath = processedImagePath;
-
-    // Prepare Tesseract command (TSV output for token-level data)
-    QStringList arguments;
-    arguments << processedImagePath;
-    arguments << "stdout";
-    arguments << "tsv"; // Output TSV format with positional data
-
-    // Robust tessdata detection: prefer explicit env, otherwise scan common directories
-    QString tessdataDir;
-    if (!qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
-        // TESSDATA_PREFIX should point to tessdata dir or parent containing tessdata/
-        QString prefix = QString::fromUtf8(qgetenv("TESSDATA_PREFIX"));
-        if (QFileInfo(prefix + "/tessdata/eng.traineddata").exists()) {
-            tessdataDir = prefix + "/tessdata";
-        } else if (QFileInfo(prefix + "/eng.traineddata").exists()) {
-            tessdataDir = prefix; // already at tessdata layer
-        }
-    }
-    if (tessdataDir.isEmpty()) {
-        QStringList probe;
-        // Bundled tessdata (first priority - included in release package)
-        probe << QCoreApplication::applicationDirPath() + "/tesseract/tessdata";
-#ifdef Q_OS_WIN
-        probe << "C:/Program Files/Tesseract-OCR/tessdata";
-        probe << "C:/Program Files (x86)/Tesseract-OCR/tessdata";
-#endif
-        for (const QString &p : probe) {
-            if (QFileInfo(p + "/eng.traineddata").exists()) { tessdataDir = p; break; }
-        }
-    }
-    if (!tessdataDir.isEmpty()) {
-        arguments << "--tessdata-dir" << tessdataDir;
-        emit ocrProgress(QString("Using tessdata dir: %1").arg(tessdataDir));
+    // If translation enabled, start translation; otherwise emit result
+    if (m_autoTranslate && !m_currentOCRResult.text.isEmpty()) {
+        startTranslation(m_currentOCRResult.text);
     } else {
-        emit ocrProgress("Warning: tessdata dir not found; language load may fail");
-    }
-
-    // Language parameter
-    QString langCode = getTesseractLanguageCode(m_language);
-    if (!langCode.isEmpty()) {
-        arguments << "-l" << langCode;
-    }
-
-    // PSM (Page Segmentation Mode) based on quality level
-    int psm = 6; // Default: uniform block of text
-    switch (m_qualityLevel) {
-    case 1: psm = 8; break; // Single word
-    case 2: psm = 7; break; // Single text line
-    case 3: psm = 6; break; // Uniform block of text
-    case 4: psm = 3; break; // Fully automatic page segmentation
-    case 5: psm = 1; break; // Automatic with OSD
-    }
-    arguments << "--psm" << QString::number(psm);
-
-    // OCR Engine Mode (OEM) - LSTM neural engine for non-English languages
-    // LSTM is critical for:
-    // - Latin scripts with diacritics (French, Spanish, German, Italian, Portuguese, Swedish, Dutch, Polish, Vietnamese)
-    // - Cyrillic script (Russian)
-    // - CJK scripts (Chinese, Japanese, Korean) - MANDATORY
-    // - Arabic script (right-to-left, contextual forms)
-    // - Devanagari (Hindi), Thai, and other complex scripts
-    // LSTM is 10x better than legacy engine for non-ASCII characters
-    bool needsLSTM = (m_language != "English" && m_language != "Auto-Detect") ||
-                     (m_autoDetectOrientation && m_qualityLevel >= 4);
-
-    if (needsLSTM) {
-        arguments << "--oem" << "1"; // LSTM neural network engine
-    }
-
-    // Let Tesseract use the full character set for the selected language
-    // No character whitelist restrictions - improves recognition of long paragraphs
-
-    emit ocrProgress("Running Tesseract OCR (TSV mode)...");
-
-    m_process = new QProcess(this);
-    connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, &OCREngine::onTesseractFinished);
-
-    // Find Tesseract executable using our robust search (current dir, subdirs, PATH)
-    QString tesseractExe = findTesseractExecutable();
-    if (tesseractExe.isEmpty()) {
-        emit ocrError("Tesseract executable not found");
-        return;
-    }
-    qDebug() << "===== TESSERACT OCR DEBUG =====";
-    qDebug() << "Using Tesseract:" << tesseractExe;
-    qDebug() << "Full command:" << tesseractExe << arguments.join(" ");
-
-    // Propagate TESSDATA_PREFIX if set after our detection
-    if (!qEnvironmentVariableIsEmpty("TESSDATA_PREFIX")) {
-        QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-        env.insert("TESSDATA_PREFIX", qgetenv("TESSDATA_PREFIX"));
-        m_process->setProcessEnvironment(env);
-    }
-
-    m_process->start(tesseractExe, arguments);
-    if (!m_process->waitForStarted(5000)) {
-        emit ocrError("Failed to start Tesseract process");
-        return;
+        emit ocrFinished(m_currentOCRResult);
     }
 }
 
@@ -501,22 +387,10 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
         // Apply intelligent paragraph merging
         result.text = mergeParagraphLines(lines, result.tokens);
 
-        // Apply language-specific character corrections
-        result.text = correctLanguageSpecificCharacters(result.text, m_language);
+        // Apply language-specific character corrections - DISABLED to respect Tesseract output
+        // result.text = correctLanguageSpecificCharacters(result.text, m_language);
 
-        // Apply spellcheck correction using Hunspell
-        auto spellChecker = getSpellChecker(m_language);
-        if (spellChecker) {
-            qDebug() << "Applying Hunspell spellcheck for" << m_language;
-            QString originalText = result.text;
-            result.text = spellChecker->correctText(result.text);
-
-            if (originalText != result.text) {
-                qDebug() << "Spellcheck made corrections:";
-                qDebug() << "  Before:" << originalText.left(100);
-                qDebug() << "  After:" << result.text.left(100);
-            }
-        }
+        // Hunspell removed - was corrupting OCR results
 
         result.success = !result.text.isEmpty();
         result.confidence = "N/A";
@@ -549,8 +423,8 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
                         result.text = txt;
                     }
 
-                    // Apply language-specific character corrections
-                    result.text = correctLanguageSpecificCharacters(result.text, m_language);
+                    // Apply language-specific character corrections - DISABLED to respect OCR output
+                    // result.text = correctLanguageSpecificCharacters(result.text, m_language);
 
                     result.success = true;
                 }
@@ -666,8 +540,8 @@ QString OCREngine::findTesseractExecutable()
 
 bool OCREngine::isTesseractAvailable()
 {
-    QString tesseractPath = findTesseractExecutable();
-    return !tesseractPath.isEmpty();
+    // Delegate to TesseractEngine module
+    return TesseractEngine::isAvailable();
 }
 
 void OCREngine::startTranslation(const QString &text)
@@ -1012,7 +886,7 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
 {
     QString correctedText = text;
 
-    if (language == "Swedish") {
+    if (language == "Swedish" || language == "Svenska") {
         qDebug() << "Applying Swedish-specific character corrections";
 
         // STEP 1: Remove foreign diacritics that don't belong in Swedish
@@ -1477,40 +1351,3 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
     return correctedText;
 }
 
-std::shared_ptr<SpellChecker> OCREngine::getSpellChecker(const QString& language)
-{
-    // Map language names to language codes
-    QString langCode;
-    if (language == "English") langCode = "en_US";
-    else if (language == "Swedish") langCode = "sv_SE";
-    else if (language == "French") langCode = "fr_FR";
-    else if (language == "German") langCode = "de_DE";
-    else if (language == "Spanish") langCode = "es_ES";
-    else if (language == "Portuguese") langCode = "pt_PT";
-    else if (language == "Italian") langCode = "it_IT";
-    else if (language == "Dutch") langCode = "nl_NL";
-    else if (language == "Polish") langCode = "pl_PL";
-    else if (language == "Russian") langCode = "ru_RU";
-    else if (language == "Vietnamese") langCode = "vi_VN";
-    else if (language == "Ukrainian") langCode = "uk_UA";
-    else if (language == "Danish") langCode = "da_DK";
-    else if (language == "Norwegian") langCode = "nb_NO";
-    else if (language == "Turkish") langCode = "tr_TR";
-    else return nullptr; // No spellchecker for this language
-
-    // Check cache
-    if (m_spellCheckers.contains(langCode)) {
-        return m_spellCheckers[langCode];
-    }
-
-    // Create new spellchecker
-    auto spellChecker = std::make_shared<SpellChecker>(langCode);
-    if (spellChecker->isLoaded()) {
-        m_spellCheckers[langCode] = spellChecker;
-        qDebug() << "Created and cached spellchecker for" << language << "(" << langCode << ")";
-        return spellChecker;
-    }
-
-    qWarning() << "Failed to load spellchecker for" << language << "(" << langCode << ")";
-    return nullptr;
-}

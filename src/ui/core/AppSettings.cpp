@@ -170,6 +170,7 @@ AppSettings::TTSConfig AppSettings::getTTSConfig() const
         QString targetLang = getTranslationConfig().targetLanguage;
         m_cachedTTSConfig.outputLanguage = m_settings->value("tts/outputLanguage", targetLang).toString();
         m_cachedTTSConfig.speakTranslation = m_settings->value("tts/speakTranslation", false).toBool();
+        m_cachedTTSConfig.wordByWordReading = m_settings->value("tts/wordByWord", false).toBool();
         m_ttsCacheValid = true;
     }
     return m_cachedTTSConfig;
@@ -184,6 +185,7 @@ void AppSettings::setTTSConfig(const TTSConfig& config)
     m_settings->setValue("tts/inputLanguage", config.inputLanguage);
     m_settings->setValue("tts/outputLanguage", config.outputLanguage);
     m_settings->setValue("tts/speakTranslation", config.speakTranslation);
+    m_settings->setValue("tts/wordByWord", config.wordByWordReading);
 
     m_cachedTTSConfig = config;
     m_ttsCacheValid = true;

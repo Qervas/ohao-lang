@@ -235,6 +235,14 @@ void OverlayManager::callTTSForResult(const OCRResult& result)
         return;
     }
 
+    // Apply word-by-word reading if enabled
+    bool wordByWord = AppSettings::instance().getTTSConfig().wordByWordReading;
+    if (wordByWord) {
+        // Split text into words and add commas for pauses
+        QStringList words = textToSpeak.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        textToSpeak = words.join(", ");  // Comma creates a natural pause in TTS
+    }
+
     // Use ModernTTSManager (same as test button in settings)
     ModernTTSManager::instance().speak(textToSpeak, targetLocale);
 }
