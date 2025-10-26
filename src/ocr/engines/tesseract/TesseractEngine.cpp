@@ -1,7 +1,6 @@
 #include "TesseractEngine.h"
 #include "TesseractConfig.h"
 #include <QProcess>
-#include <QTemporaryFile>
 #include <QStandardPaths>
 #include <QDir>
 #include <QFileInfo>
@@ -221,73 +220,4 @@ QString TesseractEngine::runTesseractProcess(const QStringList& arguments)
     return output;
 }
 
-OCRResult TesseractEngine::parseTSVOutput(const QString& tsvOutput, const QSize& imageSize)
-{
-    OCRResult result;
-    result.success = false;
-
-    QStringList lines = tsvOutput.split('\n', Qt::SkipEmptyParts);
-    if (lines.size() < 2) {
-        return result;
-    }
-
-    lines.removeFirst(); // Remove header
-
-    QStringList textLines;
-    int currentLineNum = -1;
-    QString currentLine;
-
-    for (const QString& line : lines) {
-        QStringList fields = line.split('\t');
-        if (fields.size() < 12) continue;
-
-        int level = fields[0].toInt();
-        if (level != 5) continue; // Word level only
-
-        int lineNum = fields[4].toInt();
-        QString text = fields[11].trimmed();  // Trim to remove leading/trailing spaces
-
-        if (text.isEmpty()) continue;
-
-        int left = fields[6].toInt();
-        int top = fields[7].toInt();
-        int width = fields[8].toInt();
-        int height = fields[9].toInt();
-        float confidence = fields[10].toFloat();
-
-        OCRResult::OCRToken token;
-        token.text = text;
-        token.box = QRect(left, top, width, height);
-        token.confidence = confidence / 100.0f;
-        token.lineId = lineNum;
-        result.tokens.push_back(token);
-
-        if (lineNum != currentLineNum) {
-            if (!currentLine.isEmpty()) {
-                textLines << currentLine.trimmed();
-            }
-            currentLine = text;
-            currentLineNum = lineNum;
-        } else {
-            if (!currentLine.isEmpty()) {
-                currentLine += " ";
-            }
-            currentLine += text;
-        }
-    }
-
-    if (!currentLine.isEmpty()) {
-        textLines << currentLine.trimmed();
-    }
-
-    result.text = textLines.join(" ");  // Join lines with single space
-    result.success = !result.text.isEmpty();
-
-    qDebug() << "===== PARSE RESULT =====";
-    qDebug() << "Parsed text:" << result.text;
-    qDebug() << "Parsed text (UTF-8 bytes):" << result.text.toUtf8().toHex();
-    qDebug() << "Number of tokens:" << result.tokens.size();
-    qDebug() << "========================";
-
-    return result;
-}
+// TSV parsing removed; plain text mode only

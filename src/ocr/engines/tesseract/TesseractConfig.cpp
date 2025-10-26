@@ -9,10 +9,7 @@ QString getLanguageCode(const QString& displayName)
     return LanguageManager::instance().getMultiLanguageTesseractCode(displayName);
 }
 
-QString getCharacterWhitelist(const QString& displayName)
-{
-    return LanguageManager::instance().getCharacterWhitelist(displayName);
-}
+// Character whitelist removed; plain text path relies on full language model
 
 int getPSMForQualityLevel(int qualityLevel)
 {

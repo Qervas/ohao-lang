@@ -24,5 +24,4 @@ private:
     static QString findTesseractExecutable();
     static QString findTessdataDirectory();
     static QString runTesseractProcess(const QStringList& arguments);
-    static OCRResult parseTSVOutput(const QString& tsvOutput, const QSize& imageSize);
 };
