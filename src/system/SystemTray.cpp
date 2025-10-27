@@ -42,13 +42,15 @@ SystemTray::SystemTray(FloatingWidget *widget, QObject *parent)
     // Connect tray activation
     connect(this, &QSystemTrayIcon::activated, this, &SystemTray::onTrayActivated);
 
-    // Create a simple tray icon using built-in style
-    QIcon trayIcon = QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
+    // Use app icon for tray
+    QIcon trayIcon(":/resources/icon-128.png");
     if (trayIcon.isNull()) {
-        // Fallback to creating a simple icon programmatically
-        QPixmap pixmap(16, 16);
-        pixmap.fill(Qt::blue);
-        trayIcon = QIcon(pixmap);
+        // Fallback: try loading from resources directory
+        trayIcon = QIcon("resources/icon-128.png");
+        if (trayIcon.isNull()) {
+            // Last fallback: use built-in icon
+            trayIcon = QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
+        }
     }
     setIcon(trayIcon);
     setToolTip("Ohao Language Learner - OCR & Translation Tool");

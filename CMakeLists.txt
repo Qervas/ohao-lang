@@ -257,6 +257,17 @@ if(APPLE)
     endif()
 endif()
 
+# Windows icon configuration
+if(WIN32)
+    set(RC_FILE "${CMAKE_SOURCE_DIR}/resources/app.rc")
+    if(EXISTS ${RC_FILE})
+        target_sources(ohao-lang PRIVATE ${RC_FILE})
+        message(STATUS "Windows resource file found and will be included")
+    else()
+        message(WARNING "Windows resource file not found at ${RC_FILE}")
+    endif()
+endif()
+
 # Copy resources for Linux
 if(UNIX AND NOT APPLE)
     add_custom_command(TARGET ohao-lang POST_BUILD
