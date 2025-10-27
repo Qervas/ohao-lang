@@ -12,6 +12,7 @@
 #include <QUrlQuery>
 #include <QTimer>
 #include <QSettings>
+#include <QStringList>
 
 struct TranslationResult {
     QString translatedText;
@@ -62,10 +63,15 @@ private slots:
 
 private:
     void translateWithGoogle(const QString &text);
-    void parseGoogleResponse(const QByteArray &response);
+	void parseGoogleResponse(const QByteArray &response);
+	bool parseGoogleResponseText(const QByteArray &response, QString &outText);
+	void sendRequestForText(const QString &text);
+	QStringList chunkTextByLimit(const QString &text, int limit) const;
+	void startNextChunk();
 
     QString detectSourceLanguage(const QString &text);
     QString buildGoogleTranslateUrl(const QString &text);
+    QString buildGoogleTranslateUrl(const QString &text, bool forceAutoDetect);
 
     Engine m_engine = GoogleTranslate;
     QString m_sourceLanguage; // Set from user settings
@@ -78,6 +84,14 @@ private:
     QNetworkReply *m_currentReply = nullptr;
     QTimer *m_timeoutTimer = nullptr;
     QSettings *m_settings = nullptr;
+	int m_retryAttempt = 0;
+	QStringList m_chunks;
+	int m_currentChunkIndex = -1;
+	QString m_aggregatedText;
+    bool m_forceAutoDetect = false;
 
-    static const int TIMEOUT_MS = 30000; // 30 seconds timeout
+	static const int TIMEOUT_MS = 30000; // 30 seconds timeout
+	static const int MAX_RETRIES = 2;    // retry count per chunk
+	static const int BACKOFF_BASE_MS = 800; // exponential backoff base
+	static const int CHUNK_CHAR_LIMIT = 4800; // prefer one request; stay under common 5k limit
 };

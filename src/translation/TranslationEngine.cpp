@@ -5,6 +5,7 @@
 #include <QJsonParseError>
 #include <QHttpMultiPart>
 #include <QProcess>
+#include <QRegularExpression>
 
 TranslationEngine::TranslationEngine(QObject *parent)
     : QObject(parent)
@@ -70,10 +71,11 @@ void TranslationEngine::translate(const QString &text)
         m_currentReply = nullptr;
     }
 
-    // Only Google Translate is supported
-    translateWithGoogle(text);
-
-    m_timeoutTimer->start(TIMEOUT_MS);
+    // Reset aggregation/chunk state
+    m_aggregatedText.clear();
+    m_chunks = chunkTextByLimit(text, CHUNK_CHAR_LIMIT);
+    m_currentChunkIndex = -1;
+    startNextChunk();
 }
 
 void TranslationEngine::translateWithGoogle(const QString &text)
@@ -83,9 +85,22 @@ void TranslationEngine::translateWithGoogle(const QString &text)
     QString url = buildGoogleTranslateUrl(text);
     QNetworkRequest request{QUrl(url)};
     request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+    request.setRawHeader("Accept", "application/json, text/plain, */*");
+    request.setRawHeader("Accept-Language", "en-US,en;q=0.9");
+    request.setRawHeader("Cache-Control", "no-cache");
+    request.setRawHeader("Pragma", "no-cache");
+    request.setRawHeader("Referer", "https://translate.google.com/");
+
+    // Cancel any existing reply
+    if (m_currentReply) {
+        m_currentReply->abort();
+        m_currentReply->deleteLater();
+        m_currentReply = nullptr;
+    }
 
     m_currentReply = m_networkManager->get(request);
     connect(m_currentReply, &QNetworkReply::finished, this, &TranslationEngine::onNetworkReplyFinished);
+    m_timeoutTimer->start(TIMEOUT_MS);
 }
 
 // REMOVED: Non-Google translation engines (LibreTranslate, Ollama, Microsoft, DeepL, Offline)
@@ -107,9 +122,35 @@ QString TranslationEngine::buildGoogleTranslateUrl(const QString &text)
     query.addQueryItem("sl", sourceLang);
     query.addQueryItem("tl", targetLang);
     query.addQueryItem("dt", "t");
+    query.addQueryItem("hl", "en");
+    query.addQueryItem("ie", "UTF-8");
+    query.addQueryItem("oe", "UTF-8");
+    query.addQueryItem("dj", "1");          // prefer object format for robustness
+    query.addQueryItem("source", "input");   // better handling for multi-script
     query.addQueryItem("q", text);
     url.setQuery(query);
 
+    return url.toString();
+}
+
+QString TranslationEngine::buildGoogleTranslateUrl(const QString &text, bool forceAutoDetect)
+{
+    QString src = forceAutoDetect ? QStringLiteral("auto")
+                                  : getLanguageCode(m_sourceLanguage, GoogleTranslate);
+    QString tgt = getLanguageCode(m_targetLanguage, GoogleTranslate);
+    QUrl url("https://translate.googleapis.com/translate_a/single");
+    QUrlQuery query;
+    query.addQueryItem("client", "gtx");
+    query.addQueryItem("sl", src);
+    query.addQueryItem("tl", tgt);
+    query.addQueryItem("dt", "t");
+    query.addQueryItem("hl", "en");
+    query.addQueryItem("ie", "UTF-8");
+    query.addQueryItem("oe", "UTF-8");
+    query.addQueryItem("dj", "1");
+    query.addQueryItem("source", "input");
+    query.addQueryItem("q", text);
+    url.setQuery(query);
     return url.toString();
 }
 
@@ -121,23 +162,49 @@ void TranslationEngine::onNetworkReplyFinished()
         return;
     }
 
+    auto cleanupReply = [this]() {
+        if (m_currentReply) {
+            m_currentReply->deleteLater();
+            m_currentReply = nullptr;
+        }
+    };
+
     if (m_currentReply->error() != QNetworkReply::NoError) {
         QString errorMsg = QString("Network error: %1").arg(m_currentReply->errorString());
-        emit translationError(errorMsg);
+        qDebug() << errorMsg;
+        cleanupReply();
 
+        if (m_retryAttempt < MAX_RETRIES) {
+            int delay = BACKOFF_BASE_MS * (1 << m_retryAttempt);
+            m_retryAttempt++;
+            emit translationProgress(QString("Retrying... (%1/%2)").arg(m_retryAttempt).arg(MAX_RETRIES));
+            QTimer::singleShot(delay, this, [this]() {
+                // If we detect right-to-left or Cyrillic content, force auto-detect on retry
+                if (!m_chunks.isEmpty()) {
+                    QString chunk = m_chunks.value(m_currentChunkIndex);
+                    // Use QRegularExpression (Qt 6)
+                    QRegularExpression arabicRe(QStringLiteral("[\u0600-\u06FF]"));
+                    QRegularExpression cyrillicRe(QStringLiteral("[\u0400-\u04FF]"));
+                    bool rtlOrCyr = arabicRe.match(chunk).hasMatch() || cyrillicRe.match(chunk).hasMatch();
+                    if (rtlOrCyr) {
+                        m_forceAutoDetect = true;
+                    }
+                }
+                sendRequestForText(m_chunks.value(m_currentChunkIndex));
+            });
+            return;
+        }
+
+        emit translationError(errorMsg);
         TranslationResult result;
         result.success = false;
         result.errorMessage = errorMsg;
         emit translationFinished(result);
-
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
         return;
     }
 
     QByteArray response = m_currentReply->readAll();
-    m_currentReply->deleteLater();
-    m_currentReply = nullptr;
+    cleanupReply();
 
     // Only Google Translate is supported
     parseGoogleResponse(response);
@@ -145,75 +212,30 @@ void TranslationEngine::onNetworkReplyFinished()
 
 void TranslationEngine::parseGoogleResponse(const QByteArray &response)
 {
-    TranslationResult result;
+    QString chunkText;
+    if (!parseGoogleResponseText(response, chunkText)) {
+        if (m_retryAttempt < MAX_RETRIES) {
+            int delay = BACKOFF_BASE_MS * (1 << m_retryAttempt);
+            m_retryAttempt++;
+            emit translationProgress(QString("Retrying parse... (%1/%2)").arg(m_retryAttempt).arg(MAX_RETRIES));
+            QTimer::singleShot(delay, this, [this]() {
+                sendRequestForText(m_chunks.value(m_currentChunkIndex));
+            });
+            return;
+        }
 
-    qDebug() << "Raw Google Translate response (first 500 chars):" << QString::fromUtf8(response.left(500));
-
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(response, &error);
-
-    if (error.error != QJsonParseError::NoError) {
+        TranslationResult result;
         result.success = false;
         result.errorMessage = "Failed to parse Google Translate response";
+        emit translationError(result.errorMessage);
         emit translationFinished(result);
         return;
     }
 
-    try {
-        QJsonArray mainArray = doc.array();
-        if (!mainArray.isEmpty() && mainArray[0].isArray()) {
-            QJsonArray translationsArray = mainArray[0].toArray();
-            QString translatedText;
+    m_aggregatedText += chunkText;
 
-            qDebug() << "Google Translate response has" << translationsArray.size() << "segments";
-
-            // Check if we have both translated and original text in the response
-            // Google Translate format: [["translated", "original", ...], ...]
-            for (int i = 0; i < translationsArray.size(); i++) {
-                const auto &value = translationsArray[i];
-                if (value.isArray()) {
-                    QJsonArray item = value.toArray();
-                    if (!item.isEmpty() && item[0].isString()) {
-                        QString translated = item[0].toString();
-
-                        // If we have original text too (item[1]), check if translation actually happened
-                        if (item.size() > 1 && item[1].isString()) {
-                            QString original = item[1].toString();
-
-                            // If translated == original, Google didn't translate this segment
-                            // This can happen when Google has low confidence or encounters formatting issues
-                            if (translated == original) {
-                                qDebug() << "  Segment" << i << ": [SKIPPED - untranslated]" << translated.left(50);
-                                // Skip adding this segment - it's not translated
-                                continue;
-                            }
-                        }
-
-                        qDebug() << "  Segment" << i << ":" << translated;
-                        translatedText += translated;
-                    }
-                }
-            }
-
-            result.translatedText = translatedText;
-            result.sourceLanguage = m_sourceLanguage;
-            result.targetLanguage = m_targetLanguage;
-            result.success = true;
-
-            qDebug() << "TranslationEngine: Translation successful!";
-            qDebug() << "  Translated text:" << translatedText.left(50);
-
-            emit translationProgress("Translation completed");
-        } else {
-            result.success = false;
-            result.errorMessage = "Invalid Google Translate response format";
-        }
-    } catch (...) {
-        result.success = false;
-        result.errorMessage = "Error parsing Google Translate response";
-    }
-
-    emit translationFinished(result);
+    // Move to next chunk or finish
+    startNextChunk();
 }
 
 // REMOVED: Non-Google response parsers (LibreTranslate, Ollama, DeepL)
@@ -225,6 +247,16 @@ void TranslationEngine::onRequestTimeout()
         m_currentReply->abort();
         m_currentReply->deleteLater();
         m_currentReply = nullptr;
+    }
+
+    if (m_retryAttempt < MAX_RETRIES) {
+        int delay = BACKOFF_BASE_MS * (1 << m_retryAttempt);
+        m_retryAttempt++;
+        emit translationProgress(QString("Retrying after timeout... (%1/%2)").arg(m_retryAttempt).arg(MAX_RETRIES));
+        QTimer::singleShot(delay, this, [this]() {
+            sendRequestForText(m_chunks.value(m_currentChunkIndex));
+        });
+        return;
     }
 
     TranslationResult result;
@@ -275,4 +307,156 @@ QString TranslationEngine::getLanguageName(const QString &code)
     };
 
     return codeToName.value(code, code);
+}
+
+// --- helpers ---
+
+QStringList TranslationEngine::chunkTextByLimit(const QString &text, int limit) const
+{
+    if (text.size() <= limit) {
+        return {text};
+    }
+
+    // Greedy grouping of logical lines to minimize number of chunks
+    QStringList lines = text.split('\n');
+    QStringList chunks;
+    QString current;
+    for (int i = 0; i < lines.size(); ++i) {
+        QString candidate = current.isEmpty() ? lines[i] : current + '\n' + lines[i];
+        if (candidate.size() <= limit) {
+            current = candidate;
+        } else {
+            if (!current.isEmpty()) {
+                chunks << current;
+            }
+            // If a single line is over limit, hard-split that line
+            if (lines[i].size() > limit) {
+                int start = 0;
+                while (start < lines[i].size()) {
+                    int len = qMin(limit, lines[i].size() - start);
+                    chunks << lines[i].mid(start, len);
+                    start += len;
+                }
+                current.clear();
+            } else {
+                current = lines[i];
+            }
+        }
+    }
+    if (!current.isEmpty()) {
+        chunks << current;
+    }
+    return chunks;
+}
+
+void TranslationEngine::startNextChunk()
+{
+    m_retryAttempt = 0;
+    m_currentChunkIndex++;
+    if (m_currentChunkIndex >= 0 && m_currentChunkIndex < m_chunks.size()) {
+        QString status = QString("Translating chunk %1/%2...")
+                              .arg(m_currentChunkIndex + 1)
+                              .arg(m_chunks.size());
+        emit translationProgress(status);
+        sendRequestForText(m_chunks[m_currentChunkIndex]);
+        return;
+    }
+
+    // Finished all chunks
+    TranslationResult result;
+    result.translatedText = m_aggregatedText;
+    result.sourceLanguage = m_sourceLanguage;
+    result.targetLanguage = m_targetLanguage;
+    result.success = true;
+    emit translationProgress("Translation completed");
+    emit translationFinished(result);
+}
+
+void TranslationEngine::sendRequestForText(const QString &text)
+{
+    if (m_forceAutoDetect) {
+        QString url = buildGoogleTranslateUrl(text, true);
+        QNetworkRequest request{QUrl(url)};
+        request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        request.setRawHeader("Accept", "application/json, text/plain, */*");
+        request.setRawHeader("Accept-Language", "en-US,en;q=0.9");
+        request.setRawHeader("Cache-Control", "no-cache");
+        request.setRawHeader("Pragma", "no-cache");
+        request.setRawHeader("Referer", "https://translate.google.com/");
+        if (m_currentReply) {
+            m_currentReply->abort();
+            m_currentReply->deleteLater();
+            m_currentReply = nullptr;
+        }
+        m_currentReply = m_networkManager->get(request);
+        connect(m_currentReply, &QNetworkReply::finished, this, &TranslationEngine::onNetworkReplyFinished);
+        m_timeoutTimer->start(TIMEOUT_MS);
+        return;
+    }
+    translateWithGoogle(text);
+}
+
+bool TranslationEngine::parseGoogleResponseText(const QByteArray &response, QString &outText)
+{
+    // Strip potential XSSI prefix ")]}\'\n"
+    QByteArray body = response.trimmed();
+    if (body.startsWith(")]}\'")) {
+        int nl = body.indexOf('\n');
+        if (nl >= 0) {
+            body = body.mid(nl + 1);
+        }
+    }
+
+    qDebug() << "Raw Google Translate response (first 500 chars):" << QString::fromUtf8(body.left(500));
+
+    QJsonParseError error;
+    QJsonDocument doc = QJsonDocument::fromJson(body, &error);
+    if (error.error != QJsonParseError::NoError) {
+        return false;
+    }
+
+    // Format 1: Array-based response
+    if (doc.isArray()) {
+        try {
+            QJsonArray mainArray = doc.array();
+            if (!mainArray.isEmpty() && mainArray[0].isArray()) {
+                QJsonArray translationsArray = mainArray[0].toArray();
+                QString translatedText;
+                for (int i = 0; i < translationsArray.size(); i++) {
+                    const auto &value = translationsArray[i];
+                    if (value.isArray()) {
+                        QJsonArray item = value.toArray();
+                        if (!item.isEmpty() && item[0].isString()) {
+                            translatedText += item[0].toString();
+                        }
+                    }
+                }
+                outText = translatedText;
+                if (!outText.isEmpty()) return true;
+            }
+        } catch (...) {
+            // fall through to alternate format
+        }
+    }
+
+    // Format 2: Object with sentences array (dj=1 style)
+    if (doc.isObject()) {
+        QJsonObject obj = doc.object();
+        if (obj.contains("sentences") && obj["sentences"].isArray()) {
+            QJsonArray sentences = obj["sentences"].toArray();
+            QString translatedText;
+            for (const auto &s : sentences) {
+                if (s.isObject()) {
+                    QJsonObject so = s.toObject();
+                    if (so.contains("trans") && so["trans"].isString()) {
+                        translatedText += so["trans"].toString();
+                    }
+                }
+            }
+            outText = translatedText;
+            return !outText.isEmpty();
+        }
+    }
+
+    return false;
 }
