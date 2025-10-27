@@ -567,6 +567,12 @@ QWidget* ModernSettingsWindow::createVoicePage()
             });
     speechLayout->addWidget(ttsSpeakTranslationCheck);
 
+    ttsWordByWordCheck = new QCheckBox("Word-by-Word Reading (Slower)");
+    ttsWordByWordCheck->setChecked(false);  // Default: normal reading
+    ttsWordByWordCheck->setToolTip("Add extra space between words for slower, clearer pronunciation");
+    connect(ttsWordByWordCheck, &QCheckBox::toggled, this, &ModernSettingsWindow::onSettingChanged);
+    speechLayout->addWidget(ttsWordByWordCheck);
+
     QLabel *speechInfo = new QLabel("Choose whether TTS speaks the original text or the translation");
     speechInfo->setWordWrap(true);
     speechInfo->setStyleSheet("color: #86868B; font-size: 11px; padding-left: 24px;");
@@ -949,6 +955,9 @@ void ModernSettingsWindow::loadSettings()
     if (ttsSpeakTranslationCheck) {
         ttsSpeakTranslationCheck->setChecked(settings.value("tts/speakTranslation", false).toBool());
     }
+    if (ttsWordByWordCheck) {
+        ttsWordByWordCheck->setChecked(settings.value("tts/wordByWord", false).toBool());
+    }
     // Voice will be restored by updateVoiceList() using the saved voice name
 
     qDebug() << "ModernSettingsWindow: Settings loaded successfully";
@@ -1074,6 +1083,12 @@ void ModernSettingsWindow::saveSettings()
     if (ttsSpeakTranslationCheck) {
         ttsConfig.speakTranslation = ttsSpeakTranslationCheck->isChecked();
         settings.setValue("tts/speakTranslation", ttsConfig.speakTranslation);
+    }
+
+    // Save word-by-word reading setting
+    if (ttsWordByWordCheck) {
+        ttsConfig.wordByWordReading = ttsWordByWordCheck->isChecked();
+        settings.setValue("tts/wordByWord", ttsConfig.wordByWordReading);
     }
 
     AppSettings::instance().setTTSConfig(ttsConfig);

@@ -235,6 +235,14 @@ void OverlayManager::callTTSForResult(const OCRResult& result)
         return;
     }
 
+    // Apply word-by-word reading if enabled
+    bool wordByWord = AppSettings::instance().getTTSConfig().wordByWordReading;
+    if (wordByWord) {
+        // Split text into words and add commas for pauses
+        QStringList words = textToSpeak.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        textToSpeak = words.join(", ");  // Comma creates a natural pause in TTS
+    }
+
     // Use ModernTTSManager (same as test button in settings)
     ModernTTSManager::instance().speak(textToSpeak, targetLocale);
 }
@@ -270,13 +278,13 @@ void OverlayManager::onOCRFinished(const OCRResult& result)
 
 void OverlayManager::onOCRProgress(const QString& status)
 {
-    qDebug() << "OverlayManager OCR progress:" << status;
+    // showProgress() already logs the message, no need to duplicate
     showProgress(status);
 }
 
 void OverlayManager::onOCRError(const QString& error)
 {
-    qDebug() << "OverlayManager OCR error:" << error;
+    // showError() already logs the message, no need to duplicate
     showError(error);
 }
 

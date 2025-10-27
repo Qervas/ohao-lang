@@ -19,6 +19,7 @@
 #include <QMap>
 #include <QRect>
 #include <QVector>
+#include <memory>
 
 class TranslationEngine;
 
@@ -112,6 +113,7 @@ private:
     // Language-specific character correction
     QString correctLanguageSpecificCharacters(const QString &text, const QString &language);
 
+
     Engine m_engine = Tesseract;
     QString m_language; // No hardcoded default - loaded from settings
     int m_qualityLevel = 3;
@@ -134,4 +136,5 @@ private:
     QString m_tempDir;
     QSettings *m_settings = nullptr;
     QString m_lastProcessedImagePath; // for secondary TSV extraction
+
 };

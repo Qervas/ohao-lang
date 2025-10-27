@@ -99,6 +99,7 @@ private:
     QComboBox *voiceCombo = nullptr;
     QPushButton *testVoiceBtn = nullptr;
     QCheckBox *ttsSpeakTranslationCheck = nullptr;
+    QCheckBox *ttsWordByWordCheck = nullptr;
 
     // Settings storage
     QSettings settings;

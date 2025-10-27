@@ -76,6 +76,7 @@ endif()
 target_include_directories(ohao-lang PRIVATE
     src/
     src/ocr/
+    src/ocr/engines/
     src/translation/
     src/system/
     src/capture/
@@ -183,6 +184,13 @@ if (WIN32)
                 "${CMAKE_SOURCE_DIR}/resources"
                 "$<TARGET_FILE_DIR:ohao-lang>/resources"
         COMMENT "Copying resources folder to build directory")
+
+    # Copy bundled Tesseract OCR to build directory
+    add_custom_command(TARGET ohao-lang POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/tesseract"
+                "$<TARGET_FILE_DIR:ohao-lang>/tesseract"
+        COMMENT "Bundling Tesseract OCR with executable")
 endif()
 
 # Deploy Qt runtime on macOS and create DMG

@@ -20,9 +20,11 @@
 
 ### 🔍 OCR
 - Apple Vision OCR on macOS (built-in)
-- Tesseract OCR on Windows/Linux
+- Tesseract OCR with LSTM neural network on Windows/Linux
+- **Hunspell spellcheck** - Post-OCR correction for 15 languages
 - Online OCR fallback
-- Multi-language support (English, Swedish, German, French, Spanish, Chinese, Japanese)
+- Multi-language support (18+ languages)
+- Natural reading order (left-to-right, top-to-bottom)
 
 ### 🌐 Translation
 - Google Translate
@@ -40,6 +42,20 @@
 - Global shortcuts (customizable)
 - Menu bar/system tray integration
 - Cross-platform (macOS 12.0+, Windows 10/11)
+
+### 📖 Hunspell Spellcheck
+
+Automatic post-OCR spelling correction with dictionaries for 15 languages:
+
+- English, Spanish, French, German, Russian
+- Portuguese, Italian, Dutch, Polish, Swedish
+- Vietnamese, Ukrainian, Danish, Norwegian, Turkish
+
+**How it works:**
+1. Tesseract performs OCR with LSTM neural network
+2. Language-specific character cleanup removes foreign diacritics
+3. Hunspell corrects misspelled words using 100,000+ word dictionaries
+4. Result: Higher accuracy for diacritics (ä, ö, å, é, ñ, etc.)
 
 ## 📋 Changelog
 
@@ -133,6 +149,13 @@ Settings available in app:
 - Translation backend (Google/DeepL)
 - TTS voices
 - Global shortcuts
+
+## 🙏 Acknowledgements
+
+- **[Hunspell](https://hunspell.github.io/)** - Spell checker and morphological analyzer
+- **[wooorm/dictionaries](https://github.com/wooorm/dictionaries)** - Hunspell dictionaries for 15 languages
+- **[Tesseract OCR](https://github.com/tesseract-ocr/tesseract)** - OCR engine
+- **Qt Framework** - Cross-platform application framework
 
 ## 📄 License
 
