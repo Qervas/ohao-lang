@@ -93,15 +93,15 @@ AppSettings::TranslationConfig AppSettings::getTranslationConfig() const
         m_cachedTranslationConfig.autoTranslate = m_settings->value("translation/autoTranslate", true).toBool();
         m_cachedTranslationConfig.engine = m_settings->value("translation/engine", "Google Translate (Free)").toString();
 
-        // Default source language to OCR language (intelligent default)
+        // Default source language to OCR language
+        // This ensures translation knows what language the OCR'd text is in
         QString ocrLang = getOCRConfig().language;
         m_cachedTranslationConfig.sourceLanguage = m_settings->value("translation/sourceLanguage", ocrLang).toString();
 
-        // Intelligent target language default: ensure source ≠ target for meaningful translation
-        // If OCR language matches system language, use English (most universal)
-        // Otherwise use system language as target (user likely wants to translate TO their native language)
+        // Default target language to system language (user's native language)
+        // Falls back to English only if system language detection fails
         QString systemLang = getSystemDefaultLanguage();
-        QString defaultTarget = (ocrLang == systemLang) ? "English" : systemLang;
+        QString defaultTarget = systemLang.isEmpty() ? "English" : systemLang;
         m_cachedTranslationConfig.targetLanguage = m_settings->value("translation/targetLanguage", defaultTarget).toString();
 
         m_cachedTranslationConfig.overlayMode = m_settings->value("translation/overlayMode", "Deep Learning Mode").toString();

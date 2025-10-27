@@ -97,7 +97,7 @@ private:
     void performTesseractOCR(const QPixmap &image);
 
     QString preprocessImage(const QString &imagePath);
-    QString getTesseractLanguageCode(const QString &language);
+    // REMOVED: getTesseractLanguageCode - use LanguageManager::instance().getTesseractCode() instead
     void startTranslation(const QString &text);
     QString mergeParagraphLines(const QStringList &lines, const QVector<OCRResult::OCRToken> &tokens);
 

@@ -3,6 +3,7 @@
 #include "engines/tesseract/TesseractEngine.h"
 #include "TranslationEngine.h"
 #include "../common/Platform.h"
+#include "../ui/core/LanguageManager.h"
 #include <QDebug>
 #include <QBuffer>
 #include <QImageWriter>
@@ -256,32 +257,7 @@ QString OCREngine::preprocessImage(const QString &imagePath)
     return imagePath;
 }
 
-QString OCREngine::getTesseractLanguageCode(const QString &language)
-{
-    static QMap<QString, QString> languageMap = {
-        {"English", "eng"},
-        {"Chinese (Simplified)", "chi_sim"},
-        {"Chinese (Traditional)", "chi_tra"},
-        {"Japanese", "jpn"},
-        {"Korean", "kor"},
-        {"Spanish", "spa"},
-        {"French", "fra"},
-        {"German", "deu"},
-        {"Russian", "rus"},
-        {"Portuguese", "por"},
-        {"Italian", "ita"},
-        {"Dutch", "nld"},
-        {"Polish", "pol"},
-        {"Swedish", "swe"},      // THIS WAS MISSING!
-        {"Arabic", "ara"},
-        {"Hindi", "hin"},
-        {"Thai", "tha"},
-        {"Vietnamese", "vie"},
-        {"Auto-Detect", ""}
-    };
-
-    return languageMap.value(language, "eng");
-}
+// REMOVED: Hardcoded language map - use LanguageManager as single source of truth
 
 void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
@@ -408,7 +384,7 @@ void OCREngine::onTesseractFinished(int exitCode, QProcess::ExitStatus exitStatu
             QProcess plain;
             QStringList args;
             args << m_currentImagePath << "stdout";
-            QString langCode = getTesseractLanguageCode(m_language);
+            QString langCode = LanguageManager::instance().getTesseractCode(m_language);
             if (!langCode.isEmpty()) { args << "-l" << langCode; }
             plain.start("tesseract", args);
             if (plain.waitForFinished(5000) && plain.exitCode()==0) {
@@ -555,27 +531,10 @@ void OCREngine::startTranslation(const QString &text)
         connect(m_translationEngineInstance, &TranslationEngine::translationProgress,
                 this, &OCREngine::ocrProgress);
 
-        // Configure the translation engine based on settings
-        if (m_translationEngine == "Google Translate (Free)") {
-            m_translationEngineInstance->setEngine(TranslationEngine::GoogleTranslate);
-        } else if (m_translationEngine == "LibreTranslate") {
-            m_translationEngineInstance->setEngine(TranslationEngine::LibreTranslate);
-        } else if (m_translationEngine.contains("Ollama")) {
-            m_translationEngineInstance->setEngine(TranslationEngine::OllamaLLM);
-        } else if (m_translationEngine.contains("Microsoft")) {
-            m_translationEngineInstance->setEngine(TranslationEngine::MicrosoftTranslator);
-        } else if (m_translationEngine.contains("DeepL")) {
-            m_translationEngineInstance->setEngine(TranslationEngine::DeepL);
-        }
-
+        // Only Google Translate is supported (free, no API key needed)
+        m_translationEngineInstance->setEngine(TranslationEngine::GoogleTranslate);
         m_translationEngineInstance->setSourceLanguage(m_translationSourceLanguage);
         m_translationEngineInstance->setTargetLanguage(m_translationTargetLanguage);
-
-        // Load API settings from QSettings
-        if (m_settings) {
-            m_translationEngineInstance->setApiKey(m_settings->value("translation/apiKey").toString());
-            m_translationEngineInstance->setApiUrl(m_settings->value("translation/apiUrl").toString());
-        }
     }
 
     emit ocrProgress("Starting translation...");
@@ -1325,30 +1284,7 @@ QString OCREngine::correctLanguageSpecificCharacters(const QString &text, const 
             correctedText.replace(it.key(), it.value());
         }
     }
-    else if (language == "Vietnamese") {
-        qDebug() << "Applying Vietnamese-specific character corrections";
-
-        // STEP 1: Remove foreign diacritics that don't belong in Vietnamese
-        QMap<QString, QString> vietnameseCleanup = {
-            // Swedish
-            {"å", "a"}, {"Å", "A"},
-            {"ö", "o"}, {"Ö", "O"},
-
-            // Spanish
-            {"ñ", "n"}, {"Ñ", "N"},
-
-            // German
-            {"ü", "u"}, {"Ü", "U"},
-            {"ß", "ss"},
-
-            // French ligatures
-            {"œ", "oe"}, {"æ", "ae"},
-        };
-
-        for (auto it = vietnameseCleanup.begin(); it != vietnameseCleanup.end(); ++it) {
-            correctedText.replace(it.key(), it.value());
-        }
-    }
+    // Vietnamese and Thai removed - not bundled languages
 
     return correctedText;
 }

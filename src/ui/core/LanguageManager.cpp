@@ -56,8 +56,6 @@ void LanguageManager::initializeLanguageMap()
     m_languageMap["ru"] = QLocale::Russian;
     m_languageMap["ar"] = QLocale::Arabic;
     m_languageMap["hi"] = QLocale::Hindi;
-    m_languageMap["th"] = QLocale::Thai;
-    m_languageMap["vi"] = QLocale::Vietnamese;
     m_languageMap["nl"] = QLocale::Dutch;
     m_languageMap["sv"] = QLocale::Swedish;
     m_languageMap["da"] = QLocale::Danish;
@@ -84,8 +82,6 @@ void LanguageManager::initializeLanguageMap()
     m_displayNames["ru"] = "Русский";
     m_displayNames["ar"] = "العربية";
     m_displayNames["hi"] = "हिन्दी";
-    m_displayNames["th"] = "ไทย";
-    m_displayNames["vi"] = "Tiếng Việt";
     m_displayNames["nl"] = "Nederlands";
     m_displayNames["sv"] = "Svenska";
     m_displayNames["sv-SE"] = "Svenska";
@@ -105,40 +101,43 @@ void LanguageManager::initializeLanguageDatabase()
     // All language information in one place - the tautology
     // Add new languages here ONLY
 
+    // ========== SINGLE SOURCE OF TRUTH ==========
+    // Only languages with bundled Tesseract .traineddata files
+    // Available traineddata: ara, chi_sim, deu, eng, fra, heb, ita, jpn, kor, nld, pol, por, rus, spa, swe, osd
+    //
+    // TO ADD A NEW LANGUAGE:
+    // 1. Download .traineddata from: https://github.com/tesseract-ocr/tessdata_best/raw/main/LANGCODE.traineddata
+    // 2. Copy to: build/Debug/tesseract/tessdata/ and build/Release/tesseract/tessdata/
+    // 3. Add language entry below (see examples)
+    // 4. Rebuild the application
+    // 5. See ADDING_LANGUAGES.md for detailed instructions
+    //
+    // Tesseract supports 124 languages! See ADDING_LANGUAGES.md for the complete list.
     m_languages = {
         // English
-        {"English", "English", "en", "eng", "", false, false, QLocale::English, QLocale::LatinScript},
+        {"English", "English", "en", "eng", "", false, false, "en", QLocale::English, QLocale::LatinScript},
 
-        // European Latin-based languages
-        {"Svenska", "Swedish", "sv", "swe", "åäöÅÄÖ", false, false, QLocale::Swedish, QLocale::LatinScript},
-        {"Français", "French", "fr", "fra", "éèêëàâùûïîôçÉÈÊËÀÂÙÛÏÎÔÇæœÆŒ", false, false, QLocale::French, QLocale::LatinScript},
-        {"Deutsch", "German", "de", "deu", "äöüßÄÖÜ", false, false, QLocale::German, QLocale::LatinScript},
-        {"Español", "Spanish", "es", "spa", "áéíóúñÁÉÍÓÚÑ¿¡üÜ", false, false, QLocale::Spanish, QLocale::LatinScript},
-        {"Português", "Portuguese", "pt", "por", "áâãàéêíóôõúçÁÂÃÀÉÊÍÓÔÕÚÇ", false, false, QLocale::Portuguese, QLocale::LatinScript},
-        {"Italiano", "Italian", "it", "ita", "àèéìíîòóùúÀÈÉÌÍÎÒÓÙÚ", false, false, QLocale::Italian, QLocale::LatinScript},
-        {"Nederlands", "Dutch", "nl", "nld", "áéëïóöüÁÉËÏÓÖÜ", false, false, QLocale::Dutch, QLocale::LatinScript},
-        {"Polski", "Polish", "pl", "pol", "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", false, false, QLocale::Polish, QLocale::LatinScript},
-        {"Dansk", "Danish", "da", "dan", "æøåÆØÅ", false, false, QLocale::Danish, QLocale::LatinScript},
-        {"Norsk", "Norwegian", "no", "nor", "æøåÆØÅ", false, false, QLocale::NorwegianBokmal, QLocale::LatinScript},
-        {"Suomi", "Finnish", "fi", "fin", "äöšžÄÖŠŽ", false, false, QLocale::Finnish, QLocale::LatinScript},
-        {"Türkçe", "Turkish", "tr", "tur", "çğıöşüÇĞİÖŞÜ", false, false, QLocale::Turkish, QLocale::LatinScript},
+        // European Latin-based languages (with traineddata)
+        {"Svenska", "Swedish", "sv", "swe", "åäöÅÄÖ", false, false, "sv", QLocale::Swedish, QLocale::LatinScript},
+        {"Français", "French", "fr", "fra", "éèêëàâùûïîôçÉÈÊËÀÂÙÛÏÎÔÇæœÆŒ", false, false, "fr", QLocale::French, QLocale::LatinScript},
+        {"Deutsch", "German", "de", "deu", "äöüßÄÖÜ", false, false, "de", QLocale::German, QLocale::LatinScript},
+        {"Español", "Spanish", "es", "spa", "áéíóúñÁÉÍÓÚÑ¿¡üÜ", false, false, "es", QLocale::Spanish, QLocale::LatinScript},
+        {"Português", "Portuguese", "pt", "por", "áâãàéêíóôõúçÁÂÃÀÉÊÍÓÔÕÚÇ", false, false, "pt", QLocale::Portuguese, QLocale::LatinScript},
+        {"Italiano", "Italian", "it", "ita", "àèéìíîòóùúÀÈÉÌÍÎÒÓÙÚ", false, false, "it", QLocale::Italian, QLocale::LatinScript},
+        {"Nederlands", "Dutch", "nl", "nld", "áéëïóöüÁÉËÏÓÖÜ", false, false, "nl", QLocale::Dutch, QLocale::LatinScript},
+        {"Polski", "Polish", "pl", "pol", "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", false, false, "pl", QLocale::Polish, QLocale::LatinScript},
 
-        // Cyrillic-based languages (no whitelist - full Cyrillic range)
-        {"Русский", "Russian", "ru", "rus", "", false, true, QLocale::Russian, QLocale::CyrillicScript},
-        {"Українська", "Ukrainian", "uk", "ukr", "", false, true, QLocale::Ukrainian, QLocale::CyrillicScript},
+        // Cyrillic-based languages (with traineddata)
+        {"Русский", "Russian", "ru", "rus", "", false, true, "ru", QLocale::Russian, QLocale::CyrillicScript},
 
-        // CJK languages (no whitelist - tens of thousands of characters)
-        {"中文 (简体)", "Chinese (Simplified)", "zh-CN", "chi_sim", "", true, true, QLocale::Chinese, QLocale::SimplifiedHanScript},
-        {"中文 (繁體)", "Chinese (Traditional)", "zh-TW", "chi_tra", "", true, true, QLocale::Chinese, QLocale::TraditionalHanScript},
-        {"日本語", "Japanese", "ja", "jpn", "", true, true, QLocale::Japanese, QLocale::JapaneseScript},
-        {"한국어", "Korean", "ko", "kor", "", true, true, QLocale::Korean, QLocale::KoreanScript},
+        // CJK languages (with traineddata)
+        {"中文 (简体)", "Chinese (Simplified)", "zh-CN", "chi_sim", "", true, true, "zh-CN", QLocale::Chinese, QLocale::SimplifiedHanScript},
+        {"日本語", "Japanese", "ja", "jpn", "", true, true, "ja", QLocale::Japanese, QLocale::JapaneseScript},
+        {"한국어", "Korean", "ko", "kor", "", true, true, "ko", QLocale::Korean, QLocale::KoreanScript},
 
-        // Other scripts
-        {"العربية", "Arabic", "ar", "ara", "", false, true, QLocale::Arabic, QLocale::ArabicScript},
-        {"हिन्दी", "Hindi", "hi", "hin", "", false, true, QLocale::Hindi, QLocale::DevanagariScript},
-        {"ไทย", "Thai", "th", "tha", "", false, true, QLocale::Thai, QLocale::ThaiScript},
-        {"Tiếng Việt", "Vietnamese", "vi", "vie", "ăâđêôơưĂÂĐÊÔƠƯáàảãạéèẻẽẹíìỉĩịóòỏõọúùủũụýỳỷỹỵÁÀẢÃẠÉÈẺẼẸÍÌỈĨỊÓÒỎÕỌÚÙỦŨỤÝỲỶỸỴ", false, false, QLocale::Vietnamese, QLocale::LatinScript},
-        {"עברית", "Hebrew", "he", "heb", "", false, true, QLocale::Hebrew, QLocale::HebrewScript},
+        // Other scripts (with traineddata)
+        {"العربية", "Arabic", "ar", "ara", "", false, true, "ar", QLocale::Arabic, QLocale::ArabicScript},
+        {"עברית", "Hebrew", "he", "heb", "", false, true, "he", QLocale::Hebrew, QLocale::HebrewScript},
     };
 
     // Removed debug log to reduce console noise
@@ -254,8 +253,6 @@ QString LanguageManager::languageCodeFromDisplayName(const QString& displayName)
     englishNames["Russian"] = "ru";
     englishNames["Arabic"] = "ar";
     englishNames["Hindi"] = "hi";
-    englishNames["Thai"] = "th";
-    englishNames["Vietnamese"] = "vi";
     englishNames["Dutch"] = "nl";
     englishNames["Swedish"] = "sv";
     englishNames["Danish"] = "da";
@@ -351,4 +348,9 @@ QString LanguageManager::getMultiLanguageTesseractCode(const QString& displayNam
 QString LanguageManager::getCharacterWhitelist(const QString& displayName) const
 {
     return getInfoByDisplayName(displayName).getFullWhitelist();
+}
+
+QString LanguageManager::getGoogleTranslateCode(const QString& displayName) const
+{
+    return getInfoByDisplayName(displayName).googleTranslateCode;
 }

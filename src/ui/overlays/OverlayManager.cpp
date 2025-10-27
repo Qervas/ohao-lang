@@ -124,11 +124,11 @@ void OverlayManager::showOCRResults(const OCRResult& result, const QRect& select
     qDebug() << "Setting up quick overlay - text:" << result.text.left(50) << "translation:" << result.translatedText.left(50);
     qDebug() << "Translation empty?" << result.translatedText.isEmpty() << "Same as original?" << (result.translatedText == result.text);
 
-    // Set content and mode - always show both if we have translation text
+    // Set content and mode - show both original and translation
     m_quickOverlay->setContent(result.text, result.translatedText);
 
     if (!result.translatedText.isEmpty() && result.translatedText != result.text) {
-        // We have a translation - show it
+        // We have a translation - show both original and translated
         qDebug() << "Showing both original and translation";
         m_quickOverlay->setMode(QuickTranslationOverlay::ShowBoth);
     } else {

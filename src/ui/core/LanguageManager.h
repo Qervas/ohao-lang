@@ -32,6 +32,9 @@ public:
         bool hasCJKScript;          // true for Chinese/Japanese/Korean
         bool requiresNoWhitelist;   // true for CJK/Russian (too many chars)
 
+        // Translation-specific properties
+        QString googleTranslateCode; // Google Translate API code: "sv", "fr", "zh-CN"
+
         // System properties
         QLocale::Language qtLocale; // Qt locale enum
         QLocale::Script script;     // LatinScript, CyrillicScript, etc.
@@ -75,6 +78,9 @@ public:
     QString getTesseractCode(const QString& displayName) const;
     QString getMultiLanguageTesseractCode(const QString& displayName) const;  // NEW: Returns "swe+eng" for Swedish, etc.
     QString getCharacterWhitelist(const QString& displayName) const;
+
+    // Translation-specific helpers
+    QString getGoogleTranslateCode(const QString& displayName) const;
 
 private:
     explicit LanguageManager(QObject* parent = nullptr);
