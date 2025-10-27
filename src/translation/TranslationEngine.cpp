@@ -96,6 +96,11 @@ QString TranslationEngine::buildGoogleTranslateUrl(const QString &text)
     QString sourceLang = getLanguageCode(m_sourceLanguage, GoogleTranslate);
     QString targetLang = getLanguageCode(m_targetLanguage, GoogleTranslate);
 
+    qDebug() << "TranslationEngine: Building Google Translate URL";
+    qDebug() << "  Source language (display):" << m_sourceLanguage << "-> code:" << sourceLang;
+    qDebug() << "  Target language (display):" << m_targetLanguage << "-> code:" << targetLang;
+    qDebug() << "  Text to translate:" << text.left(50);
+
     QUrl url("https://translate.googleapis.com/translate_a/single");
     QUrlQuery query;
     query.addQueryItem("client", "gtx");
@@ -142,6 +147,8 @@ void TranslationEngine::parseGoogleResponse(const QByteArray &response)
 {
     TranslationResult result;
 
+    qDebug() << "Raw Google Translate response (first 500 chars):" << QString::fromUtf8(response.left(500));
+
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(response, &error);
 
@@ -158,11 +165,32 @@ void TranslationEngine::parseGoogleResponse(const QByteArray &response)
             QJsonArray translationsArray = mainArray[0].toArray();
             QString translatedText;
 
-            for (const auto &value : translationsArray) {
+            qDebug() << "Google Translate response has" << translationsArray.size() << "segments";
+
+            // Check if we have both translated and original text in the response
+            // Google Translate format: [["translated", "original", ...], ...]
+            for (int i = 0; i < translationsArray.size(); i++) {
+                const auto &value = translationsArray[i];
                 if (value.isArray()) {
                     QJsonArray item = value.toArray();
                     if (!item.isEmpty() && item[0].isString()) {
-                        translatedText += item[0].toString();
+                        QString translated = item[0].toString();
+
+                        // If we have original text too (item[1]), check if translation actually happened
+                        if (item.size() > 1 && item[1].isString()) {
+                            QString original = item[1].toString();
+
+                            // If translated == original, Google didn't translate this segment
+                            // This can happen when Google has low confidence or encounters formatting issues
+                            if (translated == original) {
+                                qDebug() << "  Segment" << i << ": [SKIPPED - untranslated]" << translated.left(50);
+                                // Skip adding this segment - it's not translated
+                                continue;
+                            }
+                        }
+
+                        qDebug() << "  Segment" << i << ":" << translated;
+                        translatedText += translated;
                     }
                 }
             }
@@ -171,6 +199,9 @@ void TranslationEngine::parseGoogleResponse(const QByteArray &response)
             result.sourceLanguage = m_sourceLanguage;
             result.targetLanguage = m_targetLanguage;
             result.success = true;
+
+            qDebug() << "TranslationEngine: Translation successful!";
+            qDebug() << "  Translated text:" << translatedText.left(50);
 
             emit translationProgress("Translation completed");
         } else {
