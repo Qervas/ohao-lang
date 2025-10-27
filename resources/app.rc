@@ -1,0 +1,28 @@
+// Windows Resource File for Ohao Lang
+// This sets the application icon for the Windows executable
+
+IDI_ICON1 ICON "appicon.ico"
+
+1 VERSIONINFO
+FILEVERSION 1,0,3,0
+PRODUCTVERSION 1,0,3,0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Ohao Lang"
+            VALUE "FileDescription", "Ohao Lang - OCR Screenshot Tool"
+            VALUE "FileVersion", "1.0.3"
+            VALUE "InternalName", "ohao-lang"
+            VALUE "LegalCopyright", "Copyright (c) 2024"
+            VALUE "OriginalFilename", "ohao-lang.exe"
+            VALUE "ProductName", "Ohao Lang"
+            VALUE "ProductVersion", "1.0.3"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
