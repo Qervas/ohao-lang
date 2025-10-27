@@ -1,4 +1,5 @@
 #include "TranslationEngine.h"
+#include "../ui/core/LanguageManager.h"
 #include <QCoreApplication>
 #include <QDebug>
 #include <QJsonParseError>
@@ -69,26 +70,8 @@ void TranslationEngine::translate(const QString &text)
         m_currentReply = nullptr;
     }
 
-    switch (m_engine) {
-    case GoogleTranslate:
-        translateWithGoogle(text);
-        break;
-    case LibreTranslate:
-        translateWithLibreTranslate(text);
-        break;
-    case OllamaLLM:
-        translateWithOllama(text);
-        break;
-    case MicrosoftTranslator:
-        translateWithMicrosoft(text);
-        break;
-    case DeepL:
-        translateWithDeepL(text);
-        break;
-    case OfflineDictionary:
-        translateOffline(text);
-        break;
-    }
+    // Only Google Translate is supported
+    translateWithGoogle(text);
 
     m_timeoutTimer->start(TIMEOUT_MS);
 }
@@ -105,103 +88,8 @@ void TranslationEngine::translateWithGoogle(const QString &text)
     connect(m_currentReply, &QNetworkReply::finished, this, &TranslationEngine::onNetworkReplyFinished);
 }
 
-void TranslationEngine::translateWithLibreTranslate(const QString &text)
-{
-    emit translationProgress("Connecting to LibreTranslate...");
-
-    QString apiUrl = m_apiUrl.isEmpty() ? "https://libretranslate.de/translate" : m_apiUrl;
-
-    QNetworkRequest request{QUrl(apiUrl)};
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
-    if (!m_apiKey.isEmpty()) {
-        request.setRawHeader("Authorization", QString("Bearer %1").arg(m_apiKey).toUtf8());
-    }
-
-    QJsonObject json;
-    json["q"] = text;
-    json["source"] = getLanguageCode(m_sourceLanguage, LibreTranslate);
-    json["target"] = getLanguageCode(m_targetLanguage, LibreTranslate);
-    json["format"] = "text";
-
-    QJsonDocument doc(json);
-    m_currentReply = m_networkManager->post(request, doc.toJson());
-    connect(m_currentReply, &QNetworkReply::finished, this, &TranslationEngine::onNetworkReplyFinished);
-}
-
-void TranslationEngine::translateWithOllama(const QString &text)
-{
-    emit translationProgress("Connecting to Ollama LLM...");
-
-    QString apiUrl = m_apiUrl.isEmpty() ? "http://localhost:11434/api/generate" : m_apiUrl;
-
-    QNetworkRequest request{QUrl(apiUrl)};
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
-    QString prompt = QString("Translate the following text from %1 to %2. Only provide the translation, no explanations:\n\n%3")
-                        .arg(m_sourceLanguage == "Auto-Detect" ? "any language" : m_sourceLanguage)
-                        .arg(m_targetLanguage)
-                        .arg(text);
-
-    QJsonObject json;
-    json["model"] = "llama2"; // Default model, can be configured
-    json["prompt"] = prompt;
-    json["stream"] = false;
-
-    QJsonDocument doc(json);
-    m_currentReply = m_networkManager->post(request, doc.toJson());
-    connect(m_currentReply, &QNetworkReply::finished, this, &TranslationEngine::onNetworkReplyFinished);
-}
-
-void TranslationEngine::translateWithMicrosoft(const QString &text)
-{
-    emit translationProgress("Microsoft Translator not yet implemented");
-
-    TranslationResult result;
-    result.success = false;
-    result.errorMessage = "Microsoft Translator integration coming soon";
-    emit translationFinished(result);
-}
-
-void TranslationEngine::translateWithDeepL(const QString &text)
-{
-    emit translationProgress("Connecting to DeepL...");
-
-    QString apiUrl = m_apiUrl.isEmpty() ? "https://api-free.deepl.com/v2/translate" : m_apiUrl;
-
-    if (m_apiKey.isEmpty()) {
-        TranslationResult result;
-        result.success = false;
-        result.errorMessage = "DeepL requires an API key";
-        emit translationFinished(result);
-        return;
-    }
-
-    QNetworkRequest request{QUrl(apiUrl)};
-    request.setRawHeader("Authorization", QString("DeepL-Auth-Key %1").arg(m_apiKey).toUtf8());
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
-
-    QUrlQuery params;
-    params.addQueryItem("text", text);
-    params.addQueryItem("target_lang", getLanguageCode(m_targetLanguage, DeepL));
-
-    if (m_sourceLanguage != "Auto-Detect") {
-        params.addQueryItem("source_lang", getLanguageCode(m_sourceLanguage, DeepL));
-    }
-
-    m_currentReply = m_networkManager->post(request, params.toString(QUrl::FullyEncoded).toUtf8());
-    connect(m_currentReply, &QNetworkReply::finished, this, &TranslationEngine::onNetworkReplyFinished);
-}
-
-void TranslationEngine::translateOffline(const QString &text)
-{
-    emit translationProgress("Offline dictionary not yet implemented");
-
-    TranslationResult result;
-    result.success = false;
-    result.errorMessage = "Offline dictionary coming soon";
-    emit translationFinished(result);
-}
+// REMOVED: Non-Google translation engines (LibreTranslate, Ollama, Microsoft, DeepL, Offline)
+// Only Google Translate is supported (free, no API key needed)
 
 QString TranslationEngine::buildGoogleTranslateUrl(const QString &text)
 {
@@ -246,22 +134,8 @@ void TranslationEngine::onNetworkReplyFinished()
     m_currentReply->deleteLater();
     m_currentReply = nullptr;
 
-    switch (m_engine) {
-    case GoogleTranslate:
-        parseGoogleResponse(response);
-        break;
-    case LibreTranslate:
-        parseLibreTranslateResponse(response);
-        break;
-    case OllamaLLM:
-        parseOllamaResponse(response);
-        break;
-    case DeepL:
-        parseDeepLResponse(response);
-        break;
-    default:
-        break;
-    }
+    // Only Google Translate is supported
+    parseGoogleResponse(response);
 }
 
 void TranslationEngine::parseGoogleResponse(const QByteArray &response)
@@ -311,108 +185,8 @@ void TranslationEngine::parseGoogleResponse(const QByteArray &response)
     emit translationFinished(result);
 }
 
-void TranslationEngine::parseLibreTranslateResponse(const QByteArray &response)
-{
-    TranslationResult result;
-
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(response, &error);
-
-    if (error.error != QJsonParseError::NoError) {
-        result.success = false;
-        result.errorMessage = "Failed to parse LibreTranslate response";
-        emit translationFinished(result);
-        return;
-    }
-
-    QJsonObject json = doc.object();
-
-    if (json.contains("translatedText")) {
-        result.translatedText = json["translatedText"].toString();
-        result.sourceLanguage = m_sourceLanguage;
-        result.targetLanguage = m_targetLanguage;
-        result.success = true;
-        emit translationProgress("Translation completed");
-    } else if (json.contains("error")) {
-        result.success = false;
-        result.errorMessage = json["error"].toString();
-    } else {
-        result.success = false;
-        result.errorMessage = "Invalid LibreTranslate response";
-    }
-
-    emit translationFinished(result);
-}
-
-void TranslationEngine::parseOllamaResponse(const QByteArray &response)
-{
-    TranslationResult result;
-
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(response, &error);
-
-    if (error.error != QJsonParseError::NoError) {
-        result.success = false;
-        result.errorMessage = "Failed to parse Ollama response";
-        emit translationFinished(result);
-        return;
-    }
-
-    QJsonObject json = doc.object();
-
-    if (json.contains("response")) {
-        result.translatedText = json["response"].toString().trimmed();
-        result.sourceLanguage = m_sourceLanguage;
-        result.targetLanguage = m_targetLanguage;
-        result.success = true;
-        emit translationProgress("Translation completed");
-    } else if (json.contains("error")) {
-        result.success = false;
-        result.errorMessage = json["error"].toString();
-    } else {
-        result.success = false;
-        result.errorMessage = "Invalid Ollama response";
-    }
-
-    emit translationFinished(result);
-}
-
-void TranslationEngine::parseDeepLResponse(const QByteArray &response)
-{
-    TranslationResult result;
-
-    QJsonParseError error;
-    QJsonDocument doc = QJsonDocument::fromJson(response, &error);
-
-    if (error.error != QJsonParseError::NoError) {
-        result.success = false;
-        result.errorMessage = "Failed to parse DeepL response";
-        emit translationFinished(result);
-        return;
-    }
-
-    QJsonObject json = doc.object();
-
-    if (json.contains("translations")) {
-        QJsonArray translations = json["translations"].toArray();
-        if (!translations.isEmpty()) {
-            QJsonObject translation = translations[0].toObject();
-            result.translatedText = translation["text"].toString();
-            result.sourceLanguage = translation["detected_source_language"].toString();
-            result.targetLanguage = m_targetLanguage;
-            result.success = true;
-            emit translationProgress("Translation completed");
-        }
-    } else if (json.contains("message")) {
-        result.success = false;
-        result.errorMessage = json["message"].toString();
-    } else {
-        result.success = false;
-        result.errorMessage = "Invalid DeepL response";
-    }
-
-    emit translationFinished(result);
-}
+// REMOVED: Non-Google response parsers (LibreTranslate, Ollama, DeepL)
+// Only Google Translate is supported
 
 void TranslationEngine::onRequestTimeout()
 {
@@ -432,51 +206,18 @@ void TranslationEngine::onRequestTimeout()
 
 QString TranslationEngine::getLanguageCode(const QString &language, Engine engine)
 {
-    // Language code mapping for different services
-    QMap<QString, QString> googleCodes = {
-        {"Auto-Detect", "auto"},
-        {"English", "en"},
-        {"Chinese (Simplified)", "zh-CN"},
-        {"Chinese (Traditional)", "zh-TW"},
-        {"Japanese", "ja"},
-        {"Korean", "ko"},
-        {"Spanish", "es"},
-        {"French", "fr"},
-        {"German", "de"},
-        {"Russian", "ru"},
-        {"Portuguese", "pt"},
-        {"Italian", "it"},
-        {"Dutch", "nl"},
-        {"Polish", "pl"},
-        {"Arabic", "ar"},
-        {"Hindi", "hi"},
-        {"Thai", "th"},
-        {"Vietnamese", "vi"},
-        {"Swedish", "sv"}
-    };
+    Q_UNUSED(engine); // Only Google Translate is supported
 
-    QMap<QString, QString> deeplCodes = {
-        {"English", "EN"},
-        {"Chinese (Simplified)", "ZH"},
-        {"Japanese", "JA"},
-        {"Spanish", "ES"},
-        {"French", "FR"},
-        {"German", "DE"},
-        {"Russian", "RU"},
-        {"Portuguese", "PT"},
-        {"Italian", "IT"},
-        {"Dutch", "NL"},
-        {"Polish", "PL"},
-        {"Swedish", "SV"}
-    };
-
-    if (engine == GoogleTranslate || engine == LibreTranslate || engine == OllamaLLM) {
-        return googleCodes.value(language, "en");
-    } else if (engine == DeepL) {
-        return deeplCodes.value(language, "EN");
+    // Special case for Auto-Detect
+    if (language == "Auto-Detect") {
+        return "auto";
     }
 
-    return googleCodes.value(language, "en");
+    // Get language code from LanguageManager - the single source of truth
+    QString code = LanguageManager::instance().getGoogleTranslateCode(language);
+
+    // Fallback to English if not found
+    return code.isEmpty() ? "en" : code;
 }
 
 QString TranslationEngine::getLanguageName(const QString &code)

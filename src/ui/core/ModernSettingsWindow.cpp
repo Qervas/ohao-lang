@@ -8,6 +8,7 @@
 #include "ThemeManager.h"
 #include "ThemeColors.h"
 #include "FloatingWidget.h"
+#include "LanguageManager.h"
 #include <QApplication>
 #include <QScreen>
 #include <QGroupBox>
@@ -148,10 +149,12 @@ QWidget* ModernSettingsWindow::createGeneralPage()
     langLayout->setContentsMargins(0, 0, 0, 0);
 
     ocrLanguageCombo = new QComboBox();
-    ocrLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
-                                "Japanese", "Korean", "Spanish", "French", "German", "Russian",
-                                "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic",
-                                "Hindi", "Thai", "Vietnamese"});
+    // Populate from LanguageManager - the single source of truth
+    QStringList ocrLanguages;
+    for (const auto& lang : LanguageManager::instance().allLanguages()) {
+        ocrLanguages << lang.englishName;  // Use English names for consistency
+    }
+    ocrLanguageCombo->addItems(ocrLanguages);
     connect(ocrLanguageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this]() {
                 updateVoiceList();  // Update voices when OCR language changes
@@ -160,10 +163,12 @@ QWidget* ModernSettingsWindow::createGeneralPage()
     langLayout->addRow("OCR Language:", ocrLanguageCombo);
 
     targetLanguageCombo = new QComboBox();
-    targetLanguageCombo->addItems({"English", "Chinese (Simplified)", "Chinese (Traditional)",
-                                   "Japanese", "Korean", "Spanish", "French", "German", "Russian",
-                                   "Portuguese", "Italian", "Dutch", "Polish", "Swedish", "Arabic",
-                                   "Hindi", "Thai", "Vietnamese"});
+    // Populate from LanguageManager - the single source of truth
+    QStringList translationLanguages;
+    for (const auto& lang : LanguageManager::instance().allLanguages()) {
+        translationLanguages << lang.englishName;  // Use English names for consistency
+    }
+    targetLanguageCombo->addItems(translationLanguages);
     connect(targetLanguageCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &ModernSettingsWindow::onSettingChanged);
     langLayout->addRow("Translation Target:", targetLanguageCombo);
@@ -330,7 +335,7 @@ QWidget* ModernSettingsWindow::createTranslationPage()
 
     layout->addWidget(optionsGroup);
 
-    // Engine group
+    // Engine group - Only Google Translate (free)
     QGroupBox *engineGroup = new QGroupBox("Translation Engine");
     engineGroup->setObjectName("settingsGroup");
     QFormLayout *engineLayout = new QFormLayout(engineGroup);
@@ -338,37 +343,18 @@ QWidget* ModernSettingsWindow::createTranslationPage()
     engineLayout->setContentsMargins(0, 0, 0, 0);
 
     translationEngineCombo = new QComboBox();
-    translationEngineCombo->addItems({"Google Translate (Free)", "LibreTranslate",
-                                     "Ollama Local LLM", "Microsoft Translator",
-                                     "DeepL (Free)", "Offline Dictionary"});
+    translationEngineCombo->addItems({"Google Translate (Free)"});
+    translationEngineCombo->setEnabled(false); // Only one option, disable selection
     connect(translationEngineCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        // Show/hide API fields based on selected engine
-        QString engine = translationEngineCombo->currentText();
-        bool needsApi = !engine.contains("Google Translate");
-
-        if (apiUrlEdit) apiUrlEdit->setVisible(needsApi);
-        if (apiKeyEdit) apiKeyEdit->setVisible(needsApi);
-
         if (!isInitializing) {
             saveSettings();
         }
     });
     engineLayout->addRow("Engine:", translationEngineCombo);
 
-    apiUrlEdit = new QLineEdit();
-    apiUrlEdit->setPlaceholderText("Custom API URL (if needed)");
-    apiUrlEdit->setVisible(false);  // Hidden by default for Google Translate
-    connect(apiUrlEdit, &QLineEdit::textChanged,
-            this, &ModernSettingsWindow::onSettingChanged);
-    engineLayout->addRow("API URL:", apiUrlEdit);
-
-    apiKeyEdit = new QLineEdit();
-    apiKeyEdit->setPlaceholderText("API Key (if needed)");
-    apiKeyEdit->setEchoMode(QLineEdit::Password);
-    apiKeyEdit->setVisible(false);  // Hidden by default for Google Translate
-    connect(apiKeyEdit, &QLineEdit::textChanged,
-            this, &ModernSettingsWindow::onSettingChanged);
-    engineLayout->addRow("API Key:", apiKeyEdit);
+    // API fields removed - Google Translate doesn't need API key or custom URL
+    apiUrlEdit = nullptr;
+    apiKeyEdit = nullptr;
 
     layout->addWidget(engineGroup);
     layout->addStretch();

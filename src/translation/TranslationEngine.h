@@ -28,12 +28,7 @@ class TranslationEngine : public QObject
 
 public:
     enum Engine {
-        GoogleTranslate,
-        LibreTranslate,
-        OllamaLLM,
-        MicrosoftTranslator,
-        DeepL,
-        OfflineDictionary
+        GoogleTranslate  // Only Google Translate is supported (free, no API key needed)
     };
 
     explicit TranslationEngine(QObject *parent = nullptr);
@@ -67,21 +62,10 @@ private slots:
 
 private:
     void translateWithGoogle(const QString &text);
-    void translateWithLibreTranslate(const QString &text);
-    void translateWithOllama(const QString &text);
-    void translateWithMicrosoft(const QString &text);
-    void translateWithDeepL(const QString &text);
-    void translateOffline(const QString &text);
-
     void parseGoogleResponse(const QByteArray &response);
-    void parseLibreTranslateResponse(const QByteArray &response);
-    void parseOllamaResponse(const QByteArray &response);
-    void parseMicrosoftResponse(const QByteArray &response);
-    void parseDeepLResponse(const QByteArray &response);
 
     QString detectSourceLanguage(const QString &text);
     QString buildGoogleTranslateUrl(const QString &text);
-    QString buildLibreTranslateRequest(const QString &text);
 
     Engine m_engine = GoogleTranslate;
     QString m_sourceLanguage; // Set from user settings
