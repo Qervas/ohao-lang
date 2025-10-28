@@ -104,6 +104,7 @@ AppSettings::TranslationConfig AppSettings::getTranslationConfig() const
         QString defaultTarget = systemLang.isEmpty() ? "English" : systemLang;
         m_cachedTranslationConfig.targetLanguage = m_settings->value("translation/targetLanguage", defaultTarget).toString();
 
+        m_cachedTranslationConfig.overlayMode = m_settings->value("translation/overlayMode", "Deep Learning Mode").toString();
         m_translationCacheValid = true;
     }
     return m_cachedTranslationConfig;
@@ -115,6 +116,7 @@ void AppSettings::setTranslationConfig(const TranslationConfig& config)
     m_settings->setValue("translation/engine", config.engine);
     m_settings->setValue("translation/sourceLanguage", config.sourceLanguage);
     m_settings->setValue("translation/targetLanguage", config.targetLanguage);
+    m_settings->setValue("translation/overlayMode", config.overlayMode);
 
     m_cachedTranslationConfig = config;
     m_translationCacheValid = true;
@@ -198,7 +200,7 @@ AppSettings::GlobalConfig AppSettings::getGlobalConfig() const
 {
     if (!m_globalCacheValid) {
         m_cachedGlobalConfig.enableGlobalShortcuts = m_settings->value("global/enableGlobalShortcuts", true).toBool();
-        m_cachedGlobalConfig.screenshotShortcut = m_settings->value("global/screenshotShortcut", "Ctrl+Alt+X").toString();
+        m_cachedGlobalConfig.screenshotShortcut = m_settings->value("global/screenshotShortcut", "Ctrl+Shift+S").toString();
         m_cachedGlobalConfig.enableSounds = m_settings->value("global/enableSounds", true).toBool();
         m_cachedGlobalConfig.enableAnimations = m_settings->value("global/enableAnimations", true).toBool();
         m_globalCacheValid = true;
@@ -300,6 +302,14 @@ void AppSettings::invalidateCache()
     m_uiCacheValid = false;
     m_ttsCacheValid = false;
     m_globalCacheValid = false;
+}
+
+QString AppSettings::getComponentStyleSheet(const QString& componentName) const
+{
+    // This method is deprecated. Use ThemeManager and ThemeColors instead.
+    // Kept for backward compatibility but returns empty string.
+    Q_UNUSED(componentName);
+    return "";
 }
 
 QColor AppSettings::getThemeColor(const QString& colorName) const

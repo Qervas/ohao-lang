@@ -38,6 +38,7 @@ public:
         QString engine = "Google Translate (Free)";
         QString sourceLanguage; // Dynamically set from OCR language
         QString targetLanguage; // Dynamically set from system locale or user preference
+        QString overlayMode = "Deep Learning Mode";
     };
 
     TranslationConfig getTranslationConfig() const;
@@ -72,7 +73,7 @@ public:
     // === Global Settings ===
     struct GlobalConfig {
         bool enableGlobalShortcuts = true;
-        QString screenshotShortcut = "Ctrl+Alt+X";
+        QString screenshotShortcut = "Ctrl+Shift+S";
         bool enableSounds = true;
         bool enableAnimations = true;
     };
@@ -94,6 +95,7 @@ public:
     void setTheme(const QString& theme);
 
     // Centralized theming
+    QString getComponentStyleSheet(const QString& componentName) const;
     QColor getThemeColor(const QString& colorName) const;
 
     // Utility methods

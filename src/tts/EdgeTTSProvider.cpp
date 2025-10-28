@@ -12,6 +12,8 @@
 #include <QMutex>
 #include <QtGlobal>
 #include <initializer_list>
+#include <QMediaDevices>
+#include <QAudioDevice>
 
 // Voice cache with static storage
 static QStringList s_cachedVoices;
@@ -390,6 +392,8 @@ void EdgeTTSProvider::handleProcessFinished(int exitCode, QProcess::ExitStatus s
     auto *buffer = new QBuffer(this);
     buffer->setData(audioData);
     buffer->open(QIODevice::ReadOnly);
+    // Always follow current system default output device at playback time
+    m_audio->setDevice(QMediaDevices::defaultAudioOutput());
     m_player->setSourceDevice(buffer);
     m_player->play();
 
