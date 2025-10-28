@@ -1,6 +1,7 @@
 #include "EdgeTTSProvider.h"
 
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryFile>
@@ -11,6 +12,8 @@
 #include <QMutex>
 #include <QtGlobal>
 #include <initializer_list>
+#include <QMediaDevices>
+#include <QAudioDevice>
 
 // Voice cache with static storage
 static QStringList s_cachedVoices;
@@ -32,24 +35,33 @@ EdgeTTSProvider::EdgeTTSProvider(QObject* parent)
 
     // Try to auto-detect edge-tts command (check only once, cache result)
     if (!s_edgeTtsChecked) {
-        QProcess testProcess;
-        testProcess.start("edge-tts", QStringList() << "--list-voices");
-        if (testProcess.waitForFinished(5000)) {
-            QString output = testProcess.readAllStandardOutput();
-            // If we get voice list output, edge-tts is installed
-            if (!output.isEmpty() && output.contains("Name")) {
-                s_edgeTtsAvailable = true;
-                s_edgeTtsExecutable = "edge-tts";
-                qDebug() << "EdgeTTSProvider: Auto-detected edge-tts command";
-            } else {
-                s_edgeTtsAvailable = false;
-                s_edgeTtsExecutable = "";
-                qDebug() << "EdgeTTSProvider: edge-tts command not found in PATH";
+        QStringList candidatePaths;
+
+#ifdef Q_OS_WIN
+        // 1. Bundled edge-tts.exe (for Full release package on Windows)
+        candidatePaths << QCoreApplication::applicationDirPath() + "\\edge-tts\\edge-tts.exe";
+#endif
+        // 2. System-installed edge-tts (from pip, cross-platform)
+        candidatePaths << "edge-tts";
+
+        for (const QString& edgePath : candidatePaths) {
+            QProcess testProcess;
+            testProcess.start(edgePath, QStringList() << "--list-voices");
+            if (testProcess.waitForFinished(5000)) {
+                QString output = testProcess.readAllStandardOutput();
+                // If we get voice list output, edge-tts is installed
+                if (!output.isEmpty() && output.contains("Name")) {
+                    s_edgeTtsAvailable = true;
+                    s_edgeTtsExecutable = edgePath;
+                    qDebug() << "EdgeTTSProvider: Found edge-tts at:" << edgePath;
+                    break;
+                }
             }
-        } else {
+        }
+
+        if (s_edgeTtsExecutable.isEmpty()) {
             s_edgeTtsAvailable = false;
-            s_edgeTtsExecutable = "";
-            qDebug() << "EdgeTTSProvider: edge-tts command not responding";
+            qDebug() << "EdgeTTSProvider: edge-tts not found (checked bundled and system PATH)";
         }
         s_edgeTtsChecked = true;
     }
@@ -380,6 +392,8 @@ void EdgeTTSProvider::handleProcessFinished(int exitCode, QProcess::ExitStatus s
     auto *buffer = new QBuffer(this);
     buffer->setData(audioData);
     buffer->open(QIODevice::ReadOnly);
+    // Always follow current system default output device at playback time
+    m_audio->setDevice(QMediaDevices::defaultAudioOutput());
     m_player->setSourceDevice(buffer);
     m_player->play();
 
@@ -411,7 +425,7 @@ QStringList EdgeTTSProvider::getAllAvailableVoices(bool forceRefresh)
 
     QStringList voices;
     QProcess process;
-    process.start("edge-tts", QStringList() << "--list-voices");
+    process.start(s_edgeTtsExecutable, QStringList() << "--list-voices");
 
     if (!process.waitForFinished(10000)) { // 10 second timeout
         qDebug() << "EdgeTTSProvider: Failed to get voice list from edge-tts";

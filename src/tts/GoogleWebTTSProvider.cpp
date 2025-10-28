@@ -12,6 +12,8 @@
 #include <QDateTime>
 #include <QMutex>
 #include <initializer_list>
+#include <QMediaDevices>
+#include <QAudioDevice>
 
 // Voice cache with static storage
 static QStringList s_googleCachedVoices;
@@ -203,6 +205,8 @@ void GoogleWebTTSProvider::speak(const QString& text,
         
         qDebug() << "GoogleWebTTSProvider: Created temp file:" << tempFile->fileName() << "size:" << audio.size();
         
+        // Always follow current system default output device at playback time
+        m_audio->setDevice(QMediaDevices::defaultAudioOutput());
         m_player->setSource(QUrl::fromLocalFile(tempFile->fileName()));
         
         qDebug() << "GoogleWebTTSProvider: Playing audio, volume:" << m_audio->volume();
