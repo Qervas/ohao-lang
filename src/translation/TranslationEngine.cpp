@@ -103,7 +103,7 @@ void TranslationEngine::translateWithGoogle(const QString &text)
     m_timeoutTimer->start(TIMEOUT_MS);
 }
 
-// REMOVED: Non-Google translation engines (LibreTranslate, Ollama, Microsoft, DeepL, Offline)
+// REMOVED: Non-Google translation engines (LibreTranslate, Ollama, Microsoft, L, Offline)
 // Only Google Translate is supported (free, no API key needed)
 
 QString TranslationEngine::buildGoogleTranslateUrl(const QString &text)
@@ -238,7 +238,6 @@ void TranslationEngine::parseGoogleResponse(const QByteArray &response)
     startNextChunk();
 }
 
-// REMOVED: Non-Google response parsers (LibreTranslate, Ollama, DeepL)
 // Only Google Translate is supported
 
 void TranslationEngine::onRequestTimeout()
@@ -285,28 +284,8 @@ QString TranslationEngine::getLanguageCode(const QString &language, Engine engin
 
 QString TranslationEngine::getLanguageName(const QString &code)
 {
-    QMap<QString, QString> codeToName = {
-        {"en", "English"},
-        {"zh-CN", "Chinese (Simplified)"},
-        {"zh-TW", "Chinese (Traditional)"},
-        {"ja", "Japanese"},
-        {"ko", "Korean"},
-        {"es", "Spanish"},
-        {"fr", "French"},
-        {"de", "German"},
-        {"ru", "Russian"},
-        {"pt", "Portuguese"},
-        {"it", "Italian"},
-        {"nl", "Dutch"},
-        {"pl", "Polish"},
-        {"ar", "Arabic"},
-        {"hi", "Hindi"},
-        {"th", "Thai"},
-        {"vi", "Vietnamese"},
-        {"sv", "Swedish"}
-    };
-
-    return codeToName.value(code, code);
+    // Use LanguageManager as the single source of truth for language names
+    return LanguageManager::instance().displayName(code);
 }
 
 // --- helpers ---
