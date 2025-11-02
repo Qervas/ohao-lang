@@ -61,6 +61,27 @@ void TranslationEngine::translate(const QString &text)
         return;
     }
 
+    // Validate language configuration
+    QString sourceLang = getLanguageCode(m_sourceLanguage, m_engine);
+    QString targetLang = getLanguageCode(m_targetLanguage, m_engine);
+
+    qDebug() << "TranslationEngine::translate() - Language validation:";
+    qDebug() << "  Source:" << m_sourceLanguage << "->" << sourceLang;
+    qDebug() << "  Target:" << m_targetLanguage << "->" << targetLang;
+
+    // FIX: Only validate if source is NOT auto-detect
+    // When source is "auto", Google Translate will detect the language automatically
+    // and won't translate if source == target is detected
+    if (sourceLang != "auto" && sourceLang == targetLang) {
+        TranslationResult result;
+        result.success = false;
+        result.errorMessage = QString("Cannot translate: source and target languages are both '%1'").arg(sourceLang);
+        qDebug() << "Translation aborted:" << result.errorMessage;
+        emit translationError(result.errorMessage);
+        emit translationFinished(result);
+        return;
+    }
+
     m_currentText = text;
     emit translationProgress("Starting translation...");
 
@@ -71,18 +92,17 @@ void TranslationEngine::translate(const QString &text)
         m_currentReply = nullptr;
     }
 
-    // Reset aggregation/chunk state
+    // Reset state for new translation
     m_aggregatedText.clear();
+    m_forceAutoDetect = false;
+    m_retryAttempt = 0;
     m_chunks = chunkTextByLimit(text, CHUNK_CHAR_LIMIT);
     m_currentChunkIndex = -1;
     startNextChunk();
 }
 
-void TranslationEngine::translateWithGoogle(const QString &text)
+QNetworkRequest TranslationEngine::createGoogleTranslateRequest(const QString &url)
 {
-    emit translationProgress("Connecting to Google Translate...");
-
-    QString url = buildGoogleTranslateUrl(text);
     QNetworkRequest request{QUrl(url)};
     request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
     request.setRawHeader("Accept", "application/json, text/plain, */*");
@@ -90,6 +110,15 @@ void TranslationEngine::translateWithGoogle(const QString &text)
     request.setRawHeader("Cache-Control", "no-cache");
     request.setRawHeader("Pragma", "no-cache");
     request.setRawHeader("Referer", "https://translate.google.com/");
+    return request;
+}
+
+void TranslationEngine::translateWithGoogle(const QString &text)
+{
+    emit translationProgress("Connecting to Google Translate...");
+
+    QString url = buildGoogleTranslateUrl(text);
+    QNetworkRequest request = createGoogleTranslateRequest(url);
 
     // Cancel any existing reply
     if (m_currentReply) {
@@ -353,26 +382,22 @@ void TranslationEngine::startNextChunk()
 
 void TranslationEngine::sendRequestForText(const QString &text)
 {
-    if (m_forceAutoDetect) {
-        QString url = buildGoogleTranslateUrl(text, true);
-        QNetworkRequest request{QUrl(url)};
-        request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-        request.setRawHeader("Accept", "application/json, text/plain, */*");
-        request.setRawHeader("Accept-Language", "en-US,en;q=0.9");
-        request.setRawHeader("Cache-Control", "no-cache");
-        request.setRawHeader("Pragma", "no-cache");
-        request.setRawHeader("Referer", "https://translate.google.com/");
-        if (m_currentReply) {
-            m_currentReply->abort();
-            m_currentReply->deleteLater();
-            m_currentReply = nullptr;
-        }
-        m_currentReply = m_networkManager->get(request);
-        connect(m_currentReply, &QNetworkReply::finished, this, &TranslationEngine::onNetworkReplyFinished);
-        m_timeoutTimer->start(TIMEOUT_MS);
-        return;
+    // Build URL based on whether we're forcing auto-detect
+    QString url = m_forceAutoDetect ? buildGoogleTranslateUrl(text, true)
+                                    : buildGoogleTranslateUrl(text);
+
+    QNetworkRequest request = createGoogleTranslateRequest(url);
+
+    // Cancel any existing reply
+    if (m_currentReply) {
+        m_currentReply->abort();
+        m_currentReply->deleteLater();
+        m_currentReply = nullptr;
     }
-    translateWithGoogle(text);
+
+    m_currentReply = m_networkManager->get(request);
+    connect(m_currentReply, &QNetworkReply::finished, this, &TranslationEngine::onNetworkReplyFinished);
+    m_timeoutTimer->start(TIMEOUT_MS);
 }
 
 bool TranslationEngine::parseGoogleResponseText(const QByteArray &response, QString &outText)
@@ -388,37 +413,38 @@ bool TranslationEngine::parseGoogleResponseText(const QByteArray &response, QStr
 
     qDebug() << "Raw Google Translate response (first 500 chars):" << QString::fromUtf8(body.left(500));
 
+    // Parse JSON
     QJsonParseError error;
     QJsonDocument doc = QJsonDocument::fromJson(body, &error);
     if (error.error != QJsonParseError::NoError) {
+        qDebug() << "JSON parse error at offset" << error.offset << ":" << error.errorString();
         return false;
     }
 
-    // Format 1: Array-based response
+    // Format 1: Array-based response [[["translated","original",null,null,3]]]
     if (doc.isArray()) {
-        try {
-            QJsonArray mainArray = doc.array();
-            if (!mainArray.isEmpty() && mainArray[0].isArray()) {
-                QJsonArray translationsArray = mainArray[0].toArray();
-                QString translatedText;
-                for (int i = 0; i < translationsArray.size(); i++) {
-                    const auto &value = translationsArray[i];
-                    if (value.isArray()) {
-                        QJsonArray item = value.toArray();
-                        if (!item.isEmpty() && item[0].isString()) {
-                            translatedText += item[0].toString();
-                        }
+        QJsonArray mainArray = doc.array();
+        if (!mainArray.isEmpty() && mainArray[0].isArray()) {
+            QJsonArray translationsArray = mainArray[0].toArray();
+            QString translatedText;
+            for (const auto &value : translationsArray) {
+                if (value.isArray()) {
+                    QJsonArray item = value.toArray();
+                    if (!item.isEmpty() && item[0].isString()) {
+                        translatedText += item[0].toString();
                     }
                 }
-                outText = translatedText;
-                if (!outText.isEmpty()) return true;
             }
-        } catch (...) {
-            // fall through to alternate format
+            if (!translatedText.isEmpty()) {
+                outText = translatedText;
+                qDebug() << "Parsed array-based response, translated text length:" << outText.length();
+                return true;
+            }
         }
+        qDebug() << "Array-based response format not recognized";
     }
 
-    // Format 2: Object with sentences array (dj=1 style)
+    // Format 2: Object with sentences array (dj=1 style) {"sentences":[{"trans":"..."}]}
     if (doc.isObject()) {
         QJsonObject obj = doc.object();
         if (obj.contains("sentences") && obj["sentences"].isArray()) {
@@ -432,10 +458,15 @@ bool TranslationEngine::parseGoogleResponseText(const QByteArray &response, QStr
                     }
                 }
             }
-            outText = translatedText;
-            return !outText.isEmpty();
+            if (!translatedText.isEmpty()) {
+                outText = translatedText;
+                qDebug() << "Parsed object-based response, translated text length:" << outText.length();
+                return true;
+            }
         }
+        qDebug() << "Object-based response missing 'sentences' array or trans field";
     }
 
+    qDebug() << "No recognized response format found";
     return false;
 }

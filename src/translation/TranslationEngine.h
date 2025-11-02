@@ -36,6 +36,8 @@ public:
     ~TranslationEngine();
 
     void setEngine(Engine engine);
+    // Set source language for translation
+    // NOTE: Should be the OCR-detected language or "Auto-Detect" for automatic detection
     void setSourceLanguage(const QString &language);
     void setTargetLanguage(const QString &language);
     void setApiKey(const QString &key);
@@ -68,6 +70,7 @@ private:
 	void sendRequestForText(const QString &text);
 	QStringList chunkTextByLimit(const QString &text, int limit) const;
 	void startNextChunk();
+    QNetworkRequest createGoogleTranslateRequest(const QString &url);
 
     QString detectSourceLanguage(const QString &text);
     QString buildGoogleTranslateUrl(const QString &text);

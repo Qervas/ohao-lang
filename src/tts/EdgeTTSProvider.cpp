@@ -38,10 +38,12 @@ EdgeTTSProvider::EdgeTTSProvider(QObject* parent)
         QStringList candidatePaths;
 
 #ifdef Q_OS_WIN
-        // 1. Bundled edge-tts.exe (for Full release package on Windows)
+        // 1. Bundled edge-tts.exe in application directory (from CMake build)
+        candidatePaths << QCoreApplication::applicationDirPath() + "\\edge-tts.exe";
+        // 2. Legacy path (edge-tts subdirectory, for backwards compatibility)
         candidatePaths << QCoreApplication::applicationDirPath() + "\\edge-tts\\edge-tts.exe";
 #endif
-        // 2. System-installed edge-tts (from pip, cross-platform)
+        // 3. System-installed edge-tts (from pip, cross-platform)
         candidatePaths << "edge-tts";
 
         for (const QString& edgePath : candidatePaths) {

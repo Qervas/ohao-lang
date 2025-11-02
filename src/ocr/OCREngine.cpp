@@ -533,9 +533,22 @@ void OCREngine::startTranslation(const QString &text)
 
         // Only Google Translate is supported (free, no API key needed)
         m_translationEngineInstance->setEngine(TranslationEngine::GoogleTranslate);
-        m_translationEngineInstance->setSourceLanguage(m_translationSourceLanguage);
-        m_translationEngineInstance->setTargetLanguage(m_translationTargetLanguage);
     }
+
+    // FIX: Always use Auto-Detect for best translation results
+    // Google Translate's auto-detection is more reliable than OCR language detection
+    // and handles mixed-language text better (e.g., German with English names)
+    QString sourceLanguage = "Auto-Detect";
+
+    qDebug() << "OCREngine: Using Auto-Detect for translation (OCR detected:"
+             << m_currentOCRResult.language << ")";
+
+    // Update translation engine with auto-detect source and target from settings
+    m_translationEngineInstance->setSourceLanguage(sourceLanguage);
+    m_translationEngineInstance->setTargetLanguage(m_translationTargetLanguage);
+
+    qDebug() << "OCREngine: Translation configured - Source: Auto-Detect"
+             << "Target:" << m_translationTargetLanguage;
 
     emit ocrProgress("Starting translation...");
     m_translationEngineInstance->translate(text);

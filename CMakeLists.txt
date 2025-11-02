@@ -191,6 +191,15 @@ if (WIN32)
                 "${CMAKE_SOURCE_DIR}/tesseract"
                 "$<TARGET_FILE_DIR:ohao-lang>/tesseract"
         COMMENT "Bundling Tesseract OCR with executable")
+
+    # Copy Edge-TTS executable if it exists (optional TTS provider)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/edge-tts-bundle/edge-tts.exe")
+        add_custom_command(TARGET ohao-lang POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_SOURCE_DIR}/edge-tts-bundle/edge-tts.exe"
+                    "$<TARGET_FILE_DIR:ohao-lang>/edge-tts.exe"
+            COMMENT "Bundling Edge-TTS for high-quality text-to-speech")
+    endif()
 endif()
 
 # Deploy Qt runtime on macOS and create DMG
