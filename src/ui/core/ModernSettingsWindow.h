@@ -64,6 +64,7 @@ private:
     QWidget* createTranslationPage();
     QWidget* createAppearancePage();
     QWidget* createVoicePage();
+    QWidget* createChatPage();
 
     // UI Components
     QHBoxLayout *mainLayout;

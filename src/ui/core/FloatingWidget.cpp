@@ -1,6 +1,7 @@
 #include "FloatingWidget.h"
 #include "GlobalShortcutManager.h"
 #include "../screenshot/ScreenshotWidget.h"
+#include "../chat/ChatWindow.h"
 #include "ScreenCapture.h"
 #include "ModernSettingsWindow.h"
 #include "ThemeManager.h"
@@ -133,9 +134,9 @@ void FloatingWidget::setupUI()
         });
     }
 
-    // Set size from settings
-    int widgetWidth = settings.value("appearance/widgetWidth", 140).toInt();
-    int widgetHeight = static_cast<int>(widgetWidth * 0.43); // Maintain 140:60 aspect ratio
+    // Set size from settings (compact size for emoji-only buttons)
+    int widgetWidth = settings.value("appearance/widgetWidth", 200).toInt();
+    int widgetHeight = settings.value("appearance/widgetHeight", 60).toInt();
     setFixedSize(widgetWidth, widgetHeight);
     
     // Styling now provided globally by ThemeManager via #floatingWidget
@@ -153,23 +154,42 @@ void FloatingWidget::setupUI()
     layout->setContentsMargins(margin, margin, margin, margin);
     layout->setSpacing(spacing);
 
-    // Screenshot button - scale proportionally
+    // Calculate button size for 3 buttons with text
+    int btnWidth = (widgetWidth - margin * 2 - spacing * 2) / 3; // Equal width for all 3 buttons
+    int btnHeight = widgetHeight - margin * 2; // Full height minus margins
+
+    // Set common button properties for better text display
+    QFont buttonFont;
+    buttonFont.setPointSize(9);
+    buttonFont.setBold(false);
+
+    // Screenshot button
     screenshotBtn = new QPushButton(this);
-    int btnWidth = widgetWidth * 50 / 140; // 50px at 140px width
-    int btnHeight = widgetHeight * 40 / 60; // 40px at 60px height
     screenshotBtn->setFixedSize(btnWidth, btnHeight);
     screenshotBtn->setCursor(Qt::PointingHandCursor);
     screenshotBtn->setObjectName("floatingButton");
+    screenshotBtn->setFont(buttonFont);
     connect(screenshotBtn, &QPushButton::clicked, this, &FloatingWidget::takeScreenshot);
 
-    // Settings button - scale proportionally
+    // Chat button (NEW - between screenshot and settings)
+    chatBtn = new QPushButton(this);
+    chatBtn->setFixedSize(btnWidth, btnHeight);
+    chatBtn->setCursor(Qt::PointingHandCursor);
+    chatBtn->setObjectName("floatingButton");
+    chatBtn->setFont(buttonFont);
+    connect(chatBtn, &QPushButton::clicked, this, &FloatingWidget::openChatWindow);
+
+    // Settings button
     settingsBtn = new QPushButton(this);
     settingsBtn->setFixedSize(btnWidth, btnHeight);
     settingsBtn->setCursor(Qt::PointingHandCursor);
     settingsBtn->setObjectName("floatingButton");
+    settingsBtn->setFont(buttonFont);
     connect(settingsBtn, &QPushButton::clicked, this, &FloatingWidget::openSettings);
 
+    // Add buttons in order: Screenshot, Chat, Settings
     layout->addWidget(screenshotBtn);
+    layout->addWidget(chatBtn);
     layout->addWidget(settingsBtn);
 
     // Add drop shadow
@@ -206,9 +226,26 @@ void FloatingWidget::setupUI()
 
 void FloatingWidget::applyModernStyle()
 {
-    // Set button icons (styling handled by ThemeManager)
+    // Emoji-only buttons with prominent sizing
+    QString buttonStyle = R"(
+        QPushButton {
+            font-size: 24px;
+            padding: 4px;
+            text-align: center;
+        }
+    )";
+
+    screenshotBtn->setStyleSheet(buttonStyle);
     screenshotBtn->setText("📸");
+    screenshotBtn->setToolTip("Take screenshot for OCR translation");
+
+    chatBtn->setStyleSheet(buttonStyle);
+    chatBtn->setText("💬");
+    chatBtn->setToolTip("Quick translation chat");
+
+    settingsBtn->setStyleSheet(buttonStyle);
     settingsBtn->setText("⚙️");
+    settingsBtn->setToolTip("Configure OCR, translation, and appearance");
 }
 
 void FloatingWidget::paintEvent(QPaintEvent *event)
@@ -494,6 +531,26 @@ void FloatingWidget::openSettings()
     settingsWindow->raise();
     settingsWindow->activateWindow();
     qDebug() << "Settings window shown!";
+}
+
+void FloatingWidget::openChatWindow()
+{
+    qDebug() << "Opening chat window...";
+
+    if (!chatWindow) {
+        qDebug() << "Creating new ChatWindow...";
+        chatWindow = new ChatWindow(this);
+        connect(chatWindow, &ChatWindow::closed, this, [this]() {
+            qDebug() << "Chat window closed signal received";
+        });
+        qDebug() << "ChatWindow created successfully!";
+    }
+
+    qDebug() << "Showing chat window...";
+    chatWindow->show();
+    chatWindow->raise();
+    chatWindow->activateWindow();
+    qDebug() << "Chat window shown!";
 }
 
 void FloatingWidget::setSystemTray(SystemTray *tray)

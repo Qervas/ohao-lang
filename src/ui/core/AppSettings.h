@@ -70,6 +70,18 @@ public:
     TTSConfig getTTSConfig() const;
     void setTTSConfig(const TTSConfig& config);
 
+    // === Translation Chat Settings ===
+    struct ChatConfig {
+        bool enabled = true;
+        int opacity = 90;  // 0-100
+        bool autoClearHistory = false;
+        int fontSize = 12;
+        bool keepOnTop = true;
+    };
+
+    ChatConfig getChatConfig() const;
+    void setChatConfig(const ChatConfig& config);
+
     // === Global Settings ===
     struct GlobalConfig {
         bool enableGlobalShortcuts = true;
@@ -109,6 +121,7 @@ signals:
     void translationSettingsChanged();
     void uiSettingsChanged();
     void ttsSettingsChanged();
+    void chatSettingsChanged();
 
 private:
     explicit AppSettings(QObject* parent = nullptr);

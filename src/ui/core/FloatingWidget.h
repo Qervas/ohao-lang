@@ -13,6 +13,7 @@
 class ModernSettingsWindow;
 class GlobalShortcutManager;
 class SystemTray;
+class ChatWindow;
 
 class FloatingWidget : public QWidget
 {
@@ -24,6 +25,7 @@ public:
     // Public methods that can be called by SystemTray
     void takeScreenshot();
     void openSettings();
+    void openChatWindow();
     void toggleVisibility();
     void activateWindow();
     void setAlwaysOnTop(bool onTop);
@@ -48,6 +50,7 @@ private:
     void applyModernStyle();
 
     QPushButton *screenshotBtn;
+    QPushButton *chatBtn;
     QPushButton *settingsBtn;
     QPropertyAnimation *hoverAnimation;
     QPropertyAnimation *scaleAnimation;
@@ -72,6 +75,9 @@ private:
 
     // Settings window
     ModernSettingsWindow *settingsWindow = nullptr;
+
+    // Chat window
+    ChatWindow *chatWindow = nullptr;
 
     // Global shortcut manager
     GlobalShortcutManager *shortcutManager = nullptr;

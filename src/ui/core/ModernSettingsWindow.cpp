@@ -97,7 +97,8 @@ void ModernSettingsWindow::createSidebar()
         "OCR",
         "Translation",
         "Appearance",
-        "Voice"
+        "Voice",
+        "Chat"
     };
 
     for (const QString &item : items) {
@@ -125,6 +126,7 @@ void ModernSettingsWindow::createContentStack()
     contentStack->addWidget(createTranslationPage());
     contentStack->addWidget(createAppearancePage());
     contentStack->addWidget(createVoicePage());
+    contentStack->addWidget(createChatPage());
 
     mainLayout->addWidget(contentStack, 1);
 }
@@ -570,6 +572,136 @@ QWidget* ModernSettingsWindow::createVoicePage()
     // Populate voices for the current provider
     updateVoiceList();
 
+    return page;
+}
+
+QWidget* ModernSettingsWindow::createChatPage()
+{
+    QWidget *page = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setSpacing(16);
+    layout->setContentsMargins(24, 24, 24, 24);
+
+    // Title
+    QLabel *titleLabel = new QLabel("Translation Chat Settings");
+    titleLabel->setObjectName("pageTitle");
+    layout->addWidget(titleLabel);
+
+    // Chat Settings Group
+    QGroupBox *chatGroup = new QGroupBox("💬 Chat Window");
+    chatGroup->setObjectName("settingsGroup");
+    QVBoxLayout *chatLayout = new QVBoxLayout();
+    chatLayout->setSpacing(12);
+
+    // Enabled checkbox
+    QHBoxLayout *enabledRow = new QHBoxLayout();
+    QLabel *enabledLabel = new QLabel("Enable Chat Feature:");
+    enabledLabel->setMinimumWidth(140);
+    QCheckBox *enabledCheck = new QCheckBox();
+    enabledCheck->setChecked(AppSettings::instance().getChatConfig().enabled);
+    connect(enabledCheck, &QCheckBox::toggled, this, [](bool checked) {
+        auto config = AppSettings::instance().getChatConfig();
+        config.enabled = checked;
+        AppSettings::instance().setChatConfig(config);
+    });
+    enabledRow->addWidget(enabledLabel);
+    enabledRow->addWidget(enabledCheck);
+    enabledRow->addStretch();
+    chatLayout->addLayout(enabledRow);
+
+    // Opacity slider
+    QHBoxLayout *opacityRow = new QHBoxLayout();
+    QLabel *opacityLabel = new QLabel("Window Opacity:");
+    opacityLabel->setMinimumWidth(140);
+    QSlider *opacitySlider = new QSlider(Qt::Horizontal);
+    opacitySlider->setRange(50, 100);
+    opacitySlider->setValue(AppSettings::instance().getChatConfig().opacity);
+    QLabel *opacityValue = new QLabel(QString::number(opacitySlider->value()) + "%");
+    opacityValue->setMinimumWidth(50);
+    connect(opacitySlider, &QSlider::valueChanged, this, [opacityValue](int value) {
+        opacityValue->setText(QString::number(value) + "%");
+        auto config = AppSettings::instance().getChatConfig();
+        config.opacity = value;
+        AppSettings::instance().setChatConfig(config);
+    });
+    opacityRow->addWidget(opacityLabel);
+    opacityRow->addWidget(opacitySlider);
+    opacityRow->addWidget(opacityValue);
+    chatLayout->addLayout(opacityRow);
+
+    // Font size slider
+    QHBoxLayout *fontRow = new QHBoxLayout();
+    QLabel *fontLabel = new QLabel("Font Size:");
+    fontLabel->setMinimumWidth(140);
+    QSlider *fontSlider = new QSlider(Qt::Horizontal);
+    fontSlider->setRange(10, 18);
+    fontSlider->setValue(AppSettings::instance().getChatConfig().fontSize);
+    QLabel *fontValue = new QLabel(QString::number(fontSlider->value()) + "px");
+    fontValue->setMinimumWidth(50);
+    connect(fontSlider, &QSlider::valueChanged, this, [fontValue](int value) {
+        fontValue->setText(QString::number(value) + "px");
+        auto config = AppSettings::instance().getChatConfig();
+        config.fontSize = value;
+        AppSettings::instance().setChatConfig(config);
+    });
+    fontRow->addWidget(fontLabel);
+    fontRow->addWidget(fontSlider);
+    fontRow->addWidget(fontValue);
+    chatLayout->addLayout(fontRow);
+
+    // Keep on top checkbox
+    QHBoxLayout *topRow = new QHBoxLayout();
+    QLabel *topLabel = new QLabel("Keep Window On Top:");
+    topLabel->setMinimumWidth(140);
+    QCheckBox *topCheck = new QCheckBox();
+    topCheck->setChecked(AppSettings::instance().getChatConfig().keepOnTop);
+    connect(topCheck, &QCheckBox::toggled, this, [](bool checked) {
+        auto config = AppSettings::instance().getChatConfig();
+        config.keepOnTop = checked;
+        AppSettings::instance().setChatConfig(config);
+    });
+    topRow->addWidget(topLabel);
+    topRow->addWidget(topCheck);
+    topRow->addStretch();
+    chatLayout->addLayout(topRow);
+
+    // Auto clear history checkbox
+    QHBoxLayout *clearRow = new QHBoxLayout();
+    QLabel *clearLabel = new QLabel("Auto Clear History:");
+    clearLabel->setMinimumWidth(140);
+    QCheckBox *clearCheck = new QCheckBox();
+    clearCheck->setChecked(AppSettings::instance().getChatConfig().autoClearHistory);
+    connect(clearCheck, &QCheckBox::toggled, this, [](bool checked) {
+        auto config = AppSettings::instance().getChatConfig();
+        config.autoClearHistory = checked;
+        AppSettings::instance().setChatConfig(config);
+    });
+    clearRow->addWidget(clearLabel);
+    clearRow->addWidget(clearCheck);
+    clearRow->addStretch();
+    chatLayout->addLayout(clearRow);
+
+    chatGroup->setLayout(chatLayout);
+    layout->addWidget(chatGroup);
+
+    // Info section
+    QGroupBox *infoGroup = new QGroupBox("ℹ️  About Translation Chat");
+    infoGroup->setObjectName("settingsGroup");
+    QVBoxLayout *infoLayout = new QVBoxLayout();
+    QLabel *infoText = new QLabel(
+        "Translation Chat provides a quick way to translate between your OCR language and target language.\n\n"
+        "• Type in either language and get instant translation\n"
+        "• Bidirectional: automatically detects which direction to translate\n"
+        "• Keeps conversation history for reference\n"
+        "• Draggable window - click and drag to reposition\n\n"
+        "Languages used: OCR Language ↔ Translation Target"
+    );
+    infoText->setWordWrap(true);
+    infoLayout->addWidget(infoText);
+    infoGroup->setLayout(infoLayout);
+    layout->addWidget(infoGroup);
+
+    layout->addStretch();
     return page;
 }
 

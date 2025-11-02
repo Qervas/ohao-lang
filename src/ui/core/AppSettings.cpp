@@ -194,6 +194,31 @@ void AppSettings::setTTSConfig(const TTSConfig& config)
     emit settingsChanged();
 }
 
+// === Translation Chat Settings ===
+
+AppSettings::ChatConfig AppSettings::getChatConfig() const
+{
+    ChatConfig config;
+    config.enabled = m_settings->value("chat/enabled", true).toBool();
+    config.opacity = m_settings->value("chat/opacity", 90).toInt();
+    config.autoClearHistory = m_settings->value("chat/autoClearHistory", false).toBool();
+    config.fontSize = m_settings->value("chat/fontSize", 12).toInt();
+    config.keepOnTop = m_settings->value("chat/keepOnTop", true).toBool();
+    return config;
+}
+
+void AppSettings::setChatConfig(const ChatConfig& config)
+{
+    m_settings->setValue("chat/enabled", config.enabled);
+    m_settings->setValue("chat/opacity", config.opacity);
+    m_settings->setValue("chat/autoClearHistory", config.autoClearHistory);
+    m_settings->setValue("chat/fontSize", config.fontSize);
+    m_settings->setValue("chat/keepOnTop", config.keepOnTop);
+
+    emit chatSettingsChanged();
+    emit settingsChanged();
+}
+
 // === Global Settings ===
 
 AppSettings::GlobalConfig AppSettings::getGlobalConfig() const
