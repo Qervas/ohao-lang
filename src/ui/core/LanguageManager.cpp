@@ -287,6 +287,11 @@ LanguageManager::LanguageInfo LanguageManager::getInfo(const QString& languageCo
 
 LanguageManager::LanguageInfo LanguageManager::getInfoByDisplayName(const QString& displayName) const
 {
+    // Handle empty or special cases
+    if (displayName.isEmpty() || displayName == "Auto-Detect") {
+        return m_languages.first(); // Return English for auto-detect
+    }
+
     // Try exact match with display name (native name like "Svenska")
     for (const auto& lang : m_languages) {
         if (lang.displayName == displayName) {
@@ -305,6 +310,15 @@ LanguageManager::LanguageInfo LanguageManager::getInfoByDisplayName(const QStrin
     for (const auto& lang : m_languages) {
         if (lang.displayName.compare(displayName, Qt::CaseInsensitive) == 0 ||
             lang.englishName.compare(displayName, Qt::CaseInsensitive) == 0) {
+            return lang;
+        }
+    }
+
+    // Try trimmed match (in case of whitespace issues)
+    QString trimmedName = displayName.trimmed();
+    for (const auto& lang : m_languages) {
+        if (lang.displayName.trimmed() == trimmedName ||
+            lang.englishName.trimmed() == trimmedName) {
             return lang;
         }
     }
