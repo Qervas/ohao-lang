@@ -65,6 +65,7 @@ private:
     QWidget* createAppearancePage();
     QWidget* createVoicePage();
     QWidget* createChatPage();
+    QWidget* createAIPage();
 
     // UI Components
     QHBoxLayout *mainLayout;
@@ -78,6 +79,7 @@ private:
     QLabel *dimmingValueLabel = nullptr;
     QKeySequenceEdit *screenshotShortcutEdit = nullptr;
     QKeySequenceEdit *toggleShortcutEdit = nullptr;
+    QKeySequenceEdit *chatWindowShortcutEdit = nullptr;
 
     // OCR Page widgets
     QComboBox *ocrEngineCombo = nullptr;

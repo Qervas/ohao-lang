@@ -82,6 +82,26 @@ public:
     ChatConfig getChatConfig() const;
     void setChatConfig(const ChatConfig& config);
 
+    // === AI Assistant Settings (Beta) ===
+    struct AIConfig {
+        bool enabled = false;
+        QString provider = "GitHub Copilot";
+        QString apiUrl = "http://localhost:4141";
+        QString apiKey = "";
+        QString model = "gpt-4o";  // Default to free model
+        float temperature = 0.7f;
+        int maxTokens = 2000;
+        bool streamResponse = false;
+        QString systemPrompt = "You are a helpful translation and language learning assistant.";
+        bool trackUsage = true;
+        int totalTokensUsed = 0;
+        bool showTokenCount = true;
+        bool autoFallbackToTranslation = true;
+    };
+
+    AIConfig getAIConfig() const;
+    void setAIConfig(const AIConfig& config);
+
     // === Global Settings ===
     struct GlobalConfig {
         bool enableGlobalShortcuts = true;
@@ -122,6 +142,7 @@ signals:
     void uiSettingsChanged();
     void ttsSettingsChanged();
     void chatSettingsChanged();
+    void aiSettingsChanged();
 
 private:
     explicit AppSettings(QObject* parent = nullptr);
@@ -138,6 +159,8 @@ private:
     mutable TranslationConfig m_cachedTranslationConfig;
     mutable UIConfig m_cachedUIConfig;
     mutable TTSConfig m_cachedTTSConfig;
+    mutable ChatConfig m_cachedChatConfig;
+    mutable AIConfig m_cachedAIConfig;
     mutable GlobalConfig m_cachedGlobalConfig;
 
     // Cache validity flags
@@ -145,6 +168,8 @@ private:
     mutable bool m_translationCacheValid = false;
     mutable bool m_uiCacheValid = false;
     mutable bool m_ttsCacheValid = false;
+    mutable bool m_chatCacheValid = false;
+    mutable bool m_aiCacheValid = false;
     mutable bool m_globalCacheValid = false;
 
     void invalidateCache();

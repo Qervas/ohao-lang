@@ -15,13 +15,18 @@ SystemTray::SystemTray(FloatingWidget *widget, QObject *parent)
     connect(screenshotAction, &QAction::triggered, this, &SystemTray::takeScreenshot);
     trayMenu->addAction(screenshotAction);
 
-    trayMenu->addSeparator();
-
     // Toggle visibility action
     toggleAction = new QAction("👁️ Toggle Visibility", this);
     connect(toggleAction, &QAction::triggered, this, &SystemTray::toggleVisibility);
     trayMenu->addAction(toggleAction);
-    
+
+    // Chat window action
+    chatWindowAction = new QAction("💬 Toggle Chat", this);
+    connect(chatWindowAction, &QAction::triggered, this, &SystemTray::openChatWindow);
+    trayMenu->addAction(chatWindowAction);
+
+    trayMenu->addSeparator();
+
     // Load and display current shortcuts
     updateShortcutLabels();
 
@@ -87,6 +92,13 @@ void SystemTray::toggleVisibility()
     }
 }
 
+void SystemTray::openChatWindow()
+{
+    if (floatingWidget) {
+        floatingWidget->openChatWindow();
+    }
+}
+
 void SystemTray::openSettings()
 {
     if (floatingWidget) {
@@ -102,27 +114,32 @@ void SystemTray::quitApplication()
 void SystemTray::updateShortcutLabels()
 {
     QSettings settings;
-    
+
     // Load shortcuts from settings
     QString screenshotShortcut = settings.value("shortcuts/screenshot", "Meta+Shift+X").toString();
     QString toggleShortcut = settings.value("shortcuts/toggle", "Meta+Shift+Z").toString();
-    
+    QString chatWindowShortcut = settings.value("shortcuts/chatWindow", "Meta+Shift+C").toString();
+
     // Convert Meta to Cmd/Win/Super based on platform
     QString screenshotDisplay = screenshotShortcut;
     QString toggleDisplay = toggleShortcut;
-    
+    QString chatWindowDisplay = chatWindowShortcut;
+
 #ifdef Q_OS_MACOS
     screenshotDisplay.replace("Meta", "⌘");
     toggleDisplay.replace("Meta", "⌘");
+    chatWindowDisplay.replace("Meta", "⌘");
     screenshotDisplay.replace("Shift", "⇧");
     toggleDisplay.replace("Shift", "⇧");
+    chatWindowDisplay.replace("Shift", "⇧");
 #elif defined(Q_OS_WIN)
     screenshotDisplay.replace("Meta", "Win");
 #else
     screenshotDisplay.replace("Meta", "Super");
 #endif
-    
+
     // Update action text with shortcuts
     screenshotAction->setText(QString("📷 Take Screenshot (%1)").arg(screenshotDisplay));
     toggleAction->setText(QString("👁️ Toggle Visibility (%1)").arg(toggleDisplay));
+    chatWindowAction->setText(QString("💬 Toggle Chat (%1)").arg(chatWindowDisplay));
 }

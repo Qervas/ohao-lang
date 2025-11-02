@@ -219,6 +219,53 @@ void AppSettings::setChatConfig(const ChatConfig& config)
     emit settingsChanged();
 }
 
+// === AI Assistant Settings (Beta) ===
+
+AppSettings::AIConfig AppSettings::getAIConfig() const
+{
+    if (!m_aiCacheValid) {
+        m_cachedAIConfig.enabled = m_settings->value("ai/enabled", false).toBool();
+        m_cachedAIConfig.provider = m_settings->value("ai/provider", "GitHub Copilot").toString();
+        m_cachedAIConfig.apiUrl = m_settings->value("ai/apiUrl", "http://localhost:4141").toString();
+        m_cachedAIConfig.apiKey = m_settings->value("ai/apiKey", "").toString();
+        m_cachedAIConfig.model = m_settings->value("ai/model", "gpt-4o").toString();
+        m_cachedAIConfig.temperature = m_settings->value("ai/temperature", 0.7f).toFloat();
+        m_cachedAIConfig.maxTokens = m_settings->value("ai/maxTokens", 2000).toInt();
+        m_cachedAIConfig.streamResponse = m_settings->value("ai/streamResponse", false).toBool();
+        m_cachedAIConfig.systemPrompt = m_settings->value("ai/systemPrompt",
+            "You are a helpful translation and language learning assistant.").toString();
+        m_cachedAIConfig.trackUsage = m_settings->value("ai/trackUsage", true).toBool();
+        m_cachedAIConfig.totalTokensUsed = m_settings->value("ai/totalTokensUsed", 0).toInt();
+        m_cachedAIConfig.showTokenCount = m_settings->value("ai/showTokenCount", true).toBool();
+        m_cachedAIConfig.autoFallbackToTranslation = m_settings->value("ai/autoFallbackToTranslation", true).toBool();
+        m_aiCacheValid = true;
+    }
+    return m_cachedAIConfig;
+}
+
+void AppSettings::setAIConfig(const AIConfig& config)
+{
+    m_settings->setValue("ai/enabled", config.enabled);
+    m_settings->setValue("ai/provider", config.provider);
+    m_settings->setValue("ai/apiUrl", config.apiUrl);
+    m_settings->setValue("ai/apiKey", config.apiKey);
+    m_settings->setValue("ai/model", config.model);
+    m_settings->setValue("ai/temperature", config.temperature);
+    m_settings->setValue("ai/maxTokens", config.maxTokens);
+    m_settings->setValue("ai/streamResponse", config.streamResponse);
+    m_settings->setValue("ai/systemPrompt", config.systemPrompt);
+    m_settings->setValue("ai/trackUsage", config.trackUsage);
+    m_settings->setValue("ai/totalTokensUsed", config.totalTokensUsed);
+    m_settings->setValue("ai/showTokenCount", config.showTokenCount);
+    m_settings->setValue("ai/autoFallbackToTranslation", config.autoFallbackToTranslation);
+
+    m_cachedAIConfig = config;
+    m_aiCacheValid = true;
+
+    emit aiSettingsChanged();
+    emit settingsChanged();
+}
+
 // === Global Settings ===
 
 AppSettings::GlobalConfig AppSettings::getGlobalConfig() const
@@ -326,6 +373,8 @@ void AppSettings::invalidateCache()
     m_translationCacheValid = false;
     m_uiCacheValid = false;
     m_ttsCacheValid = false;
+    m_chatCacheValid = false;
+    m_aiCacheValid = false;
     m_globalCacheValid = false;
 }
 

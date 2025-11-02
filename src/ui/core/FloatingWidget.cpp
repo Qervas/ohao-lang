@@ -63,6 +63,8 @@ FloatingWidget::FloatingWidget(QWidget *parent)
             this, &FloatingWidget::takeScreenshot);
     connect(shortcutManager, &GlobalShortcutManager::toggleVisibilityRequested,
             this, &FloatingWidget::toggleVisibility);
+    connect(shortcutManager, &GlobalShortcutManager::chatWindowRequested,
+            this, &FloatingWidget::openChatWindow);
     qDebug() << "Global shortcut manager initialized";
 
     // Setup local server for single instance support
@@ -535,7 +537,7 @@ void FloatingWidget::openSettings()
 
 void FloatingWidget::openChatWindow()
 {
-    qDebug() << "Opening chat window...";
+    qDebug() << "Toggling chat window...";
 
     if (!chatWindow) {
         qDebug() << "Creating new ChatWindow...";
@@ -546,11 +548,16 @@ void FloatingWidget::openChatWindow()
         qDebug() << "ChatWindow created successfully!";
     }
 
-    qDebug() << "Showing chat window...";
-    chatWindow->show();
-    chatWindow->raise();
-    chatWindow->activateWindow();
-    qDebug() << "Chat window shown!";
+    // Toggle visibility
+    if (chatWindow->isVisible()) {
+        qDebug() << "Hiding chat window via global shortcut";
+        chatWindow->hide();
+    } else {
+        qDebug() << "Showing chat window via global shortcut";
+        chatWindow->show();
+        chatWindow->raise();
+        chatWindow->activateWindow();
+    }
 }
 
 void FloatingWidget::setSystemTray(SystemTray *tray)

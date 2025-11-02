@@ -3,6 +3,7 @@
 #include "../core/ThemeColors.h"
 #include "../core/AppSettings.h"
 #include "../core/LanguageManager.h"
+#include "../../ai/AIEngine.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -12,13 +13,17 @@
 #include <QDebug>
 #include <QScrollBar>
 #include <QMouseEvent>
+#include <QTimer>
+#include <QStandardItemModel>
 
 ChatWindow::ChatWindow(QWidget *parent)
     : QWidget(parent)
     , m_translationEngine(nullptr)
+    , m_aiEngine(nullptr)
     , m_cornerRadius(12)
     , m_opacity(90)
     , m_fontSize(12)
+    , m_chatMode(TranslationMode)
     , m_translating(false)
     , m_dragging(false)
 {
@@ -31,6 +36,7 @@ ChatWindow::ChatWindow(QWidget *parent)
 
     setupUI();
     setupTranslation();
+    setupAI();
     updateThemeColors();
     positionWindow();
 
@@ -38,7 +44,7 @@ ChatWindow::ChatWindow(QWidget *parent)
     connect(&ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &ChatWindow::updateThemeColors);
 
-    qDebug() << "ChatWindow created";
+    qDebug() << "ChatWindow created with dual-mode support";
 }
 
 ChatWindow::~ChatWindow()
@@ -52,10 +58,19 @@ void ChatWindow::setupUI()
     m_mainLayout->setContentsMargins(15, 15, 15, 15);
     m_mainLayout->setSpacing(10);
 
-    // Title bar with close button
+    // Title bar with mode selector and close button
     QHBoxLayout *titleLayout = new QHBoxLayout();
-    QLabel *titleLabel = new QLabel("💬 Translation Chat", this);
+    QLabel *titleLabel = new QLabel("💬 Smart Chat", this);
     titleLabel->setStyleSheet("font-size: 14px; font-weight: bold; color: palette(window-text);");
+
+    // Mode selector
+    m_modeSelector = new QComboBox(this);
+    m_modeSelector->addItem("🔄 Translation", TranslationMode);
+    m_modeSelector->addItem("🤖 AI Assistant", AIAssistantMode);
+    m_modeSelector->setToolTip("Switch between translation and AI modes");
+    m_modeSelector->setMinimumWidth(140);
+    connect(m_modeSelector, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &ChatWindow::onModeChanged);
 
     m_closeButton = new QPushButton("×", this);
     m_closeButton->setFixedSize(24, 24);
@@ -75,6 +90,8 @@ void ChatWindow::setupUI()
     connect(m_closeButton, &QPushButton::clicked, this, &ChatWindow::hide);
 
     titleLayout->addWidget(titleLabel);
+    titleLayout->addSpacing(10);
+    titleLayout->addWidget(m_modeSelector);
     titleLayout->addStretch();
     titleLayout->addWidget(m_closeButton);
     m_mainLayout->addLayout(titleLayout);
@@ -164,6 +181,79 @@ void ChatWindow::setupTranslation()
                 m_sourceLanguage = ocrConfig.language.isEmpty() ? "Auto-Detect" : ocrConfig.language;
                 qDebug() << "ChatWindow: OCR language changed to:" << m_sourceLanguage;
             });
+}
+
+void ChatWindow::setupAI()
+{
+    auto aiConfig = AppSettings::instance().getAIConfig();
+
+    // Only set up AI if it's enabled
+    if (!aiConfig.enabled) {
+        // Disable AI mode using model
+        QStandardItemModel* model = qobject_cast<QStandardItemModel*>(m_modeSelector->model());
+        if (model) {
+            QStandardItem* item = model->item(1);
+            if (item) {
+                item->setEnabled(false);
+                item->setToolTip("AI disabled in settings");
+            }
+        }
+        qDebug() << "ChatWindow: AI is disabled in settings";
+        return;
+    }
+
+    // Only set up when GitHub Copilot provider is selected
+    if (aiConfig.provider == "GitHub Copilot") {
+        m_aiEngine = new AIEngine(this);
+        m_aiEngine->setProvider(aiConfig.provider);
+        m_aiEngine->setApiUrl(aiConfig.apiUrl);
+        m_aiEngine->setModel(aiConfig.model);
+        m_aiEngine->setTemperature(aiConfig.temperature);
+        m_aiEngine->setMaxTokens(aiConfig.maxTokens);
+        m_aiEngine->setSystemPrompt(aiConfig.systemPrompt);
+
+        qDebug() << "ChatWindow: AI Engine initialized with" << aiConfig.provider;
+        qDebug() << "  API URL:" << aiConfig.apiUrl;
+        qDebug() << "  Model:" << aiConfig.model;
+
+        // Connect signals
+        connect(m_aiEngine, &AIEngine::responseReceived,
+                this, &ChatWindow::onAIResponseReceived);
+        connect(m_aiEngine, &AIEngine::errorOccurred,
+                this, &ChatWindow::onAIError);
+        connect(m_aiEngine, &AIEngine::connectionStatusChanged,
+                this, &ChatWindow::onAIConnectionStatusChanged);
+
+        // Async connection check (non-blocking)
+        QTimer::singleShot(100, [this]() {
+            if (m_aiEngine) {
+                m_aiEngine->checkConnection();
+            }
+        });
+
+        // Listen to AI settings changes
+        connect(&AppSettings::instance(), &AppSettings::aiSettingsChanged,
+                this, [this]() {
+                    auto config = AppSettings::instance().getAIConfig();
+                    if (m_aiEngine) {
+                        m_aiEngine->setApiUrl(config.apiUrl);
+                        m_aiEngine->setModel(config.model);
+                        m_aiEngine->setTemperature(config.temperature);
+                        m_aiEngine->setMaxTokens(config.maxTokens);
+                        m_aiEngine->setSystemPrompt(config.systemPrompt);
+                        m_aiEngine->checkConnection();
+                        qDebug() << "ChatWindow: AI settings updated";
+                    }
+                    // Enable/disable AI mode based on settings
+                    QStandardItemModel* model = qobject_cast<QStandardItemModel*>(m_modeSelector->model());
+                    if (model) {
+                        QStandardItem* item = model->item(1);
+                        if (item) {
+                            item->setEnabled(config.enabled);
+                        }
+                    }
+                });
+    }
 }
 
 void ChatWindow::positionWindow()
@@ -322,11 +412,35 @@ void ChatWindow::sendMessage()
     }
 
     if (m_translating) {
-        qDebug() << "ChatWindow: Translation already in progress, ignoring";
+        qDebug() << "ChatWindow: Request already in progress, ignoring";
         return;
     }
 
     m_currentInput = text;
+
+    // Route based on current mode
+    if (m_chatMode == AIAssistantMode) {
+        // Check if AI is available
+        if (m_aiEngine && m_aiEngine->isAvailable()) {
+            sendAIMessage(text);
+        } else {
+            // Auto-fallback to translation
+            auto aiConfig = AppSettings::instance().getAIConfig();
+            if (aiConfig.autoFallbackToTranslation) {
+                appendSystemMessage("⚠️ AI unavailable, using translation mode");
+                switchToTranslationMode();
+                sendTranslationMessage(text);
+            } else {
+                appendSystemMessage("❌ AI service unavailable. Please check settings or start copilot-api.");
+            }
+        }
+    } else {
+        sendTranslationMessage(text);
+    }
+}
+
+void ChatWindow::sendTranslationMessage(const QString &text)
+{
     m_translating = true;
     m_sendButton->setEnabled(false);
     m_inputField->setEnabled(false);
@@ -351,6 +465,25 @@ void ChatWindow::sendMessage()
     m_translationEngine->setSourceLanguage("Auto-Detect");
     m_translationEngine->setTargetLanguage(toLang);
     m_translationEngine->translate(text);
+}
+
+void ChatWindow::sendAIMessage(const QString &text)
+{
+    m_translating = true;
+    m_sendButton->setEnabled(false);
+    m_inputField->setEnabled(false);
+
+    qDebug() << "ChatWindow: Sending AI message:" << text;
+
+    // Send to AI with conversation history
+    m_aiEngine->sendMessage(text, m_conversationHistory);
+}
+
+void ChatWindow::switchToTranslationMode()
+{
+    m_chatMode = TranslationMode;
+    m_modeSelector->setCurrentIndex(0);
+    qDebug() << "ChatWindow: Switched to Translation mode";
 }
 
 bool ChatWindow::isTargetLanguage(const QString &text)
@@ -475,4 +608,138 @@ void ChatWindow::mouseReleaseEvent(QMouseEvent *event)
         m_dragging = false;
         event->accept();
     }
+}
+
+// AI Response Handlers
+
+void ChatWindow::onAIResponseReceived(const QString &response, int tokensUsed)
+{
+    m_translating = false;
+    m_sendButton->setEnabled(true);
+    m_inputField->setEnabled(true);
+
+    qDebug() << "ChatWindow: AI response received, tokens:" << tokensUsed;
+
+    // Update token usage in settings
+    auto aiConfig = AppSettings::instance().getAIConfig();
+    if (aiConfig.trackUsage) {
+        aiConfig.totalTokensUsed += tokensUsed;
+        AppSettings::instance().setAIConfig(aiConfig);
+    }
+
+    // Add to conversation history
+    m_conversationHistory.append(QString("User: %1").arg(m_currentInput));
+    m_conversationHistory.append(QString("Assistant: %1").arg(response));
+
+    // Limit history to last 10 exchanges (20 messages)
+    if (m_conversationHistory.size() > 20) {
+        m_conversationHistory = m_conversationHistory.mid(m_conversationHistory.size() - 20);
+    }
+
+    appendAIResponse(response, tokensUsed);
+    m_inputField->clear();
+    m_inputField->setFocus();
+}
+
+void ChatWindow::onAIError(const QString &error)
+{
+    m_translating = false;
+    m_sendButton->setEnabled(true);
+    m_inputField->setEnabled(true);
+
+    qDebug() << "ChatWindow: AI error:" << error;
+
+    // Auto-fallback to translation if enabled
+    auto aiConfig = AppSettings::instance().getAIConfig();
+    if (aiConfig.autoFallbackToTranslation) {
+        appendSystemMessage("⚠️ AI error: " + error);
+        appendSystemMessage("Switching to translation mode...");
+        switchToTranslationMode();
+        sendTranslationMessage(m_currentInput);
+    } else {
+        appendSystemMessage("❌ AI error: " + error);
+        m_inputField->setFocus();
+    }
+}
+
+void ChatWindow::onAIConnectionStatusChanged(bool connected)
+{
+    qDebug() << "ChatWindow: AI connection status changed:" << (connected ? "connected" : "disconnected");
+
+    // Enable/disable AI mode in selector based on connection
+    QStandardItemModel* model = qobject_cast<QStandardItemModel*>(m_modeSelector->model());
+    if (model) {
+        QStandardItem* item = model->item(1);
+        if (item) {
+            item->setEnabled(connected);
+        }
+    }
+
+    if (!connected && m_chatMode == AIAssistantMode) {
+        appendSystemMessage("⚠️ AI connection lost, switching to translation mode");
+        switchToTranslationMode();
+    }
+}
+
+void ChatWindow::onModeChanged(int index)
+{
+    m_chatMode = static_cast<ChatMode>(m_modeSelector->itemData(index).toInt());
+    qDebug() << "ChatWindow: Mode changed to" << (m_chatMode == TranslationMode ? "Translation" : "AI Assistant");
+
+    // Update placeholder text based on mode
+    if (m_chatMode == AIAssistantMode) {
+        m_inputField->setPlaceholderText("Ask AI anything...");
+        m_historyView->setPlaceholderText("Start chatting with AI...");
+    } else {
+        m_inputField->setPlaceholderText("Type message...");
+        m_historyView->setPlaceholderText("Start typing to translate...");
+    }
+}
+
+// Helper Methods
+
+void ChatWindow::appendAIResponse(const QString &response, int tokensUsed)
+{
+    QString timestamp = QTime::currentTime().toString("hh:mm");
+
+    QString html = QString(
+        "<div style='margin-bottom: 12px;'>"
+        "<div style='color: %1; font-weight: 500; margin-bottom: 4px;'>"
+        "<span style='color: gray; font-size: 10px;'>%2</span> 🤖 AI:</div>"
+        "<div style='margin-left: 8px; background: rgba(100, 200, 100, 20); "
+        "padding: 6px; border-radius: 4px; color: %3;'>%4</div>"
+    ).arg(m_textColor.name())
+     .arg(timestamp)
+     .arg(m_textColor.name())
+     .arg(response.toHtmlEscaped());
+
+    // Add token count if enabled
+    auto aiConfig = AppSettings::instance().getAIConfig();
+    if (aiConfig.showTokenCount) {
+        html += QString("<div style='color: gray; font-size: 10px; "
+                       "margin-top: 2px; margin-left: 8px;'>💎 %1 tokens</div>").arg(tokensUsed);
+    }
+
+    html += "</div>";
+
+    m_historyView->append(html);
+
+    // Scroll to bottom
+    QScrollBar *scrollBar = m_historyView->verticalScrollBar();
+    scrollBar->setValue(scrollBar->maximum());
+}
+
+void ChatWindow::appendSystemMessage(const QString &message)
+{
+    QString html = QString(
+        "<div style='margin-bottom: 8px;'>"
+        "<div style='text-align: center; color: gray; font-size: 11px; font-style: italic;'>%1</div>"
+        "</div>"
+    ).arg(message.toHtmlEscaped());
+
+    m_historyView->append(html);
+
+    // Scroll to bottom
+    QScrollBar *scrollBar = m_historyView->verticalScrollBar();
+    scrollBar->setValue(scrollBar->maximum());
 }

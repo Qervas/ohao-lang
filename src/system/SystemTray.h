@@ -19,6 +19,7 @@ private slots:
     void onTrayActivated(QSystemTrayIcon::ActivationReason reason);
     void takeScreenshot();
     void toggleVisibility();
+    void openChatWindow();
     void openSettings();
     void quitApplication();
 
@@ -27,6 +28,7 @@ private:
     QMenu *trayMenu;
     QAction *screenshotAction;
     QAction *toggleAction;
+    QAction *chatWindowAction;
     QAction *settingsAction;
     QAction *quitAction;
 };

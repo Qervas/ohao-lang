@@ -67,14 +67,28 @@ void GlobalShortcutManager::registerShortcuts()
         toggleRegistered = false;
         qWarning() << "Failed to register global shortcut Ctrl+Alt+H. Error:" << GetLastError();
     }
+
+    // Register Ctrl+Alt+C for chat window
+    const UINT chatWindowModifiers = MOD_CONTROL | MOD_ALT | MOD_NOREPEAT;
+    const UINT chatWindowKey = 0x43; // 'C'
+
+    if (RegisterHotKey(nullptr, chatWindowHotkeyId, chatWindowModifiers, chatWindowKey)) {
+        chatWindowRegistered = true;
+        qInfo() << "Registered global chat window shortcut Ctrl+Alt+C";
+    } else {
+        chatWindowRegistered = false;
+        qWarning() << "Failed to register global shortcut Ctrl+Alt+C. Error:" << GetLastError();
+    }
 #elif defined(Q_OS_MACOS)
     // Load custom shortcuts from settings
     QSettings settings;
     QString screenshotShortcut = settings.value("shortcuts/screenshot", "Meta+Shift+X").toString();
     QString toggleShortcut = settings.value("shortcuts/toggle", "Meta+Shift+Z").toString();
+    QString chatWindowShortcut = settings.value("shortcuts/chatWindow", "Meta+Shift+C").toString();
     
     QKeySequence screenshotSeq(screenshotShortcut);
     QKeySequence toggleSeq(toggleShortcut);
+    QKeySequence chatWindowSeq(chatWindowShortcut);
     
     // Install event handler for hotkeys
     EventTypeSpec eventType;
@@ -225,6 +239,76 @@ void GlobalShortcutManager::registerShortcuts()
             }
         }
     }
+
+    // Parse chat window shortcut (same logic as above)
+    if (chatWindowSeq.count() > 0) {
+        int keyCode = 0;
+        int modifiers = 0;
+
+        int key = chatWindowSeq[0].toCombined();
+
+        if (key & Qt::MetaModifier) modifiers |= cmdKey;
+        if (key & Qt::ShiftModifier) modifiers |= shiftKey;
+        if (key & Qt::ControlModifier) modifiers |= controlKey;
+        if (key & Qt::AltModifier) modifiers |= optionKey;
+
+        int baseKey = key & ~(Qt::MetaModifier | Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier);
+
+        switch (baseKey) {
+            case Qt::Key_A: keyCode = kVK_ANSI_A; break;
+            case Qt::Key_B: keyCode = kVK_ANSI_B; break;
+            case Qt::Key_C: keyCode = kVK_ANSI_C; break;
+            case Qt::Key_D: keyCode = kVK_ANSI_D; break;
+            case Qt::Key_E: keyCode = kVK_ANSI_E; break;
+            case Qt::Key_F: keyCode = kVK_ANSI_F; break;
+            case Qt::Key_G: keyCode = kVK_ANSI_G; break;
+            case Qt::Key_H: keyCode = kVK_ANSI_H; break;
+            case Qt::Key_I: keyCode = kVK_ANSI_I; break;
+            case Qt::Key_J: keyCode = kVK_ANSI_J; break;
+            case Qt::Key_K: keyCode = kVK_ANSI_K; break;
+            case Qt::Key_L: keyCode = kVK_ANSI_L; break;
+            case Qt::Key_M: keyCode = kVK_ANSI_M; break;
+            case Qt::Key_N: keyCode = kVK_ANSI_N; break;
+            case Qt::Key_O: keyCode = kVK_ANSI_O; break;
+            case Qt::Key_P: keyCode = kVK_ANSI_P; break;
+            case Qt::Key_Q: keyCode = kVK_ANSI_Q; break;
+            case Qt::Key_R: keyCode = kVK_ANSI_R; break;
+            case Qt::Key_S: keyCode = kVK_ANSI_S; break;
+            case Qt::Key_T: keyCode = kVK_ANSI_T; break;
+            case Qt::Key_U: keyCode = kVK_ANSI_U; break;
+            case Qt::Key_V: keyCode = kVK_ANSI_V; break;
+            case Qt::Key_W: keyCode = kVK_ANSI_W; break;
+            case Qt::Key_X: keyCode = kVK_ANSI_X; break;
+            case Qt::Key_Y: keyCode = kVK_ANSI_Y; break;
+            case Qt::Key_Z: keyCode = kVK_ANSI_Z; break;
+            default:
+                qWarning() << "Unsupported key for chat window shortcut:" << baseKey;
+                keyCode = -1;
+        }
+
+        if (keyCode >= 0) {
+            EventHotKeyID chatWindowHotKeyID;
+            chatWindowHotKeyID.signature = 'htk3';
+            chatWindowHotKeyID.id = 3;
+
+            OSStatus status = RegisterEventHotKey(
+                keyCode,
+                modifiers,
+                chatWindowHotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &chatWindowHotKeyRef
+            );
+
+            if (status == noErr) {
+                chatWindowRegistered = true;
+                qInfo() << "Registered global chat window shortcut:" << chatWindowShortcut;
+            } else {
+                chatWindowRegistered = false;
+                qWarning() << "Failed to register global shortcut" << chatWindowShortcut << "Error:" << status;
+            }
+        }
+    }
 #elif defined(Q_OS_LINUX)
     // Linux X11/XWayland support using XGrabKey
     Display *dpy = XOpenDisplay(nullptr);
@@ -243,6 +327,10 @@ void GlobalShortcutManager::registerShortcuts()
         qWarning() << "   Name: Ohao Toggle";
         qWarning() << "   Command:" << QCoreApplication::applicationFilePath() << "--toggle";
         qWarning() << "   Shortcut: Ctrl+Alt+H";
+        qWarning() << "";
+        qWarning() << "   Name: Ohao Chat Window";
+        qWarning() << "   Command:" << QCoreApplication::applicationFilePath() << "--chat";
+        qWarning() << "   Shortcut: Ctrl+Alt+C";
         qWarning() << "============================================================";
         return;
     }
@@ -286,6 +374,23 @@ void GlobalShortcutManager::registerShortcuts()
         qWarning() << "Failed to get keycode for 'h' key";
     }
 
+    // Register Ctrl+Alt+C for chat window
+    KeySym chatWindowKeySym = XStringToKeysym("c");
+    chatWindowKeycode = XKeysymToKeycode(dpy, chatWindowKeySym);
+    chatWindowModifiers = ControlMask | Mod1Mask;  // Mod1Mask is Alt
+
+    if (chatWindowKeycode != 0) {
+        XGrabKey(dpy, chatWindowKeycode, chatWindowModifiers, root, True, GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, chatWindowKeycode, chatWindowModifiers | Mod2Mask, root, True, GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, chatWindowKeycode, chatWindowModifiers | LockMask, root, True, GrabModeAsync, GrabModeAsync);
+        XGrabKey(dpy, chatWindowKeycode, chatWindowModifiers | Mod2Mask | LockMask, root, True, GrabModeAsync, GrabModeAsync);
+
+        chatWindowRegistered = true;
+        qInfo() << "Registered global chat window shortcut Ctrl+Alt+C";
+    } else {
+        qWarning() << "Failed to get keycode for 'c' key";
+    }
+
     XSync(dpy, False);
 
     if (!screenshotRegistered && !toggleRegistered) {
@@ -308,6 +413,10 @@ void GlobalShortcutManager::unregisterShortcuts()
         UnregisterHotKey(nullptr, toggleHotkeyId);
         toggleRegistered = false;
     }
+    if (chatWindowRegistered) {
+        UnregisterHotKey(nullptr, chatWindowHotkeyId);
+        chatWindowRegistered = false;
+    }
 #elif defined(Q_OS_MACOS)
     if (screenshotRegistered) {
         UnregisterEventHotKey(screenshotHotKeyRef);
@@ -316,6 +425,10 @@ void GlobalShortcutManager::unregisterShortcuts()
     if (toggleRegistered) {
         UnregisterEventHotKey(toggleHotKeyRef);
         toggleRegistered = false;
+    }
+    if (chatWindowRegistered) {
+        UnregisterEventHotKey(chatWindowHotKeyRef);
+        chatWindowRegistered = false;
     }
     if (eventHandlerRef) {
         RemoveEventHandler(eventHandlerRef);
@@ -346,6 +459,14 @@ void GlobalShortcutManager::unregisterShortcuts()
             toggleRegistered = false;
         }
 
+        if (chatWindowRegistered && chatWindowKeycode != 0) {
+            XUngrabKey(dpy, chatWindowKeycode, chatWindowModifiers, root);
+            XUngrabKey(dpy, chatWindowKeycode, chatWindowModifiers | Mod2Mask, root);
+            XUngrabKey(dpy, chatWindowKeycode, chatWindowModifiers | LockMask, root);
+            XUngrabKey(dpy, chatWindowKeycode, chatWindowModifiers | Mod2Mask | LockMask, root);
+            chatWindowRegistered = false;
+        }
+
         XCloseDisplay(dpy);
         display = nullptr;
     }
@@ -374,6 +495,12 @@ bool GlobalShortcutManager::nativeEventFilter(const QByteArray &eventType, void 
                     *result = 0;
                 }
                 return true;
+            } else if (msg->wParam == chatWindowHotkeyId) {
+                emit chatWindowRequested();
+                if (result) {
+                    *result = 0;
+                }
+                return true;
             }
         }
     }
@@ -398,6 +525,15 @@ bool GlobalShortcutManager::nativeEventFilter(const QByteArray &eventType, void 
             // Check for toggle shortcut (Ctrl+Shift+H)
             if (keyEvent->detail == toggleKeycode && cleanState == toggleModifiers) {
                 emit toggleVisibilityRequested();
+                if (result) {
+                    *result = 0;
+                }
+                return true;
+            }
+
+            // Check for chat window shortcut (Ctrl+Alt+C)
+            if (keyEvent->detail == chatWindowKeycode && cleanState == chatWindowModifiers) {
+                emit chatWindowRequested();
                 if (result) {
                     *result = 0;
                 }
@@ -436,8 +572,12 @@ OSStatus GlobalShortcutManager::hotKeyHandler(EventHandlerCallRef nextHandler, E
         // Toggle visibility hotkey (Cmd+Shift+H)
         emit manager->toggleVisibilityRequested();
         return noErr;
+    } else if (hotKeyID.signature == 'htk3' && hotKeyID.id == 3) {
+        // Chat window hotkey (Cmd+Shift+C)
+        emit manager->chatWindowRequested();
+        return noErr;
     }
-    
+
     return eventNotHandledErr;
 }
 #endif

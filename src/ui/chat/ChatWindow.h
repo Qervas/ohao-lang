@@ -8,26 +8,39 @@
 #include <QHBoxLayout>
 #include <QPainter>
 #include <QKeyEvent>
+#include <QComboBox>
 #include "../../translation/TranslationEngine.h"
 
+class AIEngine;
+
 /**
- * @brief Translation Chat Window - Bidirectional translation chat interface
+ * @brief Smart Chat Window - Dual-mode translation and AI assistant interface
  *
- * Provides a chat-like interface for quick bidirectional translation between
- * input and output languages. Automatically detects language direction and
- * maintains conversation history.
+ * Provides a chat-like interface with two modes:
+ * 1. Translation Mode: Bidirectional translation (input↔output languages)
+ * 2. AI Assistant Mode: Context-aware AI chat with language learning support
  *
  * Features:
- * - Bidirectional translation (input↔output languages)
- * - Auto-detect language direction
+ * - Mode selector to switch between translation and AI
+ * - Auto-fallback to translation if AI service unavailable
+ * - Bidirectional translation with auto language detection
+ * - AI conversation history for context-aware responses
+ * - Token usage tracking (AI mode)
  * - Scrollable conversation history
- * - Press Enter or button to translate
+ * - Press Enter or button to send
  * - Transparent themed widget
+ * - Draggable window
  * - ESC to close
  */
 class ChatWindow : public QWidget
 {
     Q_OBJECT
+
+public:
+    enum ChatMode {
+        TranslationMode,
+        AIAssistantMode
+    };
 
 signals:
     void closed();
@@ -54,15 +67,25 @@ private slots:
     void onTranslationFinished(const TranslationResult &result);
     void onTranslationProgress(const QString &status);
     void onTranslationError(const QString &error);
+    void onAIResponseReceived(const QString &response, int tokensUsed);
+    void onAIError(const QString &error);
+    void onAIConnectionStatusChanged(bool connected);
+    void onModeChanged(int index);
     void updateThemeColors();
 
 private:
     void setupUI();
     void setupTranslation();
+    void setupAI();
     void positionWindow();
     void sendMessage();
+    void sendTranslationMessage(const QString &text);
+    void sendAIMessage(const QString &text);
+    void switchToTranslationMode();
     void appendToHistory(const QString &userText, const QString &translation,
                         const QString &detectedLang, bool isReverse);
+    void appendAIResponse(const QString &response, int tokensUsed);
+    void appendSystemMessage(const QString &message);
     QString detectInputLanguage(const QString &text);
     bool isTargetLanguage(const QString &text);
 
@@ -71,13 +94,18 @@ private:
     QLineEdit *m_inputField;
     QPushButton *m_sendButton;
     QPushButton *m_closeButton;
+    QComboBox *m_modeSelector;
     QVBoxLayout *m_mainLayout;
 
     // Translation
     TranslationEngine *m_translationEngine;
     QString m_sourceLanguage;  // From settings (OCR language)
     QString m_targetLanguage;  // From settings (user's target)
-    QString m_currentInput;    // Pending translation text
+    QString m_currentInput;    // Pending translation/AI request text
+
+    // AI Assistant
+    AIEngine *m_aiEngine;
+    QStringList m_conversationHistory;  // For AI context
 
     // Visual properties
     QColor m_backgroundColor;
@@ -90,6 +118,7 @@ private:
     int m_fontSize;
 
     // State
+    ChatMode m_chatMode;
     bool m_translating;
 
     // Dragging support

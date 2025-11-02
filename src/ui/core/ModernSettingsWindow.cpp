@@ -16,6 +16,9 @@
 #include <QCoreApplication>
 #include <QMessageBox>
 #include <QProcess>
+#include <QClipboard>
+#include <QSpinBox>
+#include <QScrollArea>
 
 ModernSettingsWindow::ModernSettingsWindow(QWidget *parent)
     : QDialog(parent)
@@ -98,7 +101,8 @@ void ModernSettingsWindow::createSidebar()
         "Translation",
         "Appearance",
         "Voice",
-        "Chat"
+        "Chat",
+        "AI"
     };
 
     for (const QString &item : items) {
@@ -127,6 +131,7 @@ void ModernSettingsWindow::createContentStack()
     contentStack->addWidget(createAppearancePage());
     contentStack->addWidget(createVoicePage());
     contentStack->addWidget(createChatPage());
+    contentStack->addWidget(createAIPage());
 
     mainLayout->addWidget(contentStack, 1);
 }
@@ -228,6 +233,11 @@ QWidget* ModernSettingsWindow::createGeneralPage()
     connect(toggleShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
             this, &ModernSettingsWindow::onSettingChanged);
     shortcutsLayout->addRow("Toggle Widget:", toggleShortcutEdit);
+
+    chatWindowShortcutEdit = new QKeySequenceEdit();
+    connect(chatWindowShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
+            this, &ModernSettingsWindow::onSettingChanged);
+    shortcutsLayout->addRow("Toggle Chat Window:", chatWindowShortcutEdit);
 
 #ifdef Q_OS_LINUX
     // Add button to update GNOME shortcuts
@@ -705,6 +715,239 @@ QWidget* ModernSettingsWindow::createChatPage()
     return page;
 }
 
+QWidget* ModernSettingsWindow::createAIPage()
+{
+    // Create scroll area for long content
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    // Create content widget
+    QWidget *page = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setSpacing(16);
+    layout->setContentsMargins(24, 24, 24, 24);
+
+    // Title
+    QLabel *titleLabel = new QLabel("AI Assistant Settings (Beta)");
+    titleLabel->setObjectName("pageTitle");
+    layout->addWidget(titleLabel);
+
+    // AI Settings Group
+    QGroupBox *aiGroup = new QGroupBox("🤖 AI Configuration");
+    aiGroup->setObjectName("settingsGroup");
+    QFormLayout *aiForm = new QFormLayout(aiGroup);
+    aiForm->setSpacing(12);
+    aiForm->setContentsMargins(0, 0, 0, 0);
+
+    // Enabled checkbox
+    QCheckBox *enabledCheck = new QCheckBox();
+    enabledCheck->setChecked(AppSettings::instance().getAIConfig().enabled);
+    connect(enabledCheck, &QCheckBox::toggled, this, [](bool checked) {
+        auto config = AppSettings::instance().getAIConfig();
+        config.enabled = checked;
+        AppSettings::instance().setAIConfig(config);
+    });
+    aiForm->addRow("Enable AI Assistant:", enabledCheck);
+
+    // Provider dropdown
+    QComboBox *providerCombo = new QComboBox();
+    providerCombo->addItem("GitHub Copilot");
+    providerCombo->setCurrentText(AppSettings::instance().getAIConfig().provider);
+    connect(providerCombo, &QComboBox::currentTextChanged, this, [](const QString &provider) {
+        auto config = AppSettings::instance().getAIConfig();
+        config.provider = provider;
+        AppSettings::instance().setAIConfig(config);
+    });
+    aiForm->addRow("Service Provider:", providerCombo);
+
+    // API URL
+    QLineEdit *urlEdit = new QLineEdit();
+    urlEdit->setText(AppSettings::instance().getAIConfig().apiUrl);
+    urlEdit->setPlaceholderText("http://localhost:4141");
+    connect(urlEdit, &QLineEdit::textChanged, this, [](const QString &url) {
+        auto config = AppSettings::instance().getAIConfig();
+        config.apiUrl = url;
+        AppSettings::instance().setAIConfig(config);
+    });
+    aiForm->addRow("API URL:", urlEdit);
+
+    // Model selection with refresh button
+    QHBoxLayout *modelRow = new QHBoxLayout();
+    QComboBox *modelCombo = new QComboBox();
+
+    // Add all available models (free models marked with ⭐)
+    QStringList freeModels = {"gpt-4o", "gpt-4.1", "grok-code-fast-1", "gpt-5-mini"};
+    QStringList allModels = {
+        "gpt-4.1", "gpt-5-mini", "gpt-5", "gpt-3.5-turbo", "gpt-3.5-turbo-0613",
+        "gpt-4o-mini", "gpt-4o-mini-2024-07-18", "gpt-4", "gpt-4-0613",
+        "gpt-4-0125-preview", "gpt-4o", "gpt-4o-2024-11-20", "gpt-4o-2024-05-13",
+        "gpt-4-o-preview", "gpt-4o-2024-08-06", "o3-mini-paygo", "gpt-41-copilot",
+        "grok-code-fast-1", "gpt-5-codex", "text-embedding-ada-002",
+        "text-embedding-3-small", "text-embedding-3-small-inference",
+        "claude-3.5-sonnet", "claude-sonnet-4", "claude-sonnet-4.5",
+        "claude-haiku-4.5", "gemini-2.5-pro", "gpt-4.1-2025-04-14"
+    };
+
+    for (const QString &model : allModels) {
+        if (freeModels.contains(model)) {
+            modelCombo->addItem("⭐ " + model + " (Free)", model);
+        } else {
+            modelCombo->addItem(model, model);
+        }
+    }
+
+    // Set current model
+    QString currentModel = AppSettings::instance().getAIConfig().model;
+    int index = modelCombo->findData(currentModel);
+    if (index >= 0) {
+        modelCombo->setCurrentIndex(index);
+    }
+
+    connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [modelCombo](int) {
+        auto config = AppSettings::instance().getAIConfig();
+        config.model = modelCombo->currentData().toString();
+        AppSettings::instance().setAIConfig(config);
+    });
+
+    QPushButton *refreshModelsBtn = new QPushButton("🔄 Refresh", this);
+    refreshModelsBtn->setMaximumWidth(100);
+    refreshModelsBtn->setToolTip("Fetch models from API endpoint (GET /v1/models)");
+    connect(refreshModelsBtn, &QPushButton::clicked, this, [this, modelCombo, freeModels]() {
+        // TODO: Implement API call to GET /v1/models
+        // For now, show a message
+        QMessageBox::information(this, "Refresh Models",
+            "Model refresh will fetch from:\n\n"
+            "GET " + AppSettings::instance().getAIConfig().apiUrl + "/v1/models\n\n"
+            "This feature will be implemented to dynamically load available models.");
+    });
+
+    modelRow->addWidget(modelCombo, 1);
+    modelRow->addWidget(refreshModelsBtn);
+    aiForm->addRow("Model:", modelRow);
+
+    // Temperature slider
+    QHBoxLayout *tempRow = new QHBoxLayout();
+    QSlider *tempSlider = new QSlider(Qt::Horizontal);
+    tempSlider->setRange(0, 200);  // 0.0 to 2.0
+    tempSlider->setValue(static_cast<int>(AppSettings::instance().getAIConfig().temperature * 100));
+    QLabel *tempValue = new QLabel(QString::number(tempSlider->value() / 100.0, 'f', 2));
+    tempValue->setFixedWidth(50);
+    connect(tempSlider, &QSlider::valueChanged, this, [tempValue](int value) {
+        tempValue->setText(QString::number(value / 100.0, 'f', 2));
+        auto config = AppSettings::instance().getAIConfig();
+        config.temperature = value / 100.0f;
+        AppSettings::instance().setAIConfig(config);
+    });
+    tempRow->addWidget(tempSlider, 1);
+    tempRow->addWidget(tempValue);
+    aiForm->addRow("Temperature:", tempRow);
+
+    // Max tokens
+    QSpinBox *tokensSpinBox = new QSpinBox();
+    tokensSpinBox->setRange(100, 4000);
+    tokensSpinBox->setValue(AppSettings::instance().getAIConfig().maxTokens);
+    tokensSpinBox->setSingleStep(100);
+    connect(tokensSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int value) {
+        auto config = AppSettings::instance().getAIConfig();
+        config.maxTokens = value;
+        AppSettings::instance().setAIConfig(config);
+    });
+    aiForm->addRow("Max Tokens:", tokensSpinBox);
+
+    // Show token count checkbox
+    QCheckBox *showTokenCheck = new QCheckBox();
+    showTokenCheck->setChecked(AppSettings::instance().getAIConfig().showTokenCount);
+    connect(showTokenCheck, &QCheckBox::toggled, this, [](bool checked) {
+        auto config = AppSettings::instance().getAIConfig();
+        config.showTokenCount = checked;
+        AppSettings::instance().setAIConfig(config);
+    });
+    aiForm->addRow("Show Token Count:", showTokenCheck);
+
+    // Auto fallback checkbox
+    QCheckBox *fallbackCheck = new QCheckBox("Automatically use translation if AI service is unavailable");
+    fallbackCheck->setChecked(AppSettings::instance().getAIConfig().autoFallbackToTranslation);
+    connect(fallbackCheck, &QCheckBox::toggled, this, [](bool checked) {
+        auto config = AppSettings::instance().getAIConfig();
+        config.autoFallbackToTranslation = checked;
+        AppSettings::instance().setAIConfig(config);
+    });
+    aiForm->addRow("Auto Fallback:", fallbackCheck);
+
+    // Token usage display
+    QHBoxLayout *usageRow = new QHBoxLayout();
+    QLabel *usageValue = new QLabel(QString::number(AppSettings::instance().getAIConfig().totalTokensUsed));
+    usageValue->setMinimumWidth(100);
+    QPushButton *resetButton = new QPushButton("Reset");
+    resetButton->setMaximumWidth(80);
+    connect(resetButton, &QPushButton::clicked, this, [usageValue]() {
+        auto config = AppSettings::instance().getAIConfig();
+        config.totalTokensUsed = 0;
+        AppSettings::instance().setAIConfig(config);
+        usageValue->setText("0");
+    });
+    usageRow->addWidget(usageValue);
+    usageRow->addWidget(resetButton);
+    usageRow->addStretch();
+    aiForm->addRow("Total Tokens Used:", usageRow);
+
+    layout->addWidget(aiGroup);
+
+    // Setup Instructions
+    QGroupBox *setupGroup = new QGroupBox("📋 Setup Instructions");
+    setupGroup->setObjectName("settingsGroup");
+    QVBoxLayout *setupLayout = new QVBoxLayout();
+
+    QLabel *setupText = new QLabel(
+        "To use AI features, install and run copilot-api:\n\n"
+        "1. Authenticate: npx copilot-api@latest auth\n"
+        "2. Start server: npx copilot-api@latest start\n\n"
+        "Requirements:\n"
+        "• GitHub Copilot subscription\n"
+        "• Node.js or Bun runtime\n\n"
+        "The service will run on http://localhost:4141 by default."
+    );
+    setupText->setWordWrap(true);
+    setupLayout->addWidget(setupText);
+
+    QPushButton *copyButton = new QPushButton("📋 Copy Commands");
+    copyButton->setMaximumWidth(150);
+    connect(copyButton, &QPushButton::clicked, this, []() {
+        QClipboard *clipboard = QApplication::clipboard();
+        clipboard->setText("npx copilot-api@latest auth\nnpx copilot-api@latest start");
+    });
+    setupLayout->addWidget(copyButton);
+
+    setupGroup->setLayout(setupLayout);
+    layout->addWidget(setupGroup);
+
+    // Info section
+    QGroupBox *infoGroup = new QGroupBox("ℹ️  About AI Assistant");
+    infoGroup->setObjectName("settingsGroup");
+    QVBoxLayout *infoLayout = new QVBoxLayout();
+    QLabel *infoText = new QLabel(
+        "AI Assistant adds intelligent chat capabilities to Translation Chat:\n\n"
+        "• Context-aware responses with conversation history\n"
+        "• Language learning assistance and explanations\n"
+        "• Automatic fallback to translation if AI is unavailable\n"
+        "• Token usage tracking for transparency\n\n"
+        "Note: This is a beta feature. AI services run externally and require setup."
+    );
+    infoText->setWordWrap(true);
+    infoLayout->addWidget(infoText);
+    infoGroup->setLayout(infoLayout);
+    layout->addWidget(infoGroup);
+
+    layout->addStretch();
+
+    // Set content widget to scroll area
+    scrollArea->setWidget(page);
+    return scrollArea;
+}
+
 void ModernSettingsWindow::applyMacOSStyle()
 {
     // Initial style will be applied by applyTheme
@@ -994,9 +1237,11 @@ void ModernSettingsWindow::loadSettings()
 #ifdef Q_OS_MACOS
     QString defaultScreenshot = "Meta+Shift+X";
     QString defaultToggle = "Meta+Shift+H";
+    QString defaultChatWindow = "Meta+Shift+C";
 #else
     QString defaultScreenshot = "Ctrl+Alt+X";
     QString defaultToggle = "Ctrl+Alt+H";
+    QString defaultChatWindow = "Ctrl+Alt+C";
 #endif
 
     if (screenshotShortcutEdit) {
@@ -1013,6 +1258,14 @@ void ModernSettingsWindow::loadSettings()
         shortcut.replace("Meta", "Ctrl");
 #endif
         toggleShortcutEdit->setKeySequence(QKeySequence(shortcut));
+    }
+
+    if (chatWindowShortcutEdit) {
+        QString shortcut = settings.value("shortcuts/chatWindow", defaultChatWindow).toString();
+#ifdef Q_OS_MACOS
+        shortcut.replace("Meta", "Ctrl");
+#endif
+        chatWindowShortcutEdit->setKeySequence(QKeySequence(shortcut));
     }
 
     // OCR
@@ -1129,6 +1382,16 @@ void ModernSettingsWindow::saveSettings()
         if (systemTray) systemTray->updateShortcutLabels();
     }
 
+    if (chatWindowShortcutEdit) {
+        QString shortcut = chatWindowShortcutEdit->keySequence().toString();
+#ifdef Q_OS_MACOS
+        shortcut.replace("Ctrl", "Meta");
+#endif
+        settings.setValue("shortcuts/chatWindow", shortcut);
+        if (shortcutManager) shortcutManager->reloadShortcuts();
+        if (systemTray) systemTray->updateShortcutLabels();
+    }
+
     // OCR
     if (ocrEngineCombo) {
         QString text = ocrEngineCombo->currentText();
@@ -1227,6 +1490,7 @@ void ModernSettingsWindow::updateGnomeShortcuts()
     // Get the current shortcuts from the UI
     QString screenshotShortcut = screenshotShortcutEdit ? screenshotShortcutEdit->keySequence().toString() : "Ctrl+Alt+X";
     QString toggleShortcut = toggleShortcutEdit ? toggleShortcutEdit->keySequence().toString() : "Ctrl+Alt+H";
+    QString chatWindowShortcut = chatWindowShortcutEdit ? chatWindowShortcutEdit->keySequence().toString() : "Ctrl+Alt+C";
 
     // Convert Qt key sequence format to GNOME format
     // Qt format: "Ctrl+Alt+X" -> GNOME format: "<Ctrl><Alt>x"
@@ -1242,6 +1506,7 @@ void ModernSettingsWindow::updateGnomeShortcuts()
 
     QString gnomeScreenshot = qtToGnome(screenshotShortcut);
     QString gnomeToggle = qtToGnome(toggleShortcut);
+    QString gnomeChatWindow = qtToGnome(chatWindowShortcut);
 
     // Get application path
     QString appPath = QCoreApplication::applicationFilePath();
@@ -1255,14 +1520,15 @@ void ModernSettingsWindow::updateGnomeShortcuts()
     getBindings.waitForFinished();
     QString existing = QString::fromUtf8(getBindings.readAll()).trimmed();
 
-    // Find or create custom0 and custom1
+    // Find or create custom0, custom1, and custom2
     QString custom0 = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/";
     QString custom1 = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/";
+    QString custom2 = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom2/";
 
     // Update the custom keybindings list if needed
-    if (!existing.contains("custom0") || !existing.contains("custom1")) {
-        commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \"['%1', '%2']\"")
-                    .arg(custom0).arg(custom1);
+    if (!existing.contains("custom0") || !existing.contains("custom1") || !existing.contains("custom2")) {
+        commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \"['%1', '%2', '%3']\"")
+                    .arg(custom0).arg(custom1).arg(custom2);
     }
 
     // Set screenshot shortcut (custom0)
@@ -1274,6 +1540,11 @@ void ModernSettingsWindow::updateGnomeShortcuts()
     commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 name 'Ohao Toggle Widget'").arg(custom1);
     commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 command '%2 --toggle'").arg(custom1).arg(appPath);
     commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 binding '%2'").arg(custom1).arg(gnomeToggle);
+
+    // Set chat window shortcut (custom2)
+    commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 name 'Ohao Toggle Chat'").arg(custom2);
+    commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 command '%2 --chat'").arg(custom2).arg(appPath);
+    commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 binding '%2'").arg(custom2).arg(gnomeChatWindow);
 
     // Execute all commands
     bool success = true;
@@ -1290,10 +1561,12 @@ void ModernSettingsWindow::updateGnomeShortcuts()
         QMessageBox::information(this, "Shortcuts Updated",
             QString("GNOME keyboard shortcuts have been updated:\n\n"
                     "Screenshot: %1\n"
-                    "Toggle: %2\n\n"
+                    "Toggle: %2\n"
+                    "Chat Window: %3\n\n"
                     "The shortcuts should work immediately.")
             .arg(screenshotShortcut)
-            .arg(toggleShortcut));
+            .arg(toggleShortcut)
+            .arg(chatWindowShortcut));
     } else {
         QMessageBox::warning(this, "Update Failed",
             "Failed to update GNOME shortcuts. Please check the terminal for errors.\n\n"
