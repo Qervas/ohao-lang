@@ -15,6 +15,7 @@
 #include <QMouseEvent>
 #include <QTimer>
 #include <QStandardItemModel>
+#include <QTextDocument>
 
 ChatWindow::ChatWindow(QWidget *parent)
     : QWidget(parent)
@@ -89,10 +90,37 @@ void ChatWindow::setupUI()
     );
     connect(m_closeButton, &QPushButton::clicked, this, &ChatWindow::hide);
 
+    // Clear context button
+    QPushButton *clearButton = new QPushButton("Clear", this);
+    clearButton->setMinimumWidth(50);
+    clearButton->setFixedHeight(24);
+    clearButton->setToolTip("Clear conversation history");
+    clearButton->setCursor(Qt::PointingHandCursor);
+    clearButton->setStyleSheet(
+        "QPushButton {"
+        "   background: rgba(255, 165, 0, 30);"
+        "   border: 1px solid rgba(255, 165, 0, 100);"
+        "   border-radius: 4px;"
+        "   font-size: 11px;"
+        "   font-weight: bold;"
+        "   color: palette(window-text);"
+        "   padding: 2px 8px;"
+        "}"
+        "QPushButton:hover {"
+        "   background: rgba(255, 165, 0, 50);"
+        "}"
+        "QPushButton:pressed {"
+        "   background: rgba(255, 165, 0, 70);"
+        "}"
+    );
+    connect(clearButton, &QPushButton::clicked, this, &ChatWindow::clearContext);
+
     titleLayout->addWidget(titleLabel);
     titleLayout->addSpacing(10);
     titleLayout->addWidget(m_modeSelector);
     titleLayout->addStretch();
+    titleLayout->addWidget(clearButton);
+    titleLayout->addSpacing(8);
     titleLayout->addWidget(m_closeButton);
     m_mainLayout->addLayout(titleLayout);
 
@@ -702,6 +730,17 @@ void ChatWindow::appendAIResponse(const QString &response, int tokensUsed)
 {
     QString timestamp = QTime::currentTime().toString("hh:mm");
 
+    // Convert markdown to HTML
+    QTextDocument doc;
+    doc.setMarkdown(response);
+    QString responseHtml = doc.toHtml();
+
+    // Extract just the body content (remove DOCTYPE and html/body tags)
+    int bodyStart = responseHtml.indexOf("<body");
+    int bodyContentStart = responseHtml.indexOf(">", bodyStart) + 1;
+    int bodyEnd = responseHtml.indexOf("</body>");
+    QString bodyContent = responseHtml.mid(bodyContentStart, bodyEnd - bodyContentStart).trimmed();
+
     QString html = QString(
         "<div style='margin-bottom: 12px;'>"
         "<div style='color: %1; font-weight: 500; margin-bottom: 4px;'>"
@@ -711,7 +750,7 @@ void ChatWindow::appendAIResponse(const QString &response, int tokensUsed)
     ).arg(m_textColor.name())
      .arg(timestamp)
      .arg(m_textColor.name())
-     .arg(response.toHtmlEscaped());
+     .arg(bodyContent);
 
     // Add token count if enabled
     auto aiConfig = AppSettings::instance().getAIConfig();
@@ -742,4 +781,18 @@ void ChatWindow::appendSystemMessage(const QString &message)
     // Scroll to bottom
     QScrollBar *scrollBar = m_historyView->verticalScrollBar();
     scrollBar->setValue(scrollBar->maximum());
+}
+
+void ChatWindow::clearContext()
+{
+    // Clear the conversation history display
+    m_historyView->clear();
+    
+    // Clear AI conversation context
+    m_conversationHistory.clear();
+    
+    // Show confirmation message
+    appendSystemMessage("🗑️ Conversation history cleared");
+    
+    qDebug() << "ChatWindow: Conversation context cleared";
 }

@@ -72,6 +72,7 @@ private slots:
     void onAIConnectionStatusChanged(bool connected);
     void onModeChanged(int index);
     void updateThemeColors();
+    void clearContext();
 
 private:
     void setupUI();

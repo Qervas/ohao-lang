@@ -104,6 +104,9 @@ private:
     QCheckBox *ttsSpeakTranslationCheck = nullptr;
     QCheckBox *ttsWordByWordCheck = nullptr;
 
+    // AI Page widgets
+    QLabel *tokenUsageLabel = nullptr;
+
     // Settings storage
     QSettings settings;
 

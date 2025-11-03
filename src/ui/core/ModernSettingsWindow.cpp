@@ -47,6 +47,14 @@ ModernSettingsWindow::ModernSettingsWindow(QWidget *parent)
         applyTheme(themeName);
     });
 
+    // Connect to AI settings changes to update token count display
+    connect(&AppSettings::instance(), &AppSettings::aiSettingsChanged, this, [this]() {
+        if (tokenUsageLabel) {
+            auto config = AppSettings::instance().getAIConfig();
+            tokenUsageLabel->setText(QString::number(config.totalTokensUsed));
+        }
+    });
+
     qDebug() << "ModernSettingsWindow: Initialization complete!";
 }
 
@@ -879,17 +887,19 @@ QWidget* ModernSettingsWindow::createAIPage()
 
     // Token usage display
     QHBoxLayout *usageRow = new QHBoxLayout();
-    QLabel *usageValue = new QLabel(QString::number(AppSettings::instance().getAIConfig().totalTokensUsed));
-    usageValue->setMinimumWidth(100);
+    tokenUsageLabel = new QLabel(QString::number(AppSettings::instance().getAIConfig().totalTokensUsed));
+    tokenUsageLabel->setMinimumWidth(100);
     QPushButton *resetButton = new QPushButton("Reset");
     resetButton->setMaximumWidth(80);
-    connect(resetButton, &QPushButton::clicked, this, [usageValue]() {
+    connect(resetButton, &QPushButton::clicked, this, [this]() {
         auto config = AppSettings::instance().getAIConfig();
         config.totalTokensUsed = 0;
         AppSettings::instance().setAIConfig(config);
-        usageValue->setText("0");
+        if (tokenUsageLabel) {
+            tokenUsageLabel->setText("0");
+        }
     });
-    usageRow->addWidget(usageValue);
+    usageRow->addWidget(tokenUsageLabel);
     usageRow->addWidget(resetButton);
     usageRow->addStretch();
     aiForm->addRow("Total Tokens Used:", usageRow);
