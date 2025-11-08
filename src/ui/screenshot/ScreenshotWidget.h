@@ -12,15 +12,6 @@
 #include "ScreenCapture.h"
 #include "../overlays/OverlayManager.h"
 
-
-enum class ToolbarButton {
-    None,
-    Copy,
-    Save,
-    OCR,
-    Cancel
-};
-
 class ScreenshotWidget : public QWidget
 {
     Q_OBJECT
@@ -49,22 +40,12 @@ private slots:
 private:
     void captureScreen();
     void setupWidget();
-    void drawToolbar(QPainter &painter);
-    QRect getToolbarRect();
-    ToolbarButton getButtonAt(QPoint pos);
-    void handleToolbarClick(ToolbarButton button);
 
     QPixmap screenshot;
     QPoint startPoint;
     QPoint endPoint;
     bool selecting;
     bool hasSelection;
-    bool showingToolbar;
-    QRect toolbarRect;
-    QRect copyButtonRect;
-    QRect saveButtonRect;
-    QRect ocrButtonRect;
-    QRect cancelButtonRect;
 
     QPixmap m_lastOCRImage;
 

@@ -21,7 +21,7 @@
 #include <iostream>
 
 ScreenshotWidget::ScreenshotWidget(QWidget *parent)
-    : QWidget(parent), selecting(false), hasSelection(false), showingToolbar(false)
+    : QWidget(parent), selecting(false), hasSelection(false)
     , showingResults(false), m_isFirstSelection(true)
 {
     // Make fullscreen and frameless
@@ -58,7 +58,7 @@ ScreenshotWidget::ScreenshotWidget(QWidget *parent)
 }
 
 ScreenshotWidget::ScreenshotWidget(const QPixmap &screenshot, QWidget *parent)
-    : QWidget(parent), selecting(false), hasSelection(false), showingToolbar(false)
+    : QWidget(parent), selecting(false), hasSelection(false)
     , showingResults(false), m_isFirstSelection(true)
 {
     // Make fullscreen and frameless
@@ -299,140 +299,17 @@ void ScreenshotWidget::paintEvent(QPaintEvent *event)
         painter.drawText(textRect, Qt::AlignCenter, instruction);
     }
 
-    // Draw integrated toolbar if showing
-    if (showingToolbar) {
-        drawToolbar(painter);
-    }
-
     // Results overlays are now handled by OverlayManager - no drawing needed here!
-}
-
-void ScreenshotWidget::drawToolbar(QPainter &painter)
-{
-    QRect selection = QRect(startPoint, endPoint).normalized();
-
-    // Calculate toolbar position (same logic as before)
-    QScreen *screen = QApplication::primaryScreen();
-    if (!screen) return;
-
-    QRect screenGeometry = screen->geometry();
-    const int margin = 8;
-    const int buttonSize = 38;
-    const int spacing = 4;
-    const int padding = 8;
-
-    // Calculate toolbar size
-    int toolbarWidth = (buttonSize * 4) + (spacing * 3) + (padding * 2);
-    int toolbarHeight = buttonSize + (padding * 2);
-
-    // Position toolbar below selection (or above if no space)
-    int x = selection.x() + (selection.width() - toolbarWidth) / 2;
-    int y = selection.bottom() + margin;
-
-    if (y + toolbarHeight > screenGeometry.height()) {
-        y = selection.top() - toolbarHeight - margin;
-    }
-
-    // Constrain to screen
-    x = qMax(0, qMin(x, screenGeometry.width() - toolbarWidth));
-    y = qMax(0, qMin(y, screenGeometry.height() - toolbarHeight));
-
-    toolbarRect = QRect(x, y, toolbarWidth, toolbarHeight);
-
-    std::cout << "*** Drawing integrated toolbar at: " << x << "," << y << std::endl;
-
-    // Get current theme colors
-    ThemeManager::Theme currentTheme = ThemeManager::instance().getCurrentTheme();
-    QString themeName = ThemeManager::toString(currentTheme);
-    ThemeColors::ThemeColorSet colors = ThemeColors::getColorSet(themeName);
-
-    // Draw toolbar background
-    painter.setRenderHint(QPainter::Antialiasing);
-    QPainterPath toolbarPath;
-    toolbarPath.addRoundedRect(toolbarRect, 24, 24);
-
-    QBrush toolbarBrush(colors.screenshotToolbarBg);
-    painter.fillPath(toolbarPath, toolbarBrush);
-
-    // Draw toolbar border
-    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
-    painter.drawPath(toolbarPath);
-
-    // Draw buttons
-    int buttonX = x + padding;
-    int buttonY = y + padding;
-
-    // Copy button 📋
-    copyButtonRect = QRect(buttonX, buttonY, buttonSize, buttonSize);
-    painter.fillRect(copyButtonRect, colors.screenshotButtonBg);
-    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
-    painter.drawRoundedRect(copyButtonRect, 18, 18);
-    painter.setPen(colors.windowText);
-    painter.setFont(QFont("Arial", 16, QFont::Bold));
-    painter.drawText(copyButtonRect, Qt::AlignCenter, "📋");
-
-    buttonX += buttonSize + spacing;
-
-    // Save button 💾
-    saveButtonRect = QRect(buttonX, buttonY, buttonSize, buttonSize);
-    painter.fillRect(saveButtonRect, colors.screenshotButtonBg);
-    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
-    painter.drawRoundedRect(saveButtonRect, 18, 18);
-    painter.setPen(colors.windowText);
-    painter.drawText(saveButtonRect, Qt::AlignCenter, "💾");
-
-    buttonX += buttonSize + spacing;
-
-    // OCR button 📝
-    ocrButtonRect = QRect(buttonX, buttonY, buttonSize, buttonSize);
-    painter.fillRect(ocrButtonRect, colors.screenshotButtonBg);
-    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
-    painter.drawRoundedRect(ocrButtonRect, 18, 18);
-    painter.setPen(colors.windowText);
-    painter.drawText(ocrButtonRect, Qt::AlignCenter, "📝");
-
-    buttonX += buttonSize + spacing;
-
-    // Cancel button ❌
-    cancelButtonRect = QRect(buttonX, buttonY, buttonSize, buttonSize);
-    painter.fillRect(cancelButtonRect, colors.screenshotButtonBg);
-    painter.setPen(QPen(colors.screenshotToolbarBorder, 1));
-    painter.drawRoundedRect(cancelButtonRect, 18, 18);
-    painter.setPen(colors.windowText);
-    painter.drawText(cancelButtonRect, Qt::AlignCenter, "❌");
-}
-
-// Legacy drawResultsOverlay removed - now handled by OverlayManager
-
-ToolbarButton ScreenshotWidget::getButtonAt(QPoint pos)
-{
-    if (copyButtonRect.contains(pos)) return ToolbarButton::Copy;
-    if (saveButtonRect.contains(pos)) return ToolbarButton::Save;
-    if (ocrButtonRect.contains(pos)) return ToolbarButton::OCR;
-    if (cancelButtonRect.contains(pos)) return ToolbarButton::Cancel;
-    return ToolbarButton::None;
 }
 
 void ScreenshotWidget::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        // Check if clicking on toolbar buttons first
-        if (showingToolbar) {
-            ToolbarButton button = getButtonAt(event->pos());
-            if (button != ToolbarButton::None) {
-                handleToolbarClick(button);
-                return;
-            }
-        }
-
         // Start new selection
         startPoint = event->pos();
         endPoint = startPoint;
         selecting = true;
         hasSelection = false;
-        showingToolbar = false; // Hide toolbar when starting new selection
-
-        std::cout << "*** Starting new selection, hiding toolbar" << std::endl;
 
         update();
     }
@@ -471,7 +348,6 @@ void ScreenshotWidget::mouseReleaseEvent(QMouseEvent *event)
             // Reset selection state and keep the overlay active
             hasSelection = false;
             selecting = false;
-            showingToolbar = false;
             setCursor(Qt::CrossCursor);
             update();
         }
@@ -483,71 +359,17 @@ void ScreenshotWidget::keyPressEvent(QKeyEvent *event)
     if (event->key() == Qt::Key_Escape) {
         // ESC always exits screenshot mode
         qDebug() << "ESC pressed - exiting screenshot mode";
-        
+
         // Close any visible overlays first
         if (m_overlayManager) {
             m_overlayManager->hideAllOverlays();
         }
-        
+
         // Exit screenshot mode
         emit screenshotFinished();
         close();
-    } else if ((event->modifiers() & Qt::ControlModifier) && event->key() == Qt::Key_C) {
-        // Ctrl+C copies the original OCR text (not translation)
-        // This works even when overlay is showing
-        if (m_overlayManager) {
-            OCRResult lastResult = m_overlayManager->getLastOCRResult();
-            if (lastResult.success && !lastResult.text.isEmpty()) {
-                QClipboard *clipboard = QApplication::clipboard();
-                clipboard->setText(lastResult.text);
-                
-                qDebug() << "Ctrl+C: Copied original OCR text to clipboard";
-                
-                // Show brief notification
-                m_progressText = "✅ Original text copied to clipboard!";
-                showingResults = true;
-                update();
-                
-                // Clear notification after 1.5 seconds
-                QTimer::singleShot(1500, this, [this]() {
-                    m_progressText.clear();
-                    showingResults = false;
-                    update();
-                });
-            } else {
-                qDebug() << "Ctrl+C: No OCR text available to copy";
-            }
-        }
     }
 }
-
-void ScreenshotWidget::handleToolbarClick(ToolbarButton button)
-{
-    std::cout << "*** Toolbar button clicked: ";
-    switch (button) {
-        case ToolbarButton::Copy:
-            std::cout << "Copy" << std::endl;
-            handleCopy();
-            break;
-        case ToolbarButton::Save:
-            std::cout << "Save" << std::endl;
-            handleSave();
-            break;
-        case ToolbarButton::OCR:
-            std::cout << "OCR" << std::endl;
-            handleOCR();
-            break;
-        case ToolbarButton::Cancel:
-            std::cout << "Cancel" << std::endl;
-            handleCancel();
-            break;
-        default:
-            std::cout << "None" << std::endl;
-            break;
-    }
-}
-
-// Old showToolbar method removed - now using integrated toolbar
 
 void ScreenshotWidget::handleCopy()
 {
@@ -603,7 +425,6 @@ void ScreenshotWidget::handleOCR()
         // Reset selection state
         hasSelection = false;
         selecting = false;
-        showingToolbar = false;
         startPoint = QPoint();
         endPoint = QPoint();
         
@@ -640,7 +461,6 @@ void ScreenshotWidget::handleOCR()
     }
 
     // Update UI state for overlay display
-    showingToolbar = false;
     showingResults = true;
     m_currentResult = OCRResult(); // Reset result
 
