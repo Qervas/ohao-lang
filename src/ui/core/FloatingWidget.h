@@ -29,6 +29,7 @@ public:
     void toggleVisibility();
     void activateWindow();
     void setAlwaysOnTop(bool onTop);
+    void readSelectedTextAloud();
 
     void setSystemTray(SystemTray *tray);
 

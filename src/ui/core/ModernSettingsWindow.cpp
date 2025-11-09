@@ -146,6 +146,13 @@ void ModernSettingsWindow::createContentStack()
 
 QWidget* ModernSettingsWindow::createGeneralPage()
 {
+    // Create scroll area for long content
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
     QWidget *page = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(page);
     layout->setContentsMargins(30, 30, 30, 30);
@@ -247,6 +254,34 @@ QWidget* ModernSettingsWindow::createGeneralPage()
             this, &ModernSettingsWindow::onSettingChanged);
     shortcutsLayout->addRow("Toggle Chat Window:", chatWindowShortcutEdit);
 
+    readAloudShortcutEdit = new QKeySequenceEdit();
+    connect(readAloudShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
+            this, &ModernSettingsWindow::onSettingChanged);
+    shortcutsLayout->addRow("Read Selected Text Aloud:", readAloudShortcutEdit);
+
+    // Add Reset to Defaults button
+    QPushButton *resetShortcutsBtn = new QPushButton("Reset to Defaults");
+    resetShortcutsBtn->setMaximumWidth(150);
+    resetShortcutsBtn->setToolTip("Reset all shortcuts to their default values");
+    connect(resetShortcutsBtn, &QPushButton::clicked, this, [this]() {
+        QMessageBox::StandardButton reply = QMessageBox::question(
+            this,
+            "Reset Shortcuts",
+            "Reset all shortcuts to their default values?\n\n"
+            "This will change:\n"
+            "• Screenshot: Ctrl+Alt+X\n"
+            "• Toggle Widget: Ctrl+Alt+H\n"
+            "• Chat Window: Ctrl+Alt+C\n"
+            "• Read Aloud: Ctrl+Alt+A",
+            QMessageBox::Yes | QMessageBox::No
+        );
+
+        if (reply == QMessageBox::Yes) {
+            resetShortcutsToDefaults();
+        }
+    });
+    shortcutsLayout->addRow("", resetShortcutsBtn);
+
 #ifdef Q_OS_LINUX
     // Add button to update GNOME shortcuts
     QPushButton *updateGnomeBtn = new QPushButton("Update GNOME Shortcuts");
@@ -291,11 +326,20 @@ QWidget* ModernSettingsWindow::createGeneralPage()
     layout->addWidget(behaviorGroup);
 
     layout->addStretch();
-    return page;
+
+    scrollArea->setWidget(page);
+    return scrollArea;
 }
 
 QWidget* ModernSettingsWindow::createOCRPage()
 {
+    // Create scroll area for long content
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
     QWidget *page = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(page);
     layout->setContentsMargins(30, 30, 30, 30);
@@ -326,11 +370,20 @@ QWidget* ModernSettingsWindow::createOCRPage()
 
     layout->addWidget(engineGroup);
     layout->addStretch();
-    return page;
+
+    scrollArea->setWidget(page);
+    return scrollArea;
 }
 
 QWidget* ModernSettingsWindow::createTranslationPage()
 {
+    // Create scroll area for long content
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
     QWidget *page = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(page);
     layout->setContentsMargins(30, 30, 30, 30);
@@ -378,11 +431,20 @@ QWidget* ModernSettingsWindow::createTranslationPage()
 
     layout->addWidget(engineGroup);
     layout->addStretch();
-    return page;
+
+    scrollArea->setWidget(page);
+    return scrollArea;
 }
 
 QWidget* ModernSettingsWindow::createAppearancePage()
 {
+    // Create scroll area for long content
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
     QWidget *page = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(page);
     layout->setContentsMargins(30, 30, 30, 30);
@@ -455,11 +517,20 @@ QWidget* ModernSettingsWindow::createAppearancePage()
 
     layout->addWidget(sizeGroup);
     layout->addStretch();
-    return page;
+
+    scrollArea->setWidget(page);
+    return scrollArea;
 }
 
 QWidget* ModernSettingsWindow::createVoicePage()
 {
+    // Create scroll area for long content
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
     QWidget *page = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(page);
     layout->setContentsMargins(30, 30, 30, 30);
@@ -590,11 +661,19 @@ QWidget* ModernSettingsWindow::createVoicePage()
     // Populate voices for the current provider
     updateVoiceList();
 
-    return page;
+    scrollArea->setWidget(page);
+    return scrollArea;
 }
 
 QWidget* ModernSettingsWindow::createChatPage()
 {
+    // Create scroll area for long content
+    QScrollArea *scrollArea = new QScrollArea();
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
     QWidget *page = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(page);
     layout->setSpacing(16);
@@ -720,7 +799,9 @@ QWidget* ModernSettingsWindow::createChatPage()
     layout->addWidget(infoGroup);
 
     layout->addStretch();
-    return page;
+
+    scrollArea->setWidget(page);
+    return scrollArea;
 }
 
 QWidget* ModernSettingsWindow::createAIPage()
@@ -1243,19 +1324,12 @@ void ModernSettingsWindow::loadSettings()
         screenshotDimmingSlider->setValue(opacity);
     }
 
-    // General - Shortcuts
-#ifdef Q_OS_MACOS
-    QString defaultScreenshot = "Meta+Shift+X";
-    QString defaultToggle = "Meta+Shift+H";
-    QString defaultChatWindow = "Meta+Shift+C";
-#else
-    QString defaultScreenshot = "Ctrl+Alt+X";
-    QString defaultToggle = "Ctrl+Alt+H";
-    QString defaultChatWindow = "Ctrl+Alt+C";
-#endif
+    // General - Shortcuts (use ShortcutConfig as single source of truth)
+    const auto& shortcutConfig = ShortcutConfig::instance();
 
     if (screenshotShortcutEdit) {
-        QString shortcut = settings.value("shortcuts/screenshot", defaultScreenshot).toString();
+        const auto& def = shortcutConfig.getShortcut(ShortcutConfig::Screenshot);
+        QString shortcut = settings.value(def.settingsKey, def.defaultShortcut).toString();
 #ifdef Q_OS_MACOS
         shortcut.replace("Meta", "Ctrl"); // Qt displays Cmd as Ctrl
 #endif
@@ -1263,7 +1337,8 @@ void ModernSettingsWindow::loadSettings()
     }
 
     if (toggleShortcutEdit) {
-        QString shortcut = settings.value("shortcuts/toggle", defaultToggle).toString();
+        const auto& def = shortcutConfig.getShortcut(ShortcutConfig::ToggleVisibility);
+        QString shortcut = settings.value(def.settingsKey, def.defaultShortcut).toString();
 #ifdef Q_OS_MACOS
         shortcut.replace("Meta", "Ctrl");
 #endif
@@ -1271,11 +1346,21 @@ void ModernSettingsWindow::loadSettings()
     }
 
     if (chatWindowShortcutEdit) {
-        QString shortcut = settings.value("shortcuts/chatWindow", defaultChatWindow).toString();
+        const auto& def = shortcutConfig.getShortcut(ShortcutConfig::ChatWindow);
+        QString shortcut = settings.value(def.settingsKey, def.defaultShortcut).toString();
 #ifdef Q_OS_MACOS
         shortcut.replace("Meta", "Ctrl");
 #endif
         chatWindowShortcutEdit->setKeySequence(QKeySequence(shortcut));
+    }
+
+    if (readAloudShortcutEdit) {
+        const auto& def = shortcutConfig.getShortcut(ShortcutConfig::ReadAloud);
+        QString shortcut = settings.value(def.settingsKey, def.defaultShortcut).toString();
+#ifdef Q_OS_MACOS
+        shortcut.replace("Meta", "Ctrl");
+#endif
+        readAloudShortcutEdit->setKeySequence(QKeySequence(shortcut));
     }
 
     // OCR
@@ -1371,33 +1456,51 @@ void ModernSettingsWindow::saveSettings()
         settings.setValue("screenshot/dimmingOpacity", screenshotDimmingSlider->value());
     }
 
-    // General - Shortcuts
-    if (screenshotShortcutEdit) {
-        QString shortcut = screenshotShortcutEdit->keySequence().toString();
-#ifdef Q_OS_MACOS
-        shortcut.replace("Ctrl", "Meta"); // Store as Meta for Carbon API
-#endif
-        settings.setValue("shortcuts/screenshot", shortcut);
-        if (shortcutManager) shortcutManager->reloadShortcuts();
-        if (systemTray) systemTray->updateShortcutLabels();
-    }
+    // General - Shortcuts - VALIDATE BEFORE SAVING
+    auto validation = validateShortcuts();
+    if (!validation.first) {
+        // Show error dialog
+        QMessageBox::critical(const_cast<ModernSettingsWindow*>(this),
+                             "Invalid Shortcut Configuration",
+                             validation.second);
 
-    if (toggleShortcutEdit) {
-        QString shortcut = toggleShortcutEdit->keySequence().toString();
+        qWarning() << "Shortcut validation failed:" << validation.second;
+        // Don't save shortcuts if validation fails, but continue saving other settings
+    } else {
+        // Validation passed - proceed with saving shortcuts
+        if (screenshotShortcutEdit) {
+            QString shortcut = screenshotShortcutEdit->keySequence().toString();
 #ifdef Q_OS_MACOS
-        shortcut.replace("Ctrl", "Meta");
+            shortcut.replace("Ctrl", "Meta"); // Store as Meta for Carbon API
 #endif
-        settings.setValue("shortcuts/toggle", shortcut);
-        if (shortcutManager) shortcutManager->reloadShortcuts();
-        if (systemTray) systemTray->updateShortcutLabels();
-    }
+            settings.setValue("shortcuts/screenshot", shortcut);
+        }
 
-    if (chatWindowShortcutEdit) {
-        QString shortcut = chatWindowShortcutEdit->keySequence().toString();
+        if (toggleShortcutEdit) {
+            QString shortcut = toggleShortcutEdit->keySequence().toString();
 #ifdef Q_OS_MACOS
-        shortcut.replace("Ctrl", "Meta");
+            shortcut.replace("Ctrl", "Meta");
 #endif
-        settings.setValue("shortcuts/chatWindow", shortcut);
+            settings.setValue("shortcuts/toggle", shortcut);
+        }
+
+        if (chatWindowShortcutEdit) {
+            QString shortcut = chatWindowShortcutEdit->keySequence().toString();
+#ifdef Q_OS_MACOS
+            shortcut.replace("Ctrl", "Meta");
+#endif
+            settings.setValue("shortcuts/chatWindow", shortcut);
+        }
+
+        if (readAloudShortcutEdit) {
+            QString shortcut = readAloudShortcutEdit->keySequence().toString();
+#ifdef Q_OS_MACOS
+            shortcut.replace("Ctrl", "Meta");
+#endif
+            settings.setValue("shortcuts/readAloud", shortcut);
+        }
+
+        // Only reload shortcuts if validation passed
         if (shortcutManager) shortcutManager->reloadShortcuts();
         if (systemTray) systemTray->updateShortcutLabels();
     }
@@ -1488,6 +1591,102 @@ void ModernSettingsWindow::saveSettings()
     settings.sync();
 }
 
+QPair<bool, QString> ModernSettingsWindow::validateShortcuts() const
+{
+    if (!screenshotShortcutEdit || !toggleShortcutEdit ||
+        !chatWindowShortcutEdit || !readAloudShortcutEdit) {
+        return {true, ""};  // Can't validate if widgets don't exist
+    }
+
+    // Collect all shortcuts with their names
+    QMap<QString, QStringList> shortcutMap;
+
+    auto addShortcut = [&shortcutMap](const QString& key, const QString& name) {
+        if (!key.isEmpty()) {
+            shortcutMap[key].append(name);
+        }
+    };
+
+    addShortcut(screenshotShortcutEdit->keySequence().toString(), "Take Screenshot");
+    addShortcut(toggleShortcutEdit->keySequence().toString(), "Toggle Widget");
+    addShortcut(chatWindowShortcutEdit->keySequence().toString(), "Chat Window");
+    addShortcut(readAloudShortcutEdit->keySequence().toString(), "Read Aloud");
+
+    // Check for duplicates
+    for (auto it = shortcutMap.begin(); it != shortcutMap.end(); ++it) {
+        if (it.value().size() > 1) {
+            QString duplicateNames = it.value().join(", ");
+            QString errorMsg = QString("Duplicate shortcut detected!\n\n"
+                                      "Key combination: %1\n"
+                                      "Used by: %2\n\n"
+                                      "Each shortcut must have a unique key combination.")
+                                .arg(it.key())
+                                .arg(duplicateNames);
+            return {false, errorMsg};
+        }
+    }
+
+    return {true, ""};
+}
+
+void ModernSettingsWindow::resetShortcutsToDefaults()
+{
+    const auto& config = ShortcutConfig::instance();
+
+    // Remove all shortcut settings (will use defaults)
+    settings.remove("shortcuts/screenshot");
+    settings.remove("shortcuts/toggle");
+    settings.remove("shortcuts/chatWindow");
+    settings.remove("shortcuts/readAloud");
+    settings.sync();
+
+    // Update UI with defaults
+    if (screenshotShortcutEdit) {
+        QString shortcut = config.getShortcut(ShortcutConfig::Screenshot).defaultShortcut;
+#ifdef Q_OS_MACOS
+        shortcut.replace("Meta", "Ctrl");
+#endif
+        screenshotShortcutEdit->setKeySequence(QKeySequence(shortcut));
+    }
+
+    if (toggleShortcutEdit) {
+        QString shortcut = config.getShortcut(ShortcutConfig::ToggleVisibility).defaultShortcut;
+#ifdef Q_OS_MACOS
+        shortcut.replace("Meta", "Ctrl");
+#endif
+        toggleShortcutEdit->setKeySequence(QKeySequence(shortcut));
+    }
+
+    if (chatWindowShortcutEdit) {
+        QString shortcut = config.getShortcut(ShortcutConfig::ChatWindow).defaultShortcut;
+#ifdef Q_OS_MACOS
+        shortcut.replace("Meta", "Ctrl");
+#endif
+        chatWindowShortcutEdit->setKeySequence(QKeySequence(shortcut));
+    }
+
+    if (readAloudShortcutEdit) {
+        QString shortcut = config.getShortcut(ShortcutConfig::ReadAloud).defaultShortcut;
+#ifdef Q_OS_MACOS
+        shortcut.replace("Meta", "Ctrl");
+#endif
+        readAloudShortcutEdit->setKeySequence(QKeySequence(shortcut));
+    }
+
+    // Reload shortcuts in the manager
+    if (shortcutManager) {
+        shortcutManager->reloadShortcuts();
+    }
+    if (systemTray) {
+        systemTray->updateShortcutLabels();
+    }
+
+    qInfo() << "Shortcuts reset to defaults";
+
+    QMessageBox::information(this, "Reset Complete",
+        "All shortcuts have been reset to their default values.");
+}
+
 void ModernSettingsWindow::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
@@ -1497,10 +1696,12 @@ void ModernSettingsWindow::showEvent(QShowEvent *event)
 void ModernSettingsWindow::updateGnomeShortcuts()
 {
 #ifdef Q_OS_LINUX
-    // Get the current shortcuts from the UI
-    QString screenshotShortcut = screenshotShortcutEdit ? screenshotShortcutEdit->keySequence().toString() : "Ctrl+Alt+X";
-    QString toggleShortcut = toggleShortcutEdit ? toggleShortcutEdit->keySequence().toString() : "Ctrl+Alt+H";
-    QString chatWindowShortcut = chatWindowShortcutEdit ? chatWindowShortcutEdit->keySequence().toString() : "Ctrl+Alt+C";
+    // Get the current shortcuts from the UI (use ShortcutConfig for fallback defaults)
+    const auto& shortcutConfig = ShortcutConfig::instance();
+    QString screenshotShortcut = screenshotShortcutEdit ? screenshotShortcutEdit->keySequence().toString() : shortcutConfig.getShortcut(ShortcutConfig::Screenshot).defaultShortcut;
+    QString toggleShortcut = toggleShortcutEdit ? toggleShortcutEdit->keySequence().toString() : shortcutConfig.getShortcut(ShortcutConfig::ToggleVisibility).defaultShortcut;
+    QString chatWindowShortcut = chatWindowShortcutEdit ? chatWindowShortcutEdit->keySequence().toString() : shortcutConfig.getShortcut(ShortcutConfig::ChatWindow).defaultShortcut;
+    QString readAloudShortcut = readAloudShortcutEdit ? readAloudShortcutEdit->keySequence().toString() : shortcutConfig.getShortcut(ShortcutConfig::ReadAloud).defaultShortcut;
 
     // Convert Qt key sequence format to GNOME format
     // Qt format: "Ctrl+Alt+X" -> GNOME format: "<Ctrl><Alt>x"
@@ -1517,6 +1718,7 @@ void ModernSettingsWindow::updateGnomeShortcuts()
     QString gnomeScreenshot = qtToGnome(screenshotShortcut);
     QString gnomeToggle = qtToGnome(toggleShortcut);
     QString gnomeChatWindow = qtToGnome(chatWindowShortcut);
+    QString gnomeReadAloud = qtToGnome(readAloudShortcut);
 
     // Get application path
     QString appPath = QCoreApplication::applicationFilePath();
@@ -1530,15 +1732,16 @@ void ModernSettingsWindow::updateGnomeShortcuts()
     getBindings.waitForFinished();
     QString existing = QString::fromUtf8(getBindings.readAll()).trimmed();
 
-    // Find or create custom0, custom1, and custom2
+    // Find or create custom0, custom1, custom2, and custom3
     QString custom0 = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/";
     QString custom1 = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/";
     QString custom2 = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom2/";
+    QString custom3 = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/";
 
     // Update the custom keybindings list if needed
-    if (!existing.contains("custom0") || !existing.contains("custom1") || !existing.contains("custom2")) {
-        commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \"['%1', '%2', '%3']\"")
-                    .arg(custom0).arg(custom1).arg(custom2);
+    if (!existing.contains("custom0") || !existing.contains("custom1") || !existing.contains("custom2") || !existing.contains("custom3")) {
+        commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings \"['%1', '%2', '%3', '%4']\"")
+                    .arg(custom0).arg(custom1).arg(custom2).arg(custom3);
     }
 
     // Set screenshot shortcut (custom0)
@@ -1556,6 +1759,11 @@ void ModernSettingsWindow::updateGnomeShortcuts()
     commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 command '%2 --chat'").arg(custom2).arg(appPath);
     commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 binding '%2'").arg(custom2).arg(gnomeChatWindow);
 
+    // Set read aloud shortcut (custom3)
+    commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 name 'Ohao Read Aloud'").arg(custom3);
+    commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 command '%2 --read-aloud'").arg(custom3).arg(appPath);
+    commands << QString("gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:%1 binding '%2'").arg(custom3).arg(gnomeReadAloud);
+
     // Execute all commands
     bool success = true;
     for (const QString &cmd : commands) {
@@ -1572,11 +1780,13 @@ void ModernSettingsWindow::updateGnomeShortcuts()
             QString("GNOME keyboard shortcuts have been updated:\n\n"
                     "Screenshot: %1\n"
                     "Toggle: %2\n"
-                    "Chat Window: %3\n\n"
+                    "Chat Window: %3\n"
+                    "Read Aloud: %4\n\n"
                     "The shortcuts should work immediately.")
             .arg(screenshotShortcut)
             .arg(toggleShortcut)
-            .arg(chatWindowShortcut));
+            .arg(chatWindowShortcut)
+            .arg(readAloudShortcut));
     } else {
         QMessageBox::warning(this, "Update Failed",
             "Failed to update GNOME shortcuts. Please check the terminal for errors.\n\n"

@@ -3,6 +3,7 @@
 #include <QDialog>
 #include <QListWidget>
 #include <QStackedWidget>
+#include <QScrollArea>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -14,6 +15,7 @@
 #include <QLineEdit>
 #include <QKeySequenceEdit>
 #include <QSettings>
+#include "ShortcutConfig.h"
 
 class TTSEngine;
 class GlobalShortcutManager;
@@ -57,6 +59,8 @@ private:
     void saveSettings();
     void updateGnomeShortcuts();
     void updateVoiceList();
+    void resetShortcutsToDefaults();
+    QPair<bool, QString> validateShortcuts() const;
 
     // Page creators
     QWidget* createGeneralPage();
@@ -80,6 +84,7 @@ private:
     QKeySequenceEdit *screenshotShortcutEdit = nullptr;
     QKeySequenceEdit *toggleShortcutEdit = nullptr;
     QKeySequenceEdit *chatWindowShortcutEdit = nullptr;
+    QKeySequenceEdit *readAloudShortcutEdit = nullptr;
 
     // OCR Page widgets
     QComboBox *ocrEngineCombo = nullptr;

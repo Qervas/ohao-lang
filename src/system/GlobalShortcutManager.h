@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QAbstractNativeEventFilter>
 #include <QByteArray>
+#include "ShortcutConfig.h"
 
 #ifdef Q_OS_MACOS
 #include <Carbon/Carbon.h>
@@ -23,6 +24,7 @@ signals:
     void screenshotRequested();
     void toggleVisibilityRequested();
     void chatWindowRequested();
+    void readAloudRequested();
 
 private:
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
@@ -35,20 +37,24 @@ private:
     int screenshotHotkeyId = 1;
     int toggleHotkeyId = 2;
     int chatWindowHotkeyId = 3;
+    int readAloudHotkeyId = 4;
     bool screenshotRegistered = false;
     bool toggleRegistered = false;
     bool chatWindowRegistered = false;
+    bool readAloudRegistered = false;
 #endif
 
 #ifdef Q_OS_MACOS
     EventHotKeyRef screenshotHotKeyRef;
     EventHotKeyRef toggleHotKeyRef;
     EventHotKeyRef chatWindowHotKeyRef;
+    EventHotKeyRef readAloudHotKeyRef;
     EventHandlerUPP eventHandlerUPP = nullptr;
     EventHandlerRef eventHandlerRef = nullptr;
     bool screenshotRegistered = false;
     bool toggleRegistered = false;
     bool chatWindowRegistered = false;
+    bool readAloudRegistered = false;
 
     static OSStatus hotKeyHandler(EventHandlerCallRef nextHandler, EventRef event, void *userData);
 #endif
@@ -59,12 +65,15 @@ private:
     unsigned int screenshotKeycode = 0;
     unsigned int toggleKeycode = 0;
     unsigned int chatWindowKeycode = 0;
+    unsigned int readAloudKeycode = 0;
     unsigned int screenshotModifiers = 0;
     unsigned int toggleModifiers = 0;
     unsigned int chatWindowModifiers = 0;
+    unsigned int readAloudModifiers = 0;
     bool screenshotRegistered = false;
     bool toggleRegistered = false;
     bool chatWindowRegistered = false;
+    bool readAloudRegistered = false;
 
     void startX11Monitoring();
     void stopX11Monitoring();

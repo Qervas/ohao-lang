@@ -6,6 +6,7 @@
 #include "ModernSettingsWindow.h"
 #include "ThemeManager.h"
 #include "ThemeColors.h"
+#include "ModernTTSManager.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QHBoxLayout>
@@ -23,9 +24,21 @@
 #include <QLocalSocket>
 #include <QDialog>
 #include <QLabel>
+#include <QClipboard>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
+#ifdef Q_OS_MACOS
+#include <CoreGraphics/CoreGraphics.h>
+#endif
 
 #ifdef Q_OS_LINUX
 #include <QProcess>
+#include <X11/Xlib.h>
+#include <X11/extensions/XTest.h>
+#include <X11/keysym.h>
 #endif
 
 FloatingWidget::FloatingWidget(QWidget *parent)
@@ -65,6 +78,8 @@ FloatingWidget::FloatingWidget(QWidget *parent)
             this, &FloatingWidget::toggleVisibility);
     connect(shortcutManager, &GlobalShortcutManager::chatWindowRequested,
             this, &FloatingWidget::openChatWindow);
+    connect(shortcutManager, &GlobalShortcutManager::readAloudRequested,
+            this, &FloatingWidget::readSelectedTextAloud);
     qDebug() << "Global shortcut manager initialized";
 
     // Setup local server for single instance support
@@ -646,4 +661,111 @@ void FloatingWidget::handleNewConnection()
 
         connect(socket, &QLocalSocket::disconnected, socket, &QLocalSocket::deleteLater);
     }
+}
+
+void FloatingWidget::readSelectedTextAloud()
+{
+    qDebug() << "Reading selected text aloud...";
+
+    // Get clipboard
+    QClipboard *clipboard = QApplication::clipboard();
+    if (!clipboard) {
+        qWarning() << "Failed to access clipboard";
+        return;
+    }
+
+    // Save current clipboard content
+    QString originalClipboard = clipboard->text();
+    qDebug() << "Saved original clipboard content";
+
+    // Clear clipboard
+    clipboard->clear();
+
+    // Wait a moment for clipboard to clear
+    QTimer::singleShot(50, [this, clipboard, originalClipboard]() {
+        // Simulate Ctrl+C to copy selected text
+        qDebug() << "Simulating Ctrl+C to copy selected text...";
+
+#ifdef Q_OS_WIN
+        // Windows: Use keybd_event to simulate Ctrl+C
+        // IMPORTANT: Release Ctrl and Alt first to prevent interference with hotkeys
+        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);  // Release Ctrl (if held)
+        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);     // Release Alt (if held)
+        Sleep(10);  // Small delay to ensure keys are released
+
+        keybd_event(VK_CONTROL, 0, 0, 0);  // Press Ctrl
+        keybd_event('C', 0, 0, 0);          // Press C
+        keybd_event('C', 0, KEYEVENTF_KEYUP, 0);  // Release C
+        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);  // Release Ctrl
+#elif defined(Q_OS_MACOS)
+        // macOS: Use CGEvent to simulate Cmd+C
+        CGEventSourceRef source = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+
+        // Press Cmd
+        CGEventRef cmdDown = CGEventCreateKeyboardEvent(source, 55, true);  // 55 = kVK_Command
+        CGEventPost(kCGHIDEventTap, cmdDown);
+
+        // Press C
+        CGEventRef cDown = CGEventCreateKeyboardEvent(source, 8, true);  // 8 = kVK_ANSI_C
+        CGEventSetFlags(cDown, kCGEventFlagMaskCommand);
+        CGEventPost(kCGHIDEventTap, cDown);
+
+        // Release C
+        CGEventRef cUp = CGEventCreateKeyboardEvent(source, 8, false);
+        CGEventSetFlags(cUp, kCGEventFlagMaskCommand);
+        CGEventPost(kCGHIDEventTap, cUp);
+
+        // Release Cmd
+        CGEventRef cmdUp = CGEventCreateKeyboardEvent(source, 55, false);
+        CGEventPost(kCGHIDEventTap, cmdUp);
+
+        CFRelease(cmdDown);
+        CFRelease(cDown);
+        CFRelease(cUp);
+        CFRelease(cmdUp);
+        CFRelease(source);
+#elif defined(Q_OS_LINUX)
+        // Linux: Use XTest to simulate Ctrl+C
+        Display *display = XOpenDisplay(nullptr);
+        if (display) {
+            // Press Ctrl
+            XTestFakeKeyEvent(display, XKeysymToKeycode(display, XK_Control_L), True, 0);
+            // Press C
+            XTestFakeKeyEvent(display, XKeysymToKeycode(display, XK_c), True, 0);
+            // Release C
+            XTestFakeKeyEvent(display, XKeysymToKeycode(display, XK_c), False, 0);
+            // Release Ctrl
+            XTestFakeKeyEvent(display, XKeysymToKeycode(display, XK_Control_L), False, 0);
+            XFlush(display);
+            XCloseDisplay(display);
+        } else {
+            qWarning() << "Failed to open X11 display for keyboard simulation";
+        }
+#endif
+
+        // Wait for clipboard to be populated by the Ctrl+C simulation
+        QTimer::singleShot(150, [this, clipboard, originalClipboard]() {
+            // Read the copied text
+            QString selectedText = clipboard->text();
+
+            if (selectedText.isEmpty()) {
+                qWarning() << "No text was copied to clipboard";
+                // Restore original clipboard
+                clipboard->setText(originalClipboard);
+                return;
+            }
+
+            qDebug() << "Read selected text from clipboard:" << selectedText.left(50) << "...";
+
+            // Speak the text using ModernTTSManager
+            ModernTTSManager::instance().speak(selectedText);
+            qDebug() << "Started TTS for selected text";
+
+            // Restore original clipboard content
+            QTimer::singleShot(100, [clipboard, originalClipboard]() {
+                clipboard->setText(originalClipboard);
+                qDebug() << "Restored original clipboard content";
+            });
+        });
+    });
 }
