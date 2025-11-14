@@ -4,8 +4,6 @@
 #include <QDebug>
 #include <QSettings>
 #include <QKeySequence>
-#include <QFile>
-#include <QTextStream>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -185,30 +183,6 @@ void GlobalShortcutManager::registerShortcuts()
     qDebug() << "  Chat (enum 2, ID" << config.getShortcut(ShortcutConfig::ChatWindow).hotkeyId << "):" << (chatWindowRegistered ? "OK" : "FAIL");
     qDebug() << "  ReadAloud (enum 3, ID" << config.getShortcut(ShortcutConfig::ReadAloud).hotkeyId << "):" << (readAloudRegistered ? "OK" : "FAIL");
     qDebug() << "========================================";
-
-    // Write debug info to file for Windows debugging
-    QFile debugFile("C:/Users/djmax/Desktop/shortcut-debug.txt");
-    if (debugFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream out(&debugFile);
-        out << "Shortcut Registration Debug\n";
-        out << "============================\n\n";
-
-        // Show actual key combinations registered
-        auto screenshotKey = settings.value(config.getShortcut(ShortcutConfig::Screenshot).settingsKey,
-                                             config.getShortcut(ShortcutConfig::Screenshot).defaultShortcut).toString();
-        auto toggleKey = settings.value(config.getShortcut(ShortcutConfig::ToggleVisibility).settingsKey,
-                                         config.getShortcut(ShortcutConfig::ToggleVisibility).defaultShortcut).toString();
-        auto chatKey = settings.value(config.getShortcut(ShortcutConfig::ChatWindow).settingsKey,
-                                       config.getShortcut(ShortcutConfig::ChatWindow).defaultShortcut).toString();
-        auto readAloudKey = settings.value(config.getShortcut(ShortcutConfig::ReadAloud).settingsKey,
-                                            config.getShortcut(ShortcutConfig::ReadAloud).defaultShortcut).toString();
-
-        out << "Screenshot (enum 0, ID " << config.getShortcut(ShortcutConfig::Screenshot).hotkeyId << ", Key: " << screenshotKey << "): " << (screenshotRegistered ? "OK" : "FAIL") << "\n";
-        out << "Toggle (enum 1, ID " << config.getShortcut(ShortcutConfig::ToggleVisibility).hotkeyId << ", Key: " << toggleKey << "): " << (toggleRegistered ? "OK" : "FAIL") << "\n";
-        out << "Chat (enum 2, ID " << config.getShortcut(ShortcutConfig::ChatWindow).hotkeyId << ", Key: " << chatKey << "): " << (chatWindowRegistered ? "OK" : "FAIL") << "\n";
-        out << "ReadAloud (enum 3, ID " << config.getShortcut(ShortcutConfig::ReadAloud).hotkeyId << ", Key: " << readAloudKey << "): " << (readAloudRegistered ? "OK" : "FAIL") << "\n";
-        debugFile.close();
-    }
 
     if (!allSucceeded) {
         qWarning() << "════════════════════════════════════════════════════════";
@@ -758,25 +732,6 @@ bool GlobalShortcutManager::nativeEventFilter(const QByteArray &eventType, void 
             }
             qDebug() << "  Will emit signal:" << signalName;
             qDebug() << "========================================";
-
-            // Write to debug file (use WriteOnly to overwrite each time for simplicity)
-            static int pressCount = 0;
-            pressCount++;
-            QFile debugFile(QString("C:/Users/djmax/Desktop/shortcut-press-%1.txt").arg(pressCount));
-            if (debugFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                QTextStream out(&debugFile);
-                out << "Hotkey Press #" << pressCount << "\n";
-                out << "==================\n\n";
-                out << "Received ID: " << hotkeyId << "\n";
-                out << "Mapped to action enum: " << static_cast<int>(action) << "\n";
-                out << "Signal to emit: " << signalName << "\n\n";
-                out << "Expected IDs:\n";
-                out << "  Screenshot: " << config.getShortcut(ShortcutConfig::Screenshot).hotkeyId << "\n";
-                out << "  Toggle: " << config.getShortcut(ShortcutConfig::ToggleVisibility).hotkeyId << "\n";
-                out << "  Chat: " << config.getShortcut(ShortcutConfig::ChatWindow).hotkeyId << "\n";
-                out << "  ReadAloud: " << config.getShortcut(ShortcutConfig::ReadAloud).hotkeyId << "\n";
-                debugFile.close();
-            }
 
             // Dispatch based on action enum
             switch (action) {

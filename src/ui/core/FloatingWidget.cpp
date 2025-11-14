@@ -3,7 +3,7 @@
 #include "../screenshot/ScreenshotWidget.h"
 #include "../chat/ChatWindow.h"
 #include "ScreenCapture.h"
-#include "ModernSettingsWindow.h"
+#include "../settings/ModernSettingsWindow.h"
 #include "ThemeManager.h"
 #include "ThemeColors.h"
 #include "ModernTTSManager.h"
