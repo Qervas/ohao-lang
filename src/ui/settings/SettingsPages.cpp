@@ -30,6 +30,13 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QKeySequenceEdit>
+#include <QDialog>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 namespace SettingsPages
 {
@@ -130,25 +137,89 @@ QWidget* createGeneralPage(ModernSettingsWindow* parent,
     shortcutsLayout->setSpacing(12);
     shortcutsLayout->setContentsMargins(0, 0, 0, 0);
 
-    parent->screenshotShortcutEdit = new QKeySequenceEdit();
-    QObject::connect(parent->screenshotShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
-            parent, &ModernSettingsWindow::onSettingChanged);
-    shortcutsLayout->addRow("Take Screenshot:", parent->screenshotShortcutEdit);
+    // Helper lambda: creates a shortcut row with a display label and "Set" button.
+    // Clicking "Set" opens a modal dialog to capture the new key combination,
+    // preventing accidental shortcut changes from stray keypresses.
+    auto createShortcutRow = [parent, shortcutsLayout](
+            const QString &label, QKeySequenceEdit *&editPtr) {
+        editPtr = new QKeySequenceEdit();
+        editPtr->setVisible(false); // Hidden - only used as data holder
 
-    parent->toggleShortcutEdit = new QKeySequenceEdit();
-    QObject::connect(parent->toggleShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
-            parent, &ModernSettingsWindow::onSettingChanged);
-    shortcutsLayout->addRow("Toggle Widget:", parent->toggleShortcutEdit);
+        QHBoxLayout *row = new QHBoxLayout();
+        QLabel *display = new QLabel();
+        display->setMinimumWidth(160);
+        display->setStyleSheet("padding: 6px 10px; border: 1px solid palette(mid); border-radius: 6px; background: palette(base);");
 
-    parent->chatWindowShortcutEdit = new QKeySequenceEdit();
-    QObject::connect(parent->chatWindowShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
-            parent, &ModernSettingsWindow::onSettingChanged);
-    shortcutsLayout->addRow("Toggle Chat Window:", parent->chatWindowShortcutEdit);
+        QPushButton *setBtn = new QPushButton("Set...");
+        setBtn->setMaximumWidth(70);
+        setBtn->setCursor(Qt::PointingHandCursor);
+        setBtn->setToolTip("Click to set a new shortcut");
 
-    parent->readAloudShortcutEdit = new QKeySequenceEdit();
-    QObject::connect(parent->readAloudShortcutEdit, &QKeySequenceEdit::keySequenceChanged,
-            parent, &ModernSettingsWindow::onSettingChanged);
-    shortcutsLayout->addRow("Read Selected Text Aloud:", parent->readAloudShortcutEdit);
+        row->addWidget(display, 1);
+        row->addWidget(setBtn);
+
+        // Sync display with the hidden QKeySequenceEdit
+        auto updateDisplay = [display, editPtr]() {
+            QString seq = editPtr->keySequence().toString(QKeySequence::NativeText);
+            display->setText(seq.isEmpty() ? "(none)" : seq);
+        };
+
+        QObject::connect(editPtr, &QKeySequenceEdit::keySequenceChanged,
+                         parent, [updateDisplay, parent]() {
+            updateDisplay();
+            parent->onSettingChanged();
+        });
+
+        // "Set" button opens a modal dialog
+        QObject::connect(setBtn, &QPushButton::clicked, parent, [parent, editPtr, label, updateDisplay]() {
+            QDialog dialog(parent);
+            dialog.setWindowTitle("Set Shortcut");
+            dialog.setFixedSize(350, 160);
+            dialog.setModal(true);
+
+            QVBoxLayout *dlgLayout = new QVBoxLayout(&dialog);
+            dlgLayout->setSpacing(12);
+            dlgLayout->setContentsMargins(20, 20, 20, 20);
+
+            QLabel *prompt = new QLabel(QString("Press your desired key combination for:\n<b>%1</b>").arg(label));
+            prompt->setTextFormat(Qt::RichText);
+            prompt->setWordWrap(true);
+            dlgLayout->addWidget(prompt);
+
+            QKeySequenceEdit *capture = new QKeySequenceEdit(&dialog);
+            capture->setKeySequence(editPtr->keySequence());
+            dlgLayout->addWidget(capture);
+
+            // Auto-focus the capture field
+            capture->setFocus();
+
+            QHBoxLayout *btnLayout = new QHBoxLayout();
+            btnLayout->addStretch();
+            QPushButton *okBtn = new QPushButton("OK");
+            QPushButton *cancelBtn = new QPushButton("Cancel");
+            okBtn->setDefault(true);
+            btnLayout->addWidget(cancelBtn);
+            btnLayout->addWidget(okBtn);
+            dlgLayout->addLayout(btnLayout);
+
+            QObject::connect(okBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
+            QObject::connect(cancelBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+            if (dialog.exec() == QDialog::Accepted) {
+                QKeySequence newSeq = capture->keySequence();
+                if (!newSeq.isEmpty()) {
+                    editPtr->setKeySequence(newSeq);
+                }
+            }
+        });
+
+        shortcutsLayout->addRow(label + ":", row);
+    };
+
+    createShortcutRow("Take Screenshot", parent->screenshotShortcutEdit);
+    createShortcutRow("Toggle Widget", parent->toggleShortcutEdit);
+    createShortcutRow("Toggle Chat Window", parent->chatWindowShortcutEdit);
+    createShortcutRow("Read Selected Text Aloud", parent->readAloudShortcutEdit);
 
     // Add Reset to Defaults button
     QPushButton *resetShortcutsBtn = new QPushButton("Reset to Defaults");
@@ -709,7 +780,7 @@ QWidget* createAIPage(ModernSettingsWindow* parent, QSettings& settings)
     layout->setContentsMargins(24, 24, 24, 24);
 
     // Title
-    QLabel *titleLabel = new QLabel("AI Assistant Settings (Beta)");
+    QLabel *titleLabel = new QLabel("AI Assistant Settings");
     titleLabel->setObjectName("pageTitle");
     layout->addWidget(titleLabel);
 
@@ -730,76 +801,209 @@ QWidget* createAIPage(ModernSettingsWindow* parent, QSettings& settings)
     });
     aiForm->addRow("Enable AI Assistant:", enabledCheck);
 
-    // Provider dropdown
+    // Provider preset dropdown
     QComboBox *providerCombo = new QComboBox();
-    providerCombo->addItem("GitHub Copilot");
-    providerCombo->setCurrentText(AppSettings::instance().getAIConfig().provider);
-    QObject::connect(providerCombo, &QComboBox::currentTextChanged, parent, [](const QString &provider) {
-        auto config = AppSettings::instance().getAIConfig();
-        config.provider = provider;
-        AppSettings::instance().setAIConfig(config);
-    });
-    aiForm->addRow("Service Provider:", providerCombo);
+    providerCombo->addItem("Groq (Recommended)", "Groq");
+    providerCombo->addItem("OpenAI", "OpenAI");
+    providerCombo->addItem("Ollama (Local)", "Ollama");
+    providerCombo->addItem("LM Studio (Local)", "LM Studio");
+    providerCombo->addItem("Custom Endpoint", "Custom");
+
+    // Set current provider
+    QString currentProvider = AppSettings::instance().getAIConfig().provider;
+    int providerIndex = providerCombo->findData(currentProvider);
+    if (providerIndex >= 0) {
+        providerCombo->setCurrentIndex(providerIndex);
+    }
 
     // API URL
     QLineEdit *urlEdit = new QLineEdit();
     urlEdit->setText(AppSettings::instance().getAIConfig().apiUrl);
-    urlEdit->setPlaceholderText("http://localhost:4141");
-    QObject::connect(urlEdit, &QLineEdit::textChanged, parent, [](const QString &url) {
-        auto config = AppSettings::instance().getAIConfig();
-        config.apiUrl = url;
-        AppSettings::instance().setAIConfig(config);
-    });
-    aiForm->addRow("API URL:", urlEdit);
+    urlEdit->setPlaceholderText("https://api.groq.com/openai");
 
-    // Model selection with refresh button
+    // API Key
+    QLineEdit *apiKeyEdit = new QLineEdit();
+    apiKeyEdit->setText(AppSettings::instance().getAIConfig().apiKey);
+    apiKeyEdit->setPlaceholderText("Enter your API key...");
+    apiKeyEdit->setEchoMode(QLineEdit::Password);
+
+    // Show/hide API key toggle
+    QHBoxLayout *apiKeyRow = new QHBoxLayout();
+    QPushButton *toggleKeyVisibility = new QPushButton("Show");
+    toggleKeyVisibility->setMaximumWidth(60);
+    toggleKeyVisibility->setCheckable(true);
+    QObject::connect(toggleKeyVisibility, &QPushButton::toggled, parent, [apiKeyEdit, toggleKeyVisibility](bool checked) {
+        apiKeyEdit->setEchoMode(checked ? QLineEdit::Normal : QLineEdit::Password);
+        toggleKeyVisibility->setText(checked ? "Hide" : "Show");
+    });
+    apiKeyRow->addWidget(apiKeyEdit, 1);
+    apiKeyRow->addWidget(toggleKeyVisibility);
+
+    // Model - editable combo box so users can type custom model names
     QHBoxLayout *modelRow = new QHBoxLayout();
     QComboBox *modelCombo = new QComboBox();
+    modelCombo->setEditable(true);
+    modelCombo->setInsertPolicy(QComboBox::NoInsert);
 
-    // Add all available models (free models marked with ⭐)
-    QStringList freeModels = {"gpt-4o", "gpt-4.1", "grok-code-fast-1", "gpt-5-mini"};
-    QStringList allModels = {
-        "gpt-4.1", "gpt-5-mini", "gpt-5", "gpt-3.5-turbo", "gpt-3.5-turbo-0613",
-        "gpt-4o-mini", "gpt-4o-mini-2024-07-18", "gpt-4", "gpt-4-0613",
-        "gpt-4-0125-preview", "gpt-4o", "gpt-4o-2024-11-20", "gpt-4o-2024-05-13",
-        "gpt-4-o-preview", "gpt-4o-2024-08-06", "o3-mini-paygo", "gpt-41-copilot",
-        "grok-code-fast-1", "gpt-5-codex", "text-embedding-ada-002",
-        "text-embedding-3-small", "text-embedding-3-small-inference",
-        "claude-3.5-sonnet", "claude-sonnet-4", "claude-sonnet-4.5",
-        "claude-haiku-4.5", "gemini-2.5-pro", "gpt-4.1-2025-04-14"
+    // Helper to populate models based on provider
+    auto populateModels = [modelCombo](const QString &provider) {
+        QString currentModel = modelCombo->currentText();
+        modelCombo->clear();
+
+        if (provider == "Groq") {
+            modelCombo->addItems({
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
+                "llama-guard-3-8b",
+                "mixtral-8x7b-32768",
+                "gemma2-9b-it"
+            });
+        } else if (provider == "OpenAI") {
+            modelCombo->addItems({
+                "gpt-4o",
+                "gpt-4o-mini",
+                "gpt-4-turbo",
+                "gpt-3.5-turbo",
+                "o3-mini"
+            });
+        } else if (provider == "Ollama") {
+            modelCombo->addItems({
+                "llama3.2",
+                "llama3.1",
+                "mistral",
+                "mixtral",
+                "phi3",
+                "gemma2",
+                "qwen2.5"
+            });
+        } else if (provider == "LM Studio") {
+            // LM Studio models are user-loaded, just provide a placeholder
+            modelCombo->addItems({
+                "local-model"
+            });
+        }
+        // For Custom or if old model not in list, keep the text editable
+        // Try to restore previous model if it exists in new list
+        int idx = modelCombo->findText(currentModel);
+        if (idx >= 0) {
+            modelCombo->setCurrentIndex(idx);
+        }
     };
 
-    for (const QString &model : allModels) {
-        if (freeModels.contains(model)) {
-            modelCombo->addItem("⭐ " + model + " (Free)", model);
-        } else {
-            modelCombo->addItem(model, model);
-        }
-    }
-
-    // Set current model
-    QString currentModel = AppSettings::instance().getAIConfig().model;
-    int index = modelCombo->findData(currentModel);
-    if (index >= 0) {
-        modelCombo->setCurrentIndex(index);
-    }
-
-    QObject::connect(modelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), parent, [modelCombo](int) {
+    // Provider change handler - auto-fill URL, models, and key hint
+    QObject::connect(providerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                     parent, [providerCombo, urlEdit, apiKeyEdit, modelCombo, populateModels](int) {
+        QString provider = providerCombo->currentData().toString();
         auto config = AppSettings::instance().getAIConfig();
-        config.model = modelCombo->currentData().toString();
+        config.provider = provider;
+
+        if (provider == "Groq") {
+            urlEdit->setText("https://api.groq.com/openai");
+            urlEdit->setPlaceholderText("https://api.groq.com/openai");
+            apiKeyEdit->setPlaceholderText("gsk_...");
+            config.apiUrl = "https://api.groq.com/openai";
+        } else if (provider == "OpenAI") {
+            urlEdit->setText("https://api.openai.com");
+            urlEdit->setPlaceholderText("https://api.openai.com");
+            apiKeyEdit->setPlaceholderText("sk-...");
+            config.apiUrl = "https://api.openai.com";
+        } else if (provider == "Ollama") {
+            urlEdit->setText("http://localhost:11434");
+            urlEdit->setPlaceholderText("http://localhost:11434");
+            apiKeyEdit->setPlaceholderText("(not required for Ollama)");
+            config.apiUrl = "http://localhost:11434";
+        } else if (provider == "LM Studio") {
+            urlEdit->setText("http://localhost:1234");
+            urlEdit->setPlaceholderText("http://localhost:1234");
+            apiKeyEdit->setPlaceholderText("(not required for LM Studio)");
+            config.apiUrl = "http://localhost:1234";
+        } else {
+            urlEdit->setPlaceholderText("https://your-api-endpoint.com");
+            apiKeyEdit->setPlaceholderText("Enter your API key...");
+        }
+
+        populateModels(provider);
+        if (modelCombo->count() > 0) {
+            config.model = modelCombo->currentText();
+        }
+
         AppSettings::instance().setAIConfig(config);
     });
 
-    QPushButton *refreshModelsBtn = new QPushButton("🔄 Refresh", parent);
-    refreshModelsBtn->setMaximumWidth(100);
-    refreshModelsBtn->setToolTip("Fetch models from API endpoint (GET /v1/models)");
-    QObject::connect(refreshModelsBtn, &QPushButton::clicked, parent, [parent, modelCombo, freeModels]() {
-        // TODO: Implement API call to GET /v1/models
-        // For now, show a message
-        QMessageBox::information(parent, "Refresh Models",
-            "Model refresh will fetch from:\n\n"
-            "GET " + AppSettings::instance().getAIConfig().apiUrl + "/v1/models\n\n"
-            "This feature will be implemented to dynamically load available models.");
+    aiForm->addRow("Provider:", providerCombo);
+
+    // API URL row
+    QObject::connect(urlEdit, &QLineEdit::editingFinished, parent, [urlEdit]() {
+        auto config = AppSettings::instance().getAIConfig();
+        config.apiUrl = urlEdit->text();
+        AppSettings::instance().setAIConfig(config);
+    });
+    aiForm->addRow("API Endpoint:", urlEdit);
+
+    // API Key row
+    QObject::connect(apiKeyEdit, &QLineEdit::editingFinished, parent, [apiKeyEdit]() {
+        auto config = AppSettings::instance().getAIConfig();
+        config.apiKey = apiKeyEdit->text();
+        AppSettings::instance().setAIConfig(config);
+    });
+    aiForm->addRow("API Key:", apiKeyRow);
+
+    // Populate initial models
+    populateModels(currentProvider);
+    // Set current model text (works because combo is editable)
+    modelCombo->setCurrentText(AppSettings::instance().getAIConfig().model);
+
+    QObject::connect(modelCombo, &QComboBox::currentTextChanged, parent, [](const QString &model) {
+        if (!model.isEmpty()) {
+            auto config = AppSettings::instance().getAIConfig();
+            config.model = model;
+            AppSettings::instance().setAIConfig(config);
+        }
+    });
+
+    // Refresh models button - fetches from /v1/models
+    QPushButton *refreshModelsBtn = new QPushButton("Refresh");
+    refreshModelsBtn->setMaximumWidth(80);
+    refreshModelsBtn->setToolTip("Fetch available models from API (GET /v1/models)");
+    QObject::connect(refreshModelsBtn, &QPushButton::clicked, parent, [parent, modelCombo]() {
+        auto config = AppSettings::instance().getAIConfig();
+        QString url = config.apiUrl + "/v1/models";
+
+        QNetworkAccessManager *mgr = new QNetworkAccessManager(parent);
+        QUrl reqUrl(url);
+        QNetworkRequest req(reqUrl);
+        req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        if (!config.apiKey.isEmpty()) {
+            req.setRawHeader("Authorization", QString("Bearer %1").arg(config.apiKey).toUtf8());
+        }
+
+        QNetworkReply *reply = mgr->get(req);
+        QObject::connect(reply, &QNetworkReply::finished, parent, [reply, modelCombo, mgr]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
+                QJsonArray data = doc.object()["data"].toArray();
+                if (!data.isEmpty()) {
+                    QString current = modelCombo->currentText();
+                    modelCombo->clear();
+                    for (const QJsonValue &val : data) {
+                        QString id = val.toObject()["id"].toString();
+                        if (!id.isEmpty()) {
+                            modelCombo->addItem(id);
+                        }
+                    }
+                    // Restore selection
+                    int idx = modelCombo->findText(current);
+                    if (idx >= 0) modelCombo->setCurrentIndex(idx);
+                    else if (modelCombo->count() > 0) modelCombo->setCurrentIndex(0);
+                }
+            } else {
+                QMessageBox::warning(nullptr, "Fetch Models",
+                    "Failed to fetch models:\n" + reply->errorString() +
+                    "\n\nMake sure the endpoint is correct and the service is running.");
+            }
+            reply->deleteLater();
+            mgr->deleteLater();
+        });
     });
 
     modelRow->addWidget(modelCombo, 1);
@@ -825,7 +1029,7 @@ QWidget* createAIPage(ModernSettingsWindow* parent, QSettings& settings)
 
     // Max tokens
     QSpinBox *tokensSpinBox = new QSpinBox();
-    tokensSpinBox->setRange(100, 4000);
+    tokensSpinBox->setRange(100, 32000);
     tokensSpinBox->setValue(AppSettings::instance().getAIConfig().maxTokens);
     tokensSpinBox->setSingleStep(100);
     QObject::connect(tokensSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), parent, [](int value) {
@@ -876,30 +1080,35 @@ QWidget* createAIPage(ModernSettingsWindow* parent, QSettings& settings)
 
     layout->addWidget(aiGroup);
 
-    // Setup Instructions
-    QGroupBox *setupGroup = new QGroupBox("📋 Setup Instructions");
+    // Quick Start Guide
+    QGroupBox *setupGroup = new QGroupBox("📋 Quick Start");
     setupGroup->setObjectName("settingsGroup");
     QVBoxLayout *setupLayout = new QVBoxLayout();
 
     QLabel *setupText = new QLabel(
-        "To use AI features, install and run copilot-api:\n\n"
-        "1. Authenticate: npx copilot-api@latest auth\n"
-        "2. Start server: npx copilot-api@latest start\n\n"
-        "Requirements:\n"
-        "• GitHub Copilot subscription\n"
-        "• Node.js or Bun runtime\n\n"
-        "The service will run on http://localhost:4141 by default."
+        "<b>Bring Your Own Key</b> - Use any OpenAI-compatible API provider:<br><br>"
+        "<b>Groq (Recommended - Free Tier Available):</b><br>"
+        "1. Sign up at <a href='https://console.groq.com'>console.groq.com</a><br>"
+        "2. Create an API key<br>"
+        "3. Paste key above - you're done!<br><br>"
+        "<b>OpenAI:</b><br>"
+        "1. Get API key from <a href='https://platform.openai.com/api-keys'>platform.openai.com</a><br>"
+        "2. Select OpenAI provider, paste key<br><br>"
+        "<b>Ollama (Local, Free, Private):</b><br>"
+        "1. Install Ollama from <a href='https://ollama.com'>ollama.com</a><br>"
+        "2. Run: <code>ollama pull llama3.2</code><br>"
+        "3. Select Ollama provider - no API key needed<br><br>"
+        "<b>LM Studio (Local, Free, Private):</b><br>"
+        "1. Install from <a href='https://lmstudio.ai'>lmstudio.ai</a><br>"
+        "2. Load a model and start the server<br>"
+        "3. Select LM Studio provider - no API key needed<br><br>"
+        "<b>Custom Endpoint:</b><br>"
+        "Any service with an OpenAI-compatible /v1/chat/completions API works."
     );
     setupText->setWordWrap(true);
+    setupText->setTextFormat(Qt::RichText);
+    setupText->setOpenExternalLinks(true);
     setupLayout->addWidget(setupText);
-
-    QPushButton *copyButton = new QPushButton("📋 Copy Commands");
-    copyButton->setMaximumWidth(150);
-    QObject::connect(copyButton, &QPushButton::clicked, parent, []() {
-        QClipboard *clipboard = QApplication::clipboard();
-        clipboard->setText("npx copilot-api@latest auth\nnpx copilot-api@latest start");
-    });
-    setupLayout->addWidget(copyButton);
 
     setupGroup->setLayout(setupLayout);
     layout->addWidget(setupGroup);
@@ -909,12 +1118,13 @@ QWidget* createAIPage(ModernSettingsWindow* parent, QSettings& settings)
     infoGroup->setObjectName("settingsGroup");
     QVBoxLayout *infoLayout = new QVBoxLayout();
     QLabel *infoText = new QLabel(
-        "AI Assistant adds intelligent chat capabilities to Translation Chat:\n\n"
+        "AI Assistant adds intelligent chat capabilities to the Translation Chat window:\n\n"
         "• Context-aware responses with conversation history\n"
         "• Language learning assistance and explanations\n"
         "• Automatic fallback to translation if AI is unavailable\n"
-        "• Token usage tracking for transparency\n\n"
-        "Note: This is a beta feature. AI services run externally and require setup."
+        "• Token usage tracking for transparency\n"
+        "• Works with any OpenAI-compatible API\n\n"
+        "Your API key is stored locally and never shared."
     );
     infoText->setWordWrap(true);
     infoLayout->addWidget(infoText);
@@ -1064,9 +1274,9 @@ QWidget* createHelpPage()
         "<b>Setup:</b><br>"
         "1. Go to <i>AI</i> tab<br>"
         "2. Enable AI Assistant<br>"
-        "3. Configure your AI provider (GitHub Copilot, OpenAI, etc.)<br>"
-        "4. Enter API URL and select model<br><br>"
-        "<b>Beta Note:</b> This feature is in beta and requires an API connection."
+        "3. Choose a provider (Groq, OpenAI, Ollama, LM Studio, or Custom)<br>"
+        "4. Enter your API key and select a model<br><br>"
+        "<b>Tip:</b> Groq offers a free tier. For fully local/private AI, use Ollama or LM Studio."
     );
     chatText->setWordWrap(true);
     chatText->setTextFormat(Qt::RichText);
@@ -1131,7 +1341,7 @@ QWidget* createHelpPage()
         "• <b>Poor OCR accuracy:</b> Try switching OCR engine or adjusting screenshot quality<br>"
         "• <b>Translation fails:</b> Check internet connection and API settings<br>"
         "• <b>No TTS voice:</b> Install system TTS voices or enable Edge TTS with internet<br>"
-        "• <b>AI Chat not responding:</b> Verify API URL and internet connection in <i>AI</i> tab<br><br>"
+        "• <b>AI Chat not responding:</b> Check API key, endpoint URL, and that the service is running<br><br>"
         "<b>For more help:</b> Visit the project repository or check the documentation."
     );
     troubleshootText->setWordWrap(true);

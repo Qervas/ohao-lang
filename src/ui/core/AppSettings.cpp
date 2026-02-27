@@ -225,10 +225,10 @@ AppSettings::AIConfig AppSettings::getAIConfig() const
 {
     if (!m_aiCacheValid) {
         m_cachedAIConfig.enabled = m_settings->value("ai/enabled", false).toBool();
-        m_cachedAIConfig.provider = m_settings->value("ai/provider", "GitHub Copilot").toString();
-        m_cachedAIConfig.apiUrl = m_settings->value("ai/apiUrl", "http://localhost:4141").toString();
+        m_cachedAIConfig.provider = m_settings->value("ai/provider", "Groq").toString();
+        m_cachedAIConfig.apiUrl = m_settings->value("ai/apiUrl", "https://api.groq.com/openai").toString();
         m_cachedAIConfig.apiKey = m_settings->value("ai/apiKey", "").toString();
-        m_cachedAIConfig.model = m_settings->value("ai/model", "gpt-4o").toString();
+        m_cachedAIConfig.model = m_settings->value("ai/model", "llama-3.3-70b-versatile").toString();
         m_cachedAIConfig.temperature = m_settings->value("ai/temperature", 0.7f).toFloat();
         m_cachedAIConfig.maxTokens = m_settings->value("ai/maxTokens", 2000).toInt();
         m_cachedAIConfig.streamResponse = m_settings->value("ai/streamResponse", false).toBool();
@@ -261,6 +261,7 @@ void AppSettings::setAIConfig(const AIConfig& config)
 
     m_cachedAIConfig = config;
     m_aiCacheValid = true;
+    m_settings->sync();
 
     emit aiSettingsChanged();
     emit settingsChanged();

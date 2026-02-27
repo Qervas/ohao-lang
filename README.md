@@ -38,14 +38,14 @@
 - Language-specific test sentences for 38 languages
 - Voice persistence and per-language configuration
 
-### 🤖 AI Assistant (Beta)
+### 🤖 AI Assistant
 - **Dual-mode chat** - Translation mode + AI Assistant mode
-- **GitHub Copilot API** integration via [copilot-api](https://github.com/ericc-ch/copilot-api)
+- **Bring Your Own Key** - Use any OpenAI-compatible API
+- **Provider presets** - Groq (recommended), OpenAI, Ollama, LM Studio, or custom endpoint
+- **Local LLM support** - Ollama, LM Studio for fully private/offline AI
 - Context-aware responses with conversation history
-- **28 available models** - 4 free models: gpt-4o, gpt-4.1, grok-code-fast-1, gpt-5-mini
 - Token usage tracking for transparency
 - Auto-fallback to translation when AI unavailable
-- **External service** - Requires separate copilot-api setup
 
 ### ⚡ Features
 - Global shortcuts (customizable)
@@ -189,7 +189,6 @@ Settings available in app:
 - **[Hunspell](https://hunspell.github.io/)** - Spell checker and morphological analyzer
 - **[wooorm/dictionaries](https://github.com/wooorm/dictionaries)** - Hunspell dictionaries for 15 languages
 - **[Tesseract OCR](https://github.com/tesseract-ocr/tesseract)** - OCR engine
-- **[copilot-api](https://github.com/ericc-ch/copilot-api)** - GitHub Copilot API proxy for AI assistant features
 - **Qt Framework** - Cross-platform application framework
 
 ## 📄 License

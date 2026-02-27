@@ -82,13 +82,13 @@ public:
     ChatConfig getChatConfig() const;
     void setChatConfig(const ChatConfig& config);
 
-    // === AI Assistant Settings (Beta) ===
+    // === AI Assistant Settings ===
     struct AIConfig {
         bool enabled = false;
-        QString provider = "GitHub Copilot";
-        QString apiUrl = "http://localhost:4141";
-        QString apiKey = "";
-        QString model = "gpt-4o";  // Default to free model
+        QString provider = "Groq";  // Groq (recommended), OpenAI, Ollama, LM Studio, Custom
+        QString apiUrl = "https://api.groq.com/openai";
+        QString apiKey = "";  // User brings their own key
+        QString model = "llama-3.3-70b-versatile";
         float temperature = 0.7f;
         int maxTokens = 2000;
         bool streamResponse = false;

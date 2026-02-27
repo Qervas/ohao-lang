@@ -10,18 +10,17 @@
 #include <QTimer>
 
 /**
- * @brief AI Engine - Communication with AI service providers
+ * @brief AI Engine - Communication with OpenAI-compatible API providers
  *
- * Supports OpenAI-compatible API endpoints like GitHub Copilot API.
- * Handles HTTP requests, response parsing, error handling, and token tracking.
+ * Supports any OpenAI-compatible API endpoint (Groq, OpenAI, Ollama, LM Studio, etc.).
+ * Users bring their own API key and configure the endpoint.
  *
  * Features:
  * - Asynchronous HTTP communication
  * - Conversation history management
  * - Token usage tracking
  * - Connection health checks
- * - Automatic retry on transient failures
- * - Streaming response support (future)
+ * - Works with any /v1/chat/completions compatible API
  */
 class AIEngine : public QObject
 {

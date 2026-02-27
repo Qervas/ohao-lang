@@ -20,6 +20,7 @@
 #include <QClipboard>
 #include <QSpinBox>
 #include <QScrollArea>
+#include <QCloseEvent>
 
 ModernSettingsWindow::ModernSettingsWindow(QWidget *parent)
     : QDialog(parent)
@@ -799,6 +800,16 @@ void ModernSettingsWindow::showEvent(QShowEvent *event)
 {
     QDialog::showEvent(event);
     qDebug() << "ModernSettingsWindow: Window shown";
+}
+
+void ModernSettingsWindow::closeEvent(QCloseEvent *event)
+{
+    // Ensure all settings are flushed to disk on close
+    saveSettings();
+    settings.sync();
+    AppSettings::instance().save();
+    qDebug() << "ModernSettingsWindow: Settings synced on close";
+    QDialog::closeEvent(event);
 }
 
 void ModernSettingsWindow::updateGnomeShortcuts()

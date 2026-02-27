@@ -230,58 +230,58 @@ void ChatWindow::setupAI()
         return;
     }
 
-    // Only set up when GitHub Copilot provider is selected
-    if (aiConfig.provider == "GitHub Copilot") {
-        m_aiEngine = new AIEngine(this);
-        m_aiEngine->setProvider(aiConfig.provider);
-        m_aiEngine->setApiUrl(aiConfig.apiUrl);
-        m_aiEngine->setModel(aiConfig.model);
-        m_aiEngine->setTemperature(aiConfig.temperature);
-        m_aiEngine->setMaxTokens(aiConfig.maxTokens);
-        m_aiEngine->setSystemPrompt(aiConfig.systemPrompt);
+    m_aiEngine = new AIEngine(this);
+    m_aiEngine->setProvider(aiConfig.provider);
+    m_aiEngine->setApiUrl(aiConfig.apiUrl);
+    m_aiEngine->setApiKey(aiConfig.apiKey);
+    m_aiEngine->setModel(aiConfig.model);
+    m_aiEngine->setTemperature(aiConfig.temperature);
+    m_aiEngine->setMaxTokens(aiConfig.maxTokens);
+    m_aiEngine->setSystemPrompt(aiConfig.systemPrompt);
 
-        qDebug() << "ChatWindow: AI Engine initialized with" << aiConfig.provider;
-        qDebug() << "  API URL:" << aiConfig.apiUrl;
-        qDebug() << "  Model:" << aiConfig.model;
+    qDebug() << "ChatWindow: AI Engine initialized with" << aiConfig.provider;
+    qDebug() << "  API URL:" << aiConfig.apiUrl;
+    qDebug() << "  Model:" << aiConfig.model;
 
-        // Connect signals
-        connect(m_aiEngine, &AIEngine::responseReceived,
-                this, &ChatWindow::onAIResponseReceived);
-        connect(m_aiEngine, &AIEngine::errorOccurred,
-                this, &ChatWindow::onAIError);
-        connect(m_aiEngine, &AIEngine::connectionStatusChanged,
-                this, &ChatWindow::onAIConnectionStatusChanged);
+    // Connect signals
+    connect(m_aiEngine, &AIEngine::responseReceived,
+            this, &ChatWindow::onAIResponseReceived);
+    connect(m_aiEngine, &AIEngine::errorOccurred,
+            this, &ChatWindow::onAIError);
+    connect(m_aiEngine, &AIEngine::connectionStatusChanged,
+            this, &ChatWindow::onAIConnectionStatusChanged);
 
-        // Async connection check (non-blocking)
-        QTimer::singleShot(100, [this]() {
-            if (m_aiEngine) {
-                m_aiEngine->checkConnection();
-            }
-        });
+    // Async connection check (non-blocking)
+    QTimer::singleShot(100, [this]() {
+        if (m_aiEngine) {
+            m_aiEngine->checkConnection();
+        }
+    });
 
-        // Listen to AI settings changes
-        connect(&AppSettings::instance(), &AppSettings::aiSettingsChanged,
-                this, [this]() {
-                    auto config = AppSettings::instance().getAIConfig();
-                    if (m_aiEngine) {
-                        m_aiEngine->setApiUrl(config.apiUrl);
-                        m_aiEngine->setModel(config.model);
-                        m_aiEngine->setTemperature(config.temperature);
-                        m_aiEngine->setMaxTokens(config.maxTokens);
-                        m_aiEngine->setSystemPrompt(config.systemPrompt);
-                        m_aiEngine->checkConnection();
-                        qDebug() << "ChatWindow: AI settings updated";
+    // Listen to AI settings changes
+    connect(&AppSettings::instance(), &AppSettings::aiSettingsChanged,
+            this, [this]() {
+                auto config = AppSettings::instance().getAIConfig();
+                if (m_aiEngine) {
+                    m_aiEngine->setProvider(config.provider);
+                    m_aiEngine->setApiUrl(config.apiUrl);
+                    m_aiEngine->setApiKey(config.apiKey);
+                    m_aiEngine->setModel(config.model);
+                    m_aiEngine->setTemperature(config.temperature);
+                    m_aiEngine->setMaxTokens(config.maxTokens);
+                    m_aiEngine->setSystemPrompt(config.systemPrompt);
+                    m_aiEngine->checkConnection();
+                    qDebug() << "ChatWindow: AI settings updated -" << config.provider;
+                }
+                // Enable/disable AI mode based on settings
+                QStandardItemModel* model = qobject_cast<QStandardItemModel*>(m_modeSelector->model());
+                if (model) {
+                    QStandardItem* item = model->item(1);
+                    if (item) {
+                        item->setEnabled(config.enabled);
                     }
-                    // Enable/disable AI mode based on settings
-                    QStandardItemModel* model = qobject_cast<QStandardItemModel*>(m_modeSelector->model());
-                    if (model) {
-                        QStandardItem* item = model->item(1);
-                        if (item) {
-                            item->setEnabled(config.enabled);
-                        }
-                    }
-                });
-    }
+                }
+            });
 }
 
 void ChatWindow::positionWindow()
@@ -459,7 +459,7 @@ void ChatWindow::sendMessage()
                 switchToTranslationMode();
                 sendTranslationMessage(text);
             } else {
-                appendSystemMessage("❌ AI service unavailable. Please check settings or start copilot-api.");
+                appendSystemMessage("❌ AI service unavailable. Check your API key and endpoint in settings.");
             }
         }
     } else {
